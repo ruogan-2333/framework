@@ -118,49 +118,54 @@ class PaddleOCRClient:
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
 
         vis = img.copy() if debug_output else None
-        result = ocr.predict(img)
+        result = ocr.ocr(img, cls=False)
 
         elements: List[Tuple[int, int, int, int, str, float]] = []
+        lines = result[0] if isinstance(result, list) and len(result) == 1 and isinstance(result[0], list) else result
+        if not isinstance(lines, list):
+            lines = []
 
-        for res in result:
-            r = (res.json or {}).get("res", {})
-            texts = r.get("rec_texts", []) or []
-            scores = r.get("rec_scores", []) or []
-            boxes = r.get("rec_boxes", None)
-            polys = r.get("rec_polys", None)
+        for line in lines:
+            if not isinstance(line, (list, tuple)) or len(line) < 2:
+                continue
+            poly_raw, rec = line[0], line[1]
+            if not poly_raw:
+                continue
 
-            n = min(
-                len(texts),
-                len(scores),
-                len(boxes) if boxes is not None else len(polys) if polys is not None else 0,
-            )
+            poly = np.asarray(poly_raw, dtype=np.float32).reshape(-1, 2)
+            if poly.size < 2:
+                continue
+            x1, y1 = poly.min(axis=0)
+            x2, y2 = poly.max(axis=0)
 
-            for i in range(n):
-                text = str(texts[i])
-                conf = float(scores[i])
+            text = ""
+            conf = 0.0
+            if isinstance(rec, (list, tuple)):
+                if len(rec) >= 1:
+                    text = str(rec[0])
+                if len(rec) >= 2:
+                    try:
+                        conf = float(rec[1])
+                    except Exception:
+                        conf = 0.0
+            else:
+                text = str(rec)
 
-                if boxes is not None:
-                    x1, y1, x2, y2 = boxes[i]
-                else:
-                    poly = np.asarray(polys[i], dtype=np.float32)
-                    x1, y1 = poly.min(axis=0)
-                    x2, y2 = poly.max(axis=0)
+            x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
+            w, h = max(0, x2 - x1), max(0, y2 - y1)
+            elements.append((x1, y1, w, h, text, conf))
 
-                x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
-                w, h = max(0, x2 - x1), max(0, y2 - y1)
-                elements.append((x1, y1, w, h, text, conf))
-
-                if debug_output and vis is not None:
-                    cv.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2PutText(
-                        vis,
-                        text[:40],
-                        (x1, max(0, y1 - 10)),
-                        cv.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (255, 0, 0),
-                        1,
-                    )
+            if debug_output and vis is not None:
+                cv.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2PutText(
+                    vis,
+                    text[:40],
+                    (x1, max(0, y1 - 10)),
+                    cv.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 0, 0),
+                    1,
+                )
 
         if debug_output and vis is not None:
             cv.imwrite("screenshot-ocr.png", vis)

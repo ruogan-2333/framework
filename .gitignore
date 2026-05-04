@@ -18,3 +18,4 @@ mytests/outputs/uied_runtime/
 docs
 LLM图片交互测试
 .gitignore
+OCR-UIED-test
