@@ -5,13 +5,13 @@ import numpy as np
 class Text:
     def __init__(self, id, content, location):
         self.id = id
-        self.content = content
+        self.content = str(content or '')
         self.location = location
 
         self.width = self.location['right'] - self.location['left']
         self.height = self.location['bottom'] - self.location['top']
         self.area = self.width * self.height
-        self.word_width = self.width / len(self.content)
+        self.word_width = self.width / max(1, len(self.content))
 
     '''
     ********************************

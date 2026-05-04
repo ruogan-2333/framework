@@ -111,6 +111,27 @@ class ActionStep(BaseModel):
     action: ActionType = Field(..., description="Concrete action type")
     element_id: Optional[int] = Field(None, description="UI element id for click/input")
     text: Optional[str] = Field(None, description="Text to input when action==input")
+    x: Optional[int] = Field(
+        None,
+        description="Optional absolute screenshot x coordinate for visual click fallback when element_id is null",
+    )
+    y: Optional[int] = Field(
+        None,
+        description="Optional absolute screenshot y coordinate for visual click fallback when element_id is null",
+    )
+    bbox: Optional[List[int]] = Field(
+        None,
+        description=(
+            "Optional absolute screenshot bbox [x1,y1,x2,y2] for bounded visual click probing "
+            "when an obvious target is missing from ui_digest and element_id is null"
+        ),
+    )
+    probe_grid: int = Field(
+        3,
+        ge=1,
+        le=5,
+        description="Grid size for bounded visual probing inside bbox when element_id is null",
+    )
     priority: int = Field(0, description="Higher executes earlier when same group")
     reasoning: str = Field("", description="Short rationale (<=2 sentences). No chain-of-thought.")
 
@@ -892,6 +913,8 @@ OUTPUT (strict JSON matching RecoveryProposal):
 - candidate_actions <= 5
 - Allowed actions: click, input, back, wait, restart, none, complete
 - Choose overlay_kind from: none | dismiss | workflow | loading
+- If a visible recovery control is missing from ui_digest, a click may use element_id=null
+  with a tight absolute screenshot bbox=[x1,y1,x2,y2] and optional x/y for bounded visual probing.
 
 STRATEGY:
 1) If overlay likely, propose click actions on Close/X/Cancel/Deny/Not now/OK (safe first).
@@ -920,14 +943,28 @@ class GPTClient:
         self.client = None
         try:
             import openai  # type: ignore
+            import httpx
+
+            proxy_url = (
+                os.getenv("HTTPS_PROXY")
+                or os.getenv("https_proxy")
+                or os.getenv("HTTP_PROXY")
+                or os.getenv("http_proxy")
+            )
+            http_client = httpx.Client(proxy=proxy_url) if proxy_url else None
 
             if hasattr(openai, "OpenAI"):
-                self.client = openai.OpenAI(api_key=self.api_key)
+                kwargs = {"api_key": self.api_key}
+                if http_client is not None:
+                    kwargs["http_client"] = http_client
+                self.client = openai.OpenAI(**kwargs)
             elif hasattr(openai, "Client"):
                 self.client = openai.Client(api_key=self.api_key) if self.api_key else openai.Client()
             else:
                 self.client = openai
-        except Exception:
+        except Exception as e:
+            import logging as _logging
+            _logging.getLogger(__name__).warning("OpenAI client init failed: %s", e)
             self.client = None
 
     @time_consumed

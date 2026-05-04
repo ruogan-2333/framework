@@ -58,7 +58,7 @@ from collections import OrderedDict, deque
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from appium_android import AndroidAppiumClient
 from gpt_cls import (
@@ -109,6 +109,9 @@ class BudgetConfig:
     topic_pack_limit: int = 18
     screenshot_phash_similarity_threshold: float = 0.80# phash相似度判断阈值
     meaningful_xml_nodes_threshold: int = 2  #计算xml中有意义节点数阈值,用于判断xml是否可信
+    visual_probe_max_taps: int = 6
+    visual_probe_settle_s: float = 0.25
+    visual_probe_roi_delta_threshold: float = 0.035
 
     # Optional short wait after probing to let pipelined analysis land
     post_probe_wait_s: float = 1.2
@@ -5675,6 +5678,8 @@ class WorkflowRunner:
         if step.action == ActionType.CLICK:
             node = vid_map.get(step.element_id or -1)
             if not node:
+                if step.element_id is None and (getattr(step, "bbox", None) or (getattr(step, "x", None) is not None and getattr(step, "y", None) is not None)):
+                    return True, ""
                 return False, "missing_element"
             f = BaseUI.get_frame(node)
             if float(f.get("width", 0)) <= 1 or float(f.get("height", 0)) <= 1:
@@ -6423,6 +6428,180 @@ class WorkflowRunner:
 
         return True
 
+    def _visual_click_bbox(self, step: ActionStep, png_w: int, png_h: int) -> Optional[List[int]]:
+        raw_bbox = getattr(step, "bbox", None) or None
+        bbox: Optional[List[int]] = None
+        if isinstance(raw_bbox, (list, tuple)) and len(raw_bbox) >= 4:
+            try:
+                x1, y1, x2, y2 = [int(round(float(v))) for v in raw_bbox[:4]]
+                if x2 < x1:
+                    x1, x2 = x2, x1
+                if y2 < y1:
+                    y1, y2 = y2, y1
+                bbox = [x1, y1, x2, y2]
+            except Exception:
+                bbox = None
+
+        x = getattr(step, "x", None)
+        y = getattr(step, "y", None)
+        if bbox is None and x is not None and y is not None:
+            try:
+                cx = int(round(float(x)))
+                cy = int(round(float(y)))
+                r = 72
+                bbox = [cx - r, cy - r, cx + r, cy + r]
+            except Exception:
+                bbox = None
+
+        if bbox is None:
+            return None
+
+        x1, y1, x2, y2 = bbox
+        x1 = max(0, min(int(png_w) - 1, x1))
+        x2 = max(0, min(int(png_w), x2))
+        y1 = max(0, min(int(png_h) - 1, y1))
+        y2 = max(0, min(int(png_h), y2))
+        if x2 - x1 < 8 or y2 - y1 < 8:
+            return None
+        # Keep this as a local, bounded fallback. A near-full-screen bbox is too close to random clicking.
+        if (x2 - x1) * (y2 - y1) > 0.35 * max(1, int(png_w) * int(png_h)):
+            return None
+        return [x1, y1, x2, y2]
+
+    def _visual_probe_points(self, step: ActionStep, bbox: List[int]) -> List[Tuple[int, int]]:
+        x1, y1, x2, y2 = bbox
+        w = max(1, x2 - x1)
+        h = max(1, y2 - y1)
+        points: List[Tuple[int, int]] = []
+
+        def add(px: float, py: float) -> None:
+            x = int(round(max(x1 + 1, min(x2 - 1, px))))
+            y = int(round(max(y1 + 1, min(y2 - 1, py))))
+            p = (x, y)
+            if p not in points:
+                points.append(p)
+
+        x = getattr(step, "x", None)
+        y = getattr(step, "y", None)
+        if x is not None and y is not None:
+            try:
+                add(float(x), float(y))
+            except Exception:
+                pass
+
+        reasoning = f"{getattr(step, 'reasoning', '') or ''} {getattr(step, 'text', '') or ''}".lower()
+        top_right_hint = any(s in reasoning for s in ("top right", "upper right", "right upper", "close", "dismiss", "叉", "关闭", "右上")) or bool(re.search(r"\b[x×]\b", reasoning))
+        if top_right_hint:
+            add(x2 - min(40.0, w * 0.12), y1 + min(40.0, h * 0.12))
+            add(x2 - min(18.0, w * 0.06), y1 + min(18.0, h * 0.06))
+        else:
+            add(x1 + w * 0.5, y1 + h * 0.5)
+
+        grid = int(getattr(step, "probe_grid", 3) or 3)
+        grid = max(1, min(5, grid))
+        cells: List[Tuple[float, float]] = []
+        for row in range(grid):
+            for col in range(grid):
+                cells.append((x1 + (col + 0.5) * w / grid, y1 + (row + 0.5) * h / grid))
+        if top_right_hint:
+            cells.sort(key=lambda p: (p[0] - x2) ** 2 + (p[1] - y1) ** 2)
+        else:
+            cx, cy = x1 + w * 0.5, y1 + h * 0.5
+            cells.sort(key=lambda p: (p[0] - cx) ** 2 + (p[1] - cy) ** 2)
+        for px, py in cells:
+            add(px, py)
+        return points[: max(1, int(self.budget.visual_probe_max_taps))]
+
+    def _map_screenshot_point_to_tap(self, x: int, y: int, screenshot_w: int, screenshot_h: int) -> Tuple[int, int]:
+        try:
+            driver = getattr(self.appium, "driver", None)
+            ws = driver.get_window_size() if driver else {}
+            win_w = int(ws.get("width") or 0)
+            win_h = int(ws.get("height") or 0)
+            if win_w > 0 and win_h > 0 and screenshot_w > 0 and screenshot_h > 0:
+                return int(round(float(x) * win_w / screenshot_w)), int(round(float(y) * win_h / screenshot_h))
+        except Exception:
+            pass
+        return int(x), int(y)
+
+    def _roi_delta(self, before_png: bytes, after_png: bytes, bbox: List[int]) -> float:
+        try:
+            with Image.open(io.BytesIO(before_png)).convert("RGB") as before_img:
+                with Image.open(io.BytesIO(after_png)).convert("RGB") as after_img:
+                    x1, y1, x2, y2 = bbox
+                    x2 = min(x2, before_img.width, after_img.width)
+                    y2 = min(y2, before_img.height, after_img.height)
+                    x1 = max(0, min(x1, x2 - 1))
+                    y1 = max(0, min(y1, y2 - 1))
+                    a = before_img.crop((x1, y1, x2, y2)).resize((48, 48))
+                    b = after_img.crop((x1, y1, x2, y2)).resize((48, 48))
+                    stat = ImageStat.Stat(ImageChops.difference(a, b))
+                    return float(sum(stat.mean) / (len(stat.mean) * 255.0))
+        except Exception:
+            return 0.0
+
+    def _execute_visual_probe_click(self, step: ActionStep, sig_for_trace: str, action_sig: Dict[str, Any]) -> bool:
+        """
+        Bounded screenshot-only click fallback for targets visible in the screenshot but absent from vid_map.
+        It tries a few points inside a model-provided bbox and uses a cheap ROI image delta between taps.
+        Full authoritative capture still happens once in the caller after this returns.
+        """
+        try:
+            before_png = self.appium.screenshot_png_once()
+            if not before_png:
+                self.last_action_failure = {"reason": "visual_probe_no_screenshot", "action": action_sig}
+                self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "visual_probe_no_screenshot"})
+                return False
+            with Image.open(io.BytesIO(before_png)) as img:
+                png_w, png_h = int(img.width), int(img.height)
+
+            bbox = self._visual_click_bbox(step, png_w, png_h)
+            if not bbox:
+                self.last_action_failure = {"reason": "visual_probe_invalid_bbox", "action": action_sig}
+                self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "visual_probe_invalid_bbox"})
+                return False
+
+            points = self._visual_probe_points(step, bbox)
+            if not points:
+                self.last_action_failure = {"reason": "visual_probe_no_points", "action": action_sig}
+                self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "visual_probe_no_points", "bbox": bbox})
+                return False
+
+            cur_png = before_png
+            threshold = float(self.budget.visual_probe_roi_delta_threshold)
+            for idx, (sx, sy) in enumerate(points, start=1):
+                tx, ty = self._map_screenshot_point_to_tap(sx, sy, png_w, png_h)
+                self._log_event("visual_probe_tap", sig=sig_for_trace, index=idx, screenshot_x=sx, screenshot_y=sy, tap_x=tx, tap_y=ty, bbox=bbox)
+                self.appium.tap(tx, ty)
+                time.sleep(float(self.budget.visual_probe_settle_s))
+                after_png = self.appium.screenshot_png_once()
+                delta = self._roi_delta(cur_png, after_png, bbox) if after_png else 0.0
+                self._log_event("visual_probe_delta", sig=sig_for_trace, index=idx, delta=delta, threshold=threshold)
+                if delta >= threshold:
+                    self._emit_action(
+                        sig_for_trace,
+                        action_sig,
+                        "after",
+                        {"success": True, "via": "visual_probe", "taps": idx, "bbox": bbox, "delta": delta},
+                    )
+                    return True
+                if after_png:
+                    cur_png = after_png
+
+            self.last_action_failure = {"reason": "visual_probe_no_change", "action": action_sig, "bbox": bbox, "points": points}
+            self._emit_action(
+                sig_for_trace,
+                action_sig,
+                "after",
+                {"success": False, "reason": "visual_probe_no_change", "bbox": bbox, "points": points},
+            )
+            return False
+        except Exception:
+            logger.debug("visual probe click failed", exc_info=True)
+            self.last_action_failure = {"reason": "visual_probe_exception", "action": action_sig}
+            self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "visual_probe_exception"})
+            return False
+
     def _execute_action(self, step: ActionStep, vid_map: Dict[int, Any], cur_sig: Optional[str] = None) -> bool:
         """
         IPO:
@@ -6478,6 +6657,8 @@ class WorkflowRunner:
             if step.action == ActionType.CLICK:
                 node = vid_map.get(step.element_id or -1)
                 if not node:
+                    if step.element_id is None and (getattr(step, "bbox", None) or (getattr(step, "x", None) is not None and getattr(step, "y", None) is not None)):
+                        return self._execute_visual_probe_click(step, sig_for_trace, action_sig)
                     logger.debug("CLICK failed: element_id=%s not in vid_map", step.element_id)
                     self.last_action_failure = {"reason": "missing_element", "action": self._action_signature(step)}
                     self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "missing_element", **common_extra})
@@ -6646,8 +6827,18 @@ class WorkflowRunner:
     # Probe bookkeeping
     # ---------------------------
 
+    def _visual_action_suffix(self, step: ActionStep) -> str:
+        if getattr(step, "element_id", None) is not None:
+            return ""
+        bbox = getattr(step, "bbox", None) or None
+        x = getattr(step, "x", None)
+        y = getattr(step, "y", None)
+        if not bbox and (x is None or y is None):
+            return ""
+        return f":xy={x},{y}:bbox={bbox}:grid={getattr(step, 'probe_grid', '')}"
+
     def _action_key(self, step: ActionStep) -> str:
-        return f"{step.action.value}:{step.element_id}:{step.text or ''}"
+        return f"{step.action.value}:{step.element_id}:{step.text or ''}{self._visual_action_suffix(step)}"
 
     def _actions_key(self, steps: List[ActionStep]) -> str:
         if not steps:
@@ -6655,7 +6846,7 @@ class WorkflowRunner:
         parts: List[str] = []
         for s in steps:
             action_val = s.action.value if hasattr(s.action, "value") else str(s.action)
-            parts.append(f"{action_val}:{s.element_id}:{s.text or ''}")
+            parts.append(f"{action_val}:{s.element_id}:{s.text or ''}{self._visual_action_suffix(s)}")
         return "||".join(parts) or "None:None:"
 
     def _candidate_key(self, cand: Any) -> str:
@@ -6671,6 +6862,18 @@ class WorkflowRunner:
 
     def _action_signature(self, step: ActionStep, *, vid_map: Optional[Dict[int, Any]] = None) -> Dict[str, Any]:
         out: Dict[str, Any] = {"action": step.action.value, "element_id": step.element_id, "text": step.text}
+        try:
+            if step.element_id is None:
+                if getattr(step, "x", None) is not None:
+                    out["x"] = getattr(step, "x", None)
+                if getattr(step, "y", None) is not None:
+                    out["y"] = getattr(step, "y", None)
+                if getattr(step, "bbox", None):
+                    out["bbox"] = getattr(step, "bbox", None)
+                if getattr(step, "bbox", None):
+                    out["probe_grid"] = getattr(step, "probe_grid", None)
+        except Exception:
+            pass
         try:
             if vid_map is not None and step.element_id is not None and step.element_id in vid_map:
                 if step.action in (ActionType.CLICK, ActionType.INPUT):
