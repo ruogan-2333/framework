@@ -94,15 +94,18 @@ def text_cvt_orc_format(ocr_result):
             error = False
             x_coordinates = []
             y_coordinates = []
-            text_location = result['boundingPoly']['vertices']
-            content = result['description']
+            text_location = result.get('boundingPoly', {}).get('vertices', [])
+            content = str(result.get('description') or '').strip()
+            if not content:
+                continue
             for loc in text_location:
                 if 'x' not in loc or 'y' not in loc:
                     error = True
                     break
                 x_coordinates.append(loc['x'])
                 y_coordinates.append(loc['y'])
-            if error: continue
+            if error or not x_coordinates or not y_coordinates:
+                continue
             location = {'left': min(x_coordinates), 'top': min(y_coordinates),
                         'right': max(x_coordinates), 'bottom': max(y_coordinates)}
             texts.append(Text(i, content, location))
@@ -115,7 +118,9 @@ def text_cvt_orc_format_paddle(paddle_result):
         points = np.array(line[0])
         location = {'left': int(min(points[:, 0])), 'top': int(min(points[:, 1])), 'right': int(max(points[:, 0])),
                     'bottom': int(max(points[:, 1]))}
-        content = line[1][0]
+        content = str(line[1][0] or '').strip()
+        if not content:
+            continue
         texts.append(Text(i, content, location))
     return texts
 
@@ -275,4 +280,3 @@ def text_detection(input_file='../data/input/30800.jpg', output_file='../data/ou
     print("[Text Detection Completed in %.3f s] Input: %s Output: %s" % (time.process_time() - start, input_file, pjoin(ocr_root, name + '.json')))
 
 # text_detection()
-

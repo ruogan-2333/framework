@@ -6,8 +6,8 @@ node_modules
 __pycache__
 traces
 *.pyc
-
 # Debug / generated outputs
+app.log
 mytest2/llm1_debug/
 mytest2/preflight_refresh_test/
 mytest2/questionnaire_handler/chain_debug/

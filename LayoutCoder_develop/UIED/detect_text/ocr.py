@@ -22,17 +22,93 @@ def Google_OCR_makeImageData(imgpath):
     return json.dumps({"requests": img_req}).encode()
 
 
+def _box_to_poly(box):
+    if box is None:
+        return None
+    if len(box) == 4 and not hasattr(box[0], "__len__"):
+        x1, y1, x2, y2 = box
+        return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+    return box
+
+
+def _normalize_paddle_result(result):
+    """
+    Normalize PaddleOCR 2.x and 3.x outputs to the old UIED format:
+    [[poly, (text, score)], ...] wrapped in a single-image list.
+    """
+    if not result:
+        return [[]]
+
+    # PaddleOCR 3.x returns result objects with a json payload.
+    normalized = []
+    for res in result:
+        payload = getattr(res, "json", None)
+        if not payload:
+            continue
+        data = (payload or {}).get("res", {})
+        texts = data.get("rec_texts", []) or []
+        scores = data.get("rec_scores", []) or []
+        boxes = data.get("rec_boxes", None)
+        polys = data.get("rec_polys", None)
+        if boxes is None and polys is None:
+            continue
+        locs = boxes if boxes is not None else polys
+        for text, score, loc in zip(texts, scores, locs):
+            poly = _box_to_poly(loc)
+            if poly is None:
+                continue
+            normalized.append([poly, (str(text), float(score))])
+    if normalized:
+        return [normalized]
+
+    # PaddleOCR 2.x may return either [line, ...] or [[line, ...]].
+    first = result[0]
+    if first is None:
+        return [[]]
+    if isinstance(first, (list, tuple)) and len(first) >= 2:
+        second = first[1]
+        if isinstance(second, (list, tuple)) and second and isinstance(second[0], str):
+            return [result]
+    return result
+
+
 def ocr_detection_paddle(imgpath):
-    from paddleocr import PaddleOCR, draw_ocr
+    import os
+
+    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+    from paddleocr import PaddleOCR
     import cv2
+    import inspect
 
     # 20240823 # modified: 增加det_limit_side_len参数，根据图片自动调整最大长度，防止漏检
     # https://github.com/PaddlePaddle/PaddleOCR/blob/main/doc/doc_ch/FAQ.md#q%E5%AF%B9%E4%BA%8E%E4%B8%80%E4%BA%9B%E5%B0%BA%E5%AF%B8%E8%BE%83%E5%A4%A7%E7%9A%84%E6%96%87%E6%A1%A3%E7%B1%BB%E5%9B%BE%E7%89%87%E5%9C%A8%E6%A3%80%E6%B5%8B%E6%97%B6%E4%BC%9A%E6%9C%89%E8%BE%83%E5%A4%9A%E7%9A%84%E6%BC%8F%E6%A3%80%E6%80%8E%E4%B9%88%E9%81%BF%E5%85%8D%E8%BF%99%E7%A7%8D%E6%BC%8F%E6%A3%80%E7%9A%84%E9%97%AE%E9%A2%98%E5%91%A2
     img = cv2.imread(imgpath)
+    if img is None:
+        raise ValueError(f"Failed to read image for OCR: {imgpath}")
     height, width = img.shape[:2]
-    ocr = PaddleOCR(use_angle_cls=True, lang='ch', det_limit_side_len=max(width, height))
-    result = ocr.ocr(imgpath, cls=True)
-    return result
+    limit = min(max(width, height), 1600)
+    params = inspect.signature(PaddleOCR).parameters
+    if "text_detection_model_name" in params:
+        ocr = PaddleOCR(
+            text_detection_model_name="PP-OCRv5_mobile_det",
+            text_recognition_model_name="PP-OCRv5_mobile_rec",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+            text_det_limit_side_len=limit,
+        )
+    else:
+        ocr = PaddleOCR(use_angle_cls=False, lang='ch', det_limit_side_len=limit)
+    if hasattr(ocr, "ocr"):
+        try:
+            result = ocr.ocr(imgpath, cls=True)
+        except TypeError:
+            result = ocr.ocr(imgpath)
+    elif hasattr(ocr, "predict"):
+        result = ocr.predict(imgpath)
+    else:
+        raise RuntimeError("Unsupported PaddleOCR object: missing ocr/predict method")
+    return _normalize_paddle_result(result)
 
 def paddle_to_google(paddle_response):
     if not paddle_response or not paddle_response[0]:
@@ -89,7 +165,7 @@ def ocr_detection_google(imgpath):
     try:
         paddle_result = ocr_detection_paddle(imgpath)
     except Exception as e:
-        print(f"[UIED][OCR] PaddleOCR failed, fallback to empty text results: {e}")
+        print(f"[UIED][OCR] PaddleOCR failed, fallback to empty text results: {type(e).__name__}: {e}")
         return []
     goole_response = paddle_to_google(paddle_result)
     if not goole_response['responses'] or len(goole_response['responses'][0]['textAnnotations']) < 2:

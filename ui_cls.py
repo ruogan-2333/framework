@@ -746,6 +746,100 @@ class BaseUI:
         return node
 
     @staticmethod
+    def _is_uied_ocr_action_text(text: str) -> bool:
+        norm = re.sub(r"\s+", " ", str(text or "").strip()).lower()
+        if not norm:
+            return False
+        safe_labels = {
+            "no",
+            "yes",
+            "ok",
+            "okay",
+            "cancel",
+            "close",
+            "skip",
+            "deny",
+            "allow",
+            "accept",
+            "decline",
+            "later",
+            "continue",
+            "confirm",
+            "not now",
+            "got it",
+            "dismiss",
+            "x",
+            "否",
+            "是",
+            "取消",
+            "确定",
+            "关闭",
+            "跳过",
+            "稍后",
+            "允许",
+            "拒绝",
+            "同意",
+            "不同意",
+        }
+        return norm in safe_labels
+
+    @staticmethod
+    def _add_uied_ocr_action_nodes(uist: Dict[str, Any], uied_result: Dict[str, Any]) -> None:
+        # UIED merge 有时会把按钮文字吞进大 Block，导致 NO/YES 这种按钮不进 vid_map。
+        # 这里不重新 OCR，只复用 UIED 已经落盘的 ocr/*.json，把短按钮文本补成可点击节点。
+        ocr_data = (uied_result or {}).get("ocr") or {}
+        added = 0
+
+        def existing_same_label(frame: Dict[str, int], text: str) -> bool:
+            for n in BaseUI.iter_nodes(uist):
+                label = str(n.get("text") or n.get("content_desc") or n.get("ocr_text") or "").strip()
+                if label.lower() != text.lower():
+                    continue
+                if BaseUI._frames_almost_overlap(BaseUI.get_frame(n), frame, tolerance=0.45):
+                    return True
+            return False
+
+        for item in ocr_data.get("texts", []) or []:
+            text = str(item.get("content") or "").strip()
+            if not BaseUI._is_uied_ocr_action_text(text):
+                continue
+            try:
+                x1 = int(item.get("column_min", 0))
+                y1 = int(item.get("row_min", 0))
+                x2 = int(item.get("column_max", x1))
+                y2 = int(item.get("row_max", y1))
+            except Exception:
+                continue
+            frame = {"x": x1, "y": y1, "width": max(1, x2 - x1), "height": max(1, y2 - y1)}
+            if frame["width"] <= 1 or frame["height"] <= 1:
+                continue
+            if existing_same_label(frame, text):
+                continue
+
+            node: Dict[str, Any] = {
+                "class": "uied_ocr_action",
+                "text": text,
+                "content_desc": text,
+                "resource_id": "",
+                "clickable": True,
+                "enabled": True,
+                "absolute_frame": frame,
+                "subviews": [],
+                "uied_class": "OCRText",
+                "semantic_source": "uied_ocr_action",
+                "ocr_text": text,
+            }
+            _, host = BaseUI._find_best_uied_host(uist, frame, tolerance=0.20)
+            if host is not None:
+                host.setdefault("subviews", []).append(node)
+            else:
+                uist.setdefault("elements", []).append(node)
+            added += 1
+
+        if added:
+            logger.debug("Injected %d UIED OCR action nodes", added)
+
+    @staticmethod
     def _merge_uied_into_uist(uist: Dict[str, Any], uied_result: Dict[str, Any]) -> None:
         # 这是 UIED 补树的核心逻辑。
         #
@@ -1557,6 +1651,8 @@ class BaseUI:
                 uied_result = BaseUI._enrich_uied_merge_with_ocr(uied_result)
                 # 3. 再把已经“自带 OCR 文本”的 MERGE 节点补成 synthetic node，插回树里
                 BaseUI._merge_uied_into_uist(uist, uied_result)
+                # 4. 对 UIED merge 吞掉的短按钮 OCR 文本，补成可点击节点。
+                BaseUI._add_uied_ocr_action_nodes(uist, uied_result)
         except Exception:
             logger.exception(
                 "UIED attach failed (continuing): screenshot_key=%s",
