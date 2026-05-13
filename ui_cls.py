@@ -47,6 +47,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import cv2
+import numpy as np
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -1516,6 +1518,622 @@ class BaseUI:
 
         logger.debug("Assigned %d ids", len(vid_map))
         return vid_map
+
+    @staticmethod
+    def _assign_ids_all_nodes(uist: Dict[str, Any]) -> Dict[int, Dict[str, Any]]:
+        """
+        三工具调试分支专用：为 UI 树中的所有节点分配 id。
+
+        输入:
+        - uist: 经过三工具融合后的 UI 树字典，结构为 {"elements": [...], ...}
+
+        输出:
+        - vid_map: Dict[int, Dict[str, Any]]
+          键为连续递增 id（从 1 开始），值为对应节点；同时会把 id 回写到 node["id"]。
+        """
+        vid_map: Dict[int, Dict[str, Any]] = {}
+        next_id = 1
+
+        for n in BaseUI.iter_nodes(uist):
+            n["id"] = next_id
+            vid_map[next_id] = n
+            next_id += 1
+
+        logger.debug("Assigned %d ids (all nodes)", len(vid_map))
+        return vid_map
+
+    # ---------------------------
+    # Three-tools debug post-process
+    # ---------------------------
+
+    @staticmethod
+    def _tt_safe_frame(x: int, y: int, w: int, h: int) -> Dict[str, int]:
+        return {
+            "x": int(x),
+            "y": int(y),
+            "width": max(1, int(w)),
+            "height": max(1, int(h)),
+        }
+
+    @staticmethod
+    def _tt_frame_area(frame: Dict[str, int]) -> int:
+        return int(frame["width"]) * int(frame["height"])
+
+    @staticmethod
+    def _tt_intersection_area(a: Dict[str, int], b: Dict[str, int]) -> int:
+        ax1, ay1 = int(a["x"]), int(a["y"])
+        ax2, ay2 = ax1 + int(a["width"]), ay1 + int(a["height"])
+        bx1, by1 = int(b["x"]), int(b["y"])
+        bx2, by2 = bx1 + int(b["width"]), by1 + int(b["height"])
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+        return int(iw * ih)
+
+    @staticmethod
+    def _tt_contains(outer: Dict[str, int], inner: Dict[str, int], threshold: float = 0.85) -> bool:
+        inter = BaseUI._tt_intersection_area(outer, inner)
+        inner_area = max(1, BaseUI._tt_frame_area(inner))
+        return (float(inter) / float(inner_area)) >= float(threshold)
+
+    @staticmethod
+    def _tt_almost_overlap(a: Dict[str, int], b: Dict[str, int], threshold: float = 0.92) -> bool:
+        inter = BaseUI._tt_intersection_area(a, b)
+        if inter <= 0:
+            return False
+        aa = max(1, BaseUI._tt_frame_area(a))
+        bb = max(1, BaseUI._tt_frame_area(b))
+        return (float(inter) / float(aa)) >= threshold and (float(inter) / float(bb)) >= threshold
+
+    @staticmethod
+    def _tt_dedupe_nodes(nodes: List[Dict[str, Any]], overlap_threshold: float = 0.92) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for node in nodes:
+            frame = node["frame"]
+            duplicate = False
+            for kept in out:
+                if (
+                    kept["source"] == node["source"]
+                    and kept["type"] == node["type"]
+                    and BaseUI._tt_almost_overlap(frame, kept["frame"], threshold=overlap_threshold)
+                ):
+                    duplicate = True
+                    break
+            if not duplicate:
+                out.append(node)
+        return out
+
+    @staticmethod
+    def _tt_image_size_from_b64(screenshot_b64: str) -> Tuple[int, int]:
+        if not screenshot_b64:
+            return 0, 0
+        try:
+            raw = base64.b64decode(str(screenshot_b64) + "==", validate=False)
+            with Image.open(io.BytesIO(raw)) as im:
+                w, h = im.size
+            return int(w), int(h)
+        except Exception:
+            return 0, 0
+
+    @staticmethod
+    def _tt_is_near_fullscreen_node(
+        frame: Dict[str, int],
+        image_w: int,
+        image_h: int,
+        full_screen_area_ratio: float = 0.70,
+    ) -> bool:
+        if image_w <= 0 or image_h <= 0:
+            return False
+        w = max(1, int(frame.get("width", 0)))
+        h = max(1, int(frame.get("height", 0)))
+        area_ratio = float(w * h) / float(max(1, image_w * image_h))
+        return area_ratio >= float(full_screen_area_ratio)
+
+    @staticmethod
+    def _tt_filter_non_ocr_nodes(
+        nodes: List[Dict[str, Any]],
+        image_w: int,
+        image_h: int,
+        min_w: int,
+        min_h: int,
+        min_area: int,
+        max_aspect: float,
+        full_screen_area_ratio: float = 0.70,
+    ) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for node in nodes:
+            frame = node["frame"]
+            w = int(frame["width"])
+            h = int(frame["height"])
+            area = int(w * h)
+            if w <= 0 or h <= 0:
+                continue
+            if w < int(min_w) or h < int(min_h):
+                continue
+            if area < int(min_area):
+                continue
+            aspect = max(float(w) / float(h), float(h) / float(w))
+            if aspect > float(max_aspect):
+                continue
+            if BaseUI._tt_is_near_fullscreen_node(
+                frame=frame,
+                image_w=image_w,
+                image_h=image_h,
+                full_screen_area_ratio=float(full_screen_area_ratio),
+            ):
+                continue
+            out.append(node)
+        return BaseUI._tt_dedupe_nodes(out, overlap_threshold=0.96)
+
+    @staticmethod
+    def _tt_allow_outer_absorb_inner(
+        outer: Dict[str, int],
+        inner: Dict[str, int],
+        image_w: int,
+        image_h: int,
+        max_target_screen_ratio_y: float,
+        max_outer_inner_area_ratio_x: float,
+    ) -> bool:
+        if image_w <= 0 or image_h <= 0:
+            return True
+        outer_area = max(1, BaseUI._tt_frame_area(outer))
+        inner_area = max(1, BaseUI._tt_frame_area(inner))
+        screen_area = max(1, int(image_w) * int(image_h))
+        target_screen_ratio = float(outer_area) / float(screen_area)
+        if target_screen_ratio > float(max_target_screen_ratio_y):
+            return False
+        area_ratio = float(outer_area) / float(inner_area)
+        if area_ratio > float(max_outer_inner_area_ratio_x):
+            return False
+        return True
+
+    @staticmethod
+    def _tt_prune_contained_template_nodes(
+        nodes: List[Dict[str, Any]],
+        contain_threshold: float = 0.98,
+    ) -> List[Dict[str, Any]]:
+        if not nodes:
+            return []
+        sorted_nodes = sorted(nodes, key=lambda n: BaseUI._tt_frame_area(n["frame"]), reverse=True)
+        kept: List[Dict[str, Any]] = []
+        for node in sorted_nodes:
+            frame = node["frame"]
+            contained = False
+            for k in kept:
+                if BaseUI._tt_contains(k["frame"], frame, threshold=contain_threshold):
+                    contained = True
+                    break
+            if not contained:
+                kept.append(node)
+        kept.sort(key=lambda n: (int(n["frame"]["y"]), int(n["frame"]["x"])))
+        return BaseUI._tt_dedupe_nodes(kept, overlap_threshold=0.97)
+
+    @staticmethod
+    def _tt_prune_contained_across_sources(
+        nodes: List[Dict[str, Any]],
+        image_w: int,
+        image_h: int,
+        max_target_screen_ratio_y: float,
+        max_outer_inner_area_ratio_x: float,
+        contain_threshold: float = 0.98,
+    ) -> List[Dict[str, Any]]:
+        if not nodes:
+            return []
+        sorted_nodes = sorted(nodes, key=lambda n: BaseUI._tt_frame_area(n["frame"]), reverse=True)
+        kept: List[Dict[str, Any]] = []
+        for node in sorted_nodes:
+            frame = node["frame"]
+            source = str(node.get("source") or "")
+            drop_inner = False
+            for k in kept:
+                if str(k.get("source") or "") == source:
+                    continue
+                if (
+                    BaseUI._tt_contains(k["frame"], frame, threshold=contain_threshold)
+                    and BaseUI._tt_allow_outer_absorb_inner(
+                        outer=k["frame"],
+                        inner=frame,
+                        image_w=image_w,
+                        image_h=image_h,
+                        max_target_screen_ratio_y=max_target_screen_ratio_y,
+                        max_outer_inner_area_ratio_x=max_outer_inner_area_ratio_x,
+                    )
+                ):
+                    drop_inner = True
+                    break
+            if not drop_inner:
+                kept.append(node)
+        kept.sort(key=lambda n: (int(n["frame"]["y"]), int(n["frame"]["x"])))
+        return BaseUI._tt_dedupe_nodes(kept, overlap_threshold=0.97)
+
+    @staticmethod
+    def _tt_extract_ocr_nodes(screenshot_b64: str, min_conf: float) -> List[Dict[str, Any]]:
+        ocr_items = BaseUI._run_ocr_cached(screenshot_b64, force=False)
+        nodes: List[Dict[str, Any]] = []
+        for item in ocr_items:
+            if float(item.conf) < float(min_conf):
+                continue
+            text = str(item.text or "").strip()
+            if not text:
+                continue
+            nodes.append(
+                {
+                    "source": "ocr",
+                    "type": "Text",
+                    "text": text,
+                    "confidence": float(item.conf),
+                    "frame": BaseUI._tt_safe_frame(item.x, item.y, item.w, item.h),
+                    "clickable": False,
+                    "attributes": {},
+                }
+            )
+        return BaseUI._tt_dedupe_nodes(nodes, overlap_threshold=0.95)
+
+    @staticmethod
+    def _tt_extract_uied_nodes(screenshot_b64: str, include_block: bool = False) -> List[Dict[str, Any]]:
+        uied_result = BaseUI._run_uied_cached(screenshot_b64)
+        uied_result = BaseUI._enrich_uied_merge_with_ocr(uied_result)
+        compos = ((uied_result or {}).get("merge") or {}).get("compos", []) or []
+        nodes: List[Dict[str, Any]] = []
+        for compo in compos:
+            cls = str(compo.get("class") or "Unknown").strip()
+            if not include_block and cls == "Block":
+                continue
+            pos = compo.get("position") or {}
+            x1 = int(pos.get("column_min", 0))
+            y1 = int(pos.get("row_min", 0))
+            x2 = int(pos.get("column_max", x1))
+            y2 = int(pos.get("row_max", y1))
+            w = int(compo.get("width", max(1, x2 - x1)))
+            h = int(compo.get("height", max(1, y2 - y1)))
+            if w <= 1 or h <= 1:
+                continue
+            text = str(compo.get("text_content") or compo.get("matched_ocr_text") or "").strip()
+            nodes.append(
+                {
+                    "source": "uied",
+                    "type": cls or "Unknown",
+                    "text": text,
+                    "confidence": None,
+                    "frame": BaseUI._tt_safe_frame(x1, y1, w, h),
+                    "clickable": (cls != "Text"),
+                    "attributes": {"uied_class": cls},
+                }
+            )
+        return BaseUI._tt_dedupe_nodes(nodes, overlap_threshold=0.93)
+
+    @staticmethod
+    def _tt_detect_template_elements(base64_screenshot: str) -> List[Tuple[str, int, int, int, int]]:
+        if not base64_screenshot:
+            return []
+
+        b64 = str(base64_screenshot)
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+
+        try:
+            img_data = base64.b64decode(b64)
+            nparr = np.frombuffer(img_data, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        except Exception:
+            return []
+        if img is None:
+            return []
+
+        template_size = 14
+        x_template = np.zeros((template_size, template_size), dtype=np.uint8)
+        cv2.line(x_template, (2, 2), (11, 11), 255, 2)
+        cv2.line(x_template, (11, 2), (2, 11), 255, 2)
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        filtered = cv2.bilateralFilter(gray, 9, 75, 75)
+        canny_output = cv2.Canny(filtered, 30, 150)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        closed_edges = cv2.morphologyEx(canny_output, cv2.MORPH_CLOSE, kernel)
+        contours, _ = cv2.findContours(closed_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        image_h, image_w = img.shape[:2]
+        total_pixels = image_h * image_w
+        detected_elements: List[Tuple[str, int, int, int, int]] = []
+
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > (total_pixels * 0.5):
+                continue
+            x, y, w, h = cv2.boundingRect(cnt)
+            if h <= 0:
+                continue
+            aspect_ratio = float(w) / float(h)
+            if w < 30 and h < 30:
+                continue
+            hull = cv2.convexHull(cnt)
+            hull_area = cv2.contourArea(hull)
+            if hull_area == 0:
+                continue
+            solidity = float(area) / float(hull_area)
+            extent = float(area) / float(max(1, w * h))
+
+            match_score = 0.0
+            if 0.7 < aspect_ratio < 1.3 and float(w) < 100 and float(h) < 100:
+                try:
+                    mask = np.zeros((h, w), dtype=np.uint8)
+                    offset_cnt = cnt - [x, y]
+                    cv2.drawContours(mask, [offset_cnt], -1, 255, thickness=-1)
+                    target_mini = cv2.resize(mask, (template_size, template_size), interpolation=cv2.INTER_AREA)
+                    res = cv2.matchTemplate(target_mini, x_template, cv2.TM_CCOEFF_NORMED)
+                    match_score = float(res[0][0])
+                except Exception:
+                    match_score = 0.0
+
+            shape_type: Optional[str] = None
+            try:
+                tri_area, _triangle_cnt = cv2.minEnclosingTriangle(cnt)
+                triangle_match_ratio = float(area) / float(tri_area) if float(tri_area) > 0 else 0.0
+            except Exception:
+                triangle_match_ratio = 0.0
+
+            if solidity > 0.6 and triangle_match_ratio > 0.75:
+                shape_type = "Triangle"
+            elif match_score > 0.6:
+                shape_type = "X-Shape"
+            elif solidity > 0.85 and extent > 0.6:
+                shape_type = "Rectangle"
+
+            if shape_type:
+                detected_elements.append((shape_type, int(x), int(y), int(w), int(h)))
+
+        return detected_elements
+
+    @staticmethod
+    def _tt_extract_template_nodes(
+        screenshot_b64: str,
+        min_w: int,
+        min_h: int,
+        min_area: int,
+        max_aspect: float,
+    ) -> List[Dict[str, Any]]:
+        detections = BaseUI._tt_detect_template_elements(screenshot_b64)
+        nodes: List[Dict[str, Any]] = []
+        for shape, x, y, w, h in detections:
+            if w < int(min_w) or h < int(min_h):
+                continue
+            area = int(w * h)
+            if area < int(min_area):
+                continue
+            if w <= 0 or h <= 0:
+                continue
+            aspect = max(float(w) / float(h), float(h) / float(w))
+            if aspect > float(max_aspect):
+                continue
+            nodes.append(
+                {
+                    "source": "template",
+                    "type": str(shape),
+                    "text": "",
+                    "confidence": None,
+                    "frame": BaseUI._tt_safe_frame(x, y, w, h),
+                    "clickable": True,
+                    "attributes": {},
+                }
+            )
+        return BaseUI._tt_dedupe_nodes(nodes, overlap_threshold=0.94)
+
+    @staticmethod
+    def _tt_merge_by_ocr_rules(
+        ocr_nodes: List[Dict[str, Any]],
+        other_nodes: List[Dict[str, Any]],
+        image_w: int,
+        image_h: int,
+        max_target_screen_ratio_y: float,
+        max_outer_inner_area_ratio_x: float,
+        contain_threshold: float,
+    ) -> List[Dict[str, Any]]:
+        active_ocr = [dict(n) for n in ocr_nodes]
+        ocr_alive = [True for _ in active_ocr]
+        merged_others: List[Dict[str, Any]] = []
+
+        for other in other_nodes:
+            other_frame = other["frame"]
+            contained_ocr_idx: List[int] = []
+            ocr_contains_other = False
+
+            for idx, ocr in enumerate(active_ocr):
+                if not ocr_alive[idx]:
+                    continue
+                ocr_frame = ocr["frame"]
+                if BaseUI._tt_contains(other_frame, ocr_frame, threshold=contain_threshold):
+                    contained_ocr_idx.append(idx)
+                if BaseUI._tt_contains(ocr_frame, other_frame, threshold=contain_threshold):
+                    ocr_contains_other = True
+
+            if contained_ocr_idx:
+                mergeable_ocr_idx = [
+                    idx
+                    for idx in contained_ocr_idx
+                    if BaseUI._tt_allow_outer_absorb_inner(
+                        outer=other_frame,
+                        inner=active_ocr[idx]["frame"],
+                        image_w=image_w,
+                        image_h=image_h,
+                        max_target_screen_ratio_y=max_target_screen_ratio_y,
+                        max_outer_inner_area_ratio_x=max_outer_inner_area_ratio_x,
+                    )
+                ]
+                if not mergeable_ocr_idx:
+                    merged_others.append(dict(other))
+                    continue
+
+                merged = dict(other)
+                merged["attributes"] = dict(merged.get("attributes") or {})
+                merged_texts: List[str] = []
+                for idx in mergeable_ocr_idx:
+                    ocr_text = str(active_ocr[idx].get("text") or "").strip()
+                    if ocr_text:
+                        merged_texts.append(ocr_text)
+                    ocr_alive[idx] = False
+
+                unique_texts = list(dict.fromkeys(merged_texts))
+                if unique_texts:
+                    existing = str(merged.get("text") or "").strip()
+                    joined = "\n".join(unique_texts).strip()
+                    if existing:
+                        existing_lines = [s.strip() for s in existing.splitlines() if s.strip()]
+                        merged_lines = existing_lines + [s for s in unique_texts if s and s not in existing_lines]
+                        merged["text"] = "\n".join(merged_lines).strip()
+                    else:
+                        merged["text"] = joined
+                merged_others.append(merged)
+                continue
+
+            if ocr_contains_other:
+                continue
+
+            merged_others.append(dict(other))
+
+        final_nodes: List[Dict[str, Any]] = []
+        for alive, ocr in zip(ocr_alive, active_ocr):
+            if alive:
+                final_nodes.append(ocr)
+        final_nodes.extend(merged_others)
+        final_nodes.sort(key=lambda n: (int(n["frame"]["y"]), int(n["frame"]["x"])))
+        return BaseUI._tt_dedupe_nodes(final_nodes, overlap_threshold=0.97)
+
+    @staticmethod
+    def _tt_node_to_uist_node(node: Dict[str, Any]) -> Dict[str, Any]:
+        src = str(node.get("source") or "unknown")
+        node_type = str(node.get("type") or "Unknown")
+        text = str(node.get("text") or "").strip()
+        frame = node["frame"]
+
+        out: Dict[str, Any] = {
+            "class": f"{src}_{node_type}".lower().replace(" ", "_"),
+            "text": text if src == "ocr" else "",
+            "content_desc": text if src != "ocr" and text else "",
+            "resource_id": "",
+            "clickable": bool(node.get("clickable", False)),
+            "enabled": True,
+            "absolute_frame": BaseUI._tt_safe_frame(frame["x"], frame["y"], frame["width"], frame["height"]),
+            "subviews": [],
+            "semantic_source": src,
+            "source_type": node_type,
+        }
+        if text:
+            out["ocr_text"] = text
+        conf = node.get("confidence")
+        if conf is not None:
+            out["ocr_conf"] = float(conf)
+        attrs = node.get("attributes") or {}
+        for k, v in attrs.items():
+            out[str(k)] = v
+        return out
+
+    @staticmethod
+    @time_consumed
+    def post_process_ui_three_tools_debug(
+        uist: Dict[str, Any],
+        screenshot_b64: str,
+        device_info: Optional[Dict[str, Any]] = None,
+        *,
+        ocr_min_conf: float = 0.5,
+        contain_threshold: float = 0.85,
+        template_min_w: int = 30,
+        template_min_h: int = 30,
+        template_min_area: int = 900,
+        template_max_aspect: float = 8.0,
+        full_screen_area_ratio: float = 0.70,
+        merge_target_max_screen_ratio_y: float = 0.35,
+        merge_max_outer_inner_area_ratio_x: float = 12.0,
+        include_uied_block: bool = False,
+    ) -> Tuple[Dict[str, Any], Dict[int, Dict[str, Any]]]:
+        if not screenshot_b64:
+            return BaseUI.post_process_ui_uied_first(uist, screenshot_b64, device_info=device_info)
+
+        image_w, image_h = BaseUI._tt_image_size_from_b64(screenshot_b64)
+        if image_w <= 0 or image_h <= 0:
+            return BaseUI.post_process_ui_uied_first(uist, screenshot_b64, device_info=device_info)
+
+        ocr_nodes = BaseUI._tt_extract_ocr_nodes(screenshot_b64, min_conf=float(ocr_min_conf))
+        uied_nodes_raw = BaseUI._tt_extract_uied_nodes(screenshot_b64, include_block=bool(include_uied_block))
+        template_nodes_raw = BaseUI._tt_extract_template_nodes(
+            screenshot_b64=screenshot_b64,
+            min_w=int(template_min_w),
+            min_h=int(template_min_h),
+            min_area=int(template_min_area),
+            max_aspect=float(template_max_aspect),
+        )
+
+        uied_nodes = BaseUI._tt_filter_non_ocr_nodes(
+            nodes=uied_nodes_raw,
+            image_w=image_w,
+            image_h=image_h,
+            min_w=int(template_min_w),
+            min_h=int(template_min_h),
+            min_area=int(template_min_area),
+            max_aspect=float(template_max_aspect),
+            full_screen_area_ratio=float(full_screen_area_ratio),
+        )
+        template_nodes_base_filtered = BaseUI._tt_filter_non_ocr_nodes(
+            nodes=template_nodes_raw,
+            image_w=image_w,
+            image_h=image_h,
+            min_w=int(template_min_w),
+            min_h=int(template_min_h),
+            min_area=int(template_min_area),
+            max_aspect=float(template_max_aspect),
+            full_screen_area_ratio=float(full_screen_area_ratio),
+        )
+        template_nodes = BaseUI._tt_prune_contained_template_nodes(
+            nodes=template_nodes_base_filtered,
+            contain_threshold=0.98,
+        )
+
+        other_nodes = BaseUI._tt_dedupe_nodes(uied_nodes + template_nodes, overlap_threshold=0.96)
+        final_nodes_pre_cross = BaseUI._tt_merge_by_ocr_rules(
+            ocr_nodes=ocr_nodes,
+            other_nodes=other_nodes,
+            image_w=image_w,
+            image_h=image_h,
+            max_target_screen_ratio_y=float(merge_target_max_screen_ratio_y),
+            max_outer_inner_area_ratio_x=float(merge_max_outer_inner_area_ratio_x),
+            contain_threshold=float(contain_threshold),
+        )
+        final_nodes = BaseUI._tt_prune_contained_across_sources(
+            nodes=final_nodes_pre_cross,
+            image_w=image_w,
+            image_h=image_h,
+            max_target_screen_ratio_y=float(merge_target_max_screen_ratio_y),
+            max_outer_inner_area_ratio_x=float(merge_max_outer_inner_area_ratio_x),
+            contain_threshold=0.98,
+        )
+
+        out_uist = {
+            "elements": [BaseUI._tt_node_to_uist_node(n) for n in final_nodes],
+            "screenscale": 1.0,
+        }
+
+        try:
+            BaseUI._attach_icon_labels(out_uist, screenshot_b64)
+        except Exception:
+            logger.debug("Icon classification failed in three-tools debug mode (continuing)", exc_info=True)
+
+        try:
+            BaseUI._attach_external_semantic(out_uist, screenshot_b64, device_info=device_info)
+        except Exception:
+            logger.debug("External semantic attach failed in three-tools debug mode (continuing)", exc_info=True)
+
+        # 仅三工具调试分支使用全量 id 映射，便于核对融合后每个元素。
+        vid_map = BaseUI._assign_ids_all_nodes(out_uist)
+        logger.debug(
+            "three-tools debug post-process: ocr=%d uied_raw=%d uied_filtered=%d template_raw=%d template_filtered=%d final=%d ids=%d",
+            len(ocr_nodes),
+            len(uied_nodes_raw),
+            len(uied_nodes),
+            len(template_nodes_raw),
+            len(template_nodes),
+            len(final_nodes),
+            len(vid_map),
+        )
+        return out_uist, vid_map
 
     # ---------------------------
     # Public API

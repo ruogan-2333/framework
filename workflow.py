@@ -2457,10 +2457,10 @@ class WorkflowRunner:
             logger.exception("capture_and_process failed")
             return None
         
-
-    def _capture_and_process2(self, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
+    def _capture_and_process_debug(self, timeout: float = 10.0, debug: bool = False, raw=None, xml_raw=None) -> Optional[Dict[str, Any]]:
         """
-        (no uied)
+
+        (use uied)
         IPO:
           in : device UI state (implicit)
           out: {xml, screenshot(b64), uist, vid_map, state_sig} or None
@@ -2475,8 +2475,12 @@ class WorkflowRunner:
           - Prevents planning on mixed frames (xml from one, screenshot from another).
         """
         try:
-            raw = self.appium.capture_snapshot(timeout=timeout)
-            xml_raw = raw.get("xml", "")
+            if debug and raw is not None:
+                if xml_raw is None:
+                    xml_raw = raw.get("xml", "")
+            else:
+                raw = self.appium.capture_snapshot(timeout=timeout)
+                xml_raw = raw.get("xml", "")
             xml_hash_raw = str(raw.get("xml_hash") or "")
             screenshot_b64_raw = raw.get("screenshot", "")
             screenshot_hash_raw = str(raw.get("screenshot_hash") or "")
@@ -2534,10 +2538,19 @@ class WorkflowRunner:
                 png_bytes = self._crop_png_top(png_bytes_raw, crop_px)
                 screenshot_b64 = base64.b64encode(png_bytes).decode("utf-8")
             screenshot_hash = hashlib.md5((png_bytes or b"")).hexdigest() if png_bytes else hashlib.md5((screenshot_b64 or "").encode("utf-8")).hexdigest()
+            screenshot_phash = compute_screenshot_phash(screenshot_b64)
 
             # Processed XML: remove top status bar region; keep raw for debugging.
             xml = self._preprocess_hierarchy_xml(xml_raw, crop_top_xml=crop_xml) if crop_xml > 0 else (xml_raw or "")
             xml_hash = hashlib.md5((xml or "").encode("utf-8")).hexdigest()
+
+            xml_reliable = count_meaningful_xml_nodes(xml) >= int(self.budget.meaningful_xml_nodes_threshold)
+            postprocess_mode = "xml_only" if xml_reliable else "three_tools_debug"
+            logger.info(
+                "Debug post-process mode: %s (xml_reliable=%s)",
+                "xml_only" if xml_reliable else "three_tools_debug",
+                xml_reliable,
+            )
 
             raw_key = self._snapshot_cache_key(
                 xml_hash,
@@ -2545,7 +2558,7 @@ class WorkflowRunner:
                 coord_scale,
                 foreground_package=foreground_package,
                 foreground_activity=foreground_activity,
-            )
+            ) + f":{postprocess_mode}"
             cached = self.snapshot_cache.get(raw_key)
             if cached:
                 self.snapshot_cache.move_to_end(raw_key)
@@ -2561,14 +2574,14 @@ class WorkflowRunner:
             else:
                 self.snapshot_cache_misses += 1
                 uist = self.appium.parse_xml_to_uist(xml, pixel_ratio=coord_scale)
-                # 这里是“页面分析”的真正入口：
-                # 1. 先把 Appium XML 解析成内部树 uist
-                # 2. 再交给 BaseUI.post_process_ui* 做后处理
-                #
-                # 当前这条链走的是原始 post_process_ui()。
-                # 如果后面要切到 UIED-first 调试链，可以在这里改成
-                # BaseUI.post_process_ui_uied_first(...)
-                uist2, vid_map = BaseUI.post_process_ui(uist, screenshot_b64, device_info=info)
+                if xml_reliable:
+                    uist2, vid_map = BaseUI.post_process_ui(uist, screenshot_b64, device_info=info)
+                else:
+                    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
+                        uist,
+                        screenshot_b64,
+                        device_info=info,
+                    )
                 sig = compute_state_signature(
                     uist2,
                     foreground_package=foreground_package,
@@ -2580,8 +2593,6 @@ class WorkflowRunner:
                     self.snapshot_cache.popitem(last=False)
                 self._log_event("snapshot_cache_miss", sig=sig, raw_key=raw_key, cache_size=len(self.snapshot_cache))
 
-            screenshot_phash = compute_screenshot_phash(screenshot_b64)
-            xml_reliable = count_meaningful_xml_nodes(xml) >= int(self.budget.meaningful_xml_nodes_threshold)
             coarse_sig = compute_coarse_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
             struct_sig = compute_structural_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
             fine_sig = compute_fine_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
@@ -2602,7 +2613,7 @@ class WorkflowRunner:
             snap = {
                 "xml": xml,  # 处理后的 XML：后续解析/UI 判断真正使用的层级树
                 "xml_raw": xml_raw,  # 原始 XML：保留给调试对照
-                "screenshot": screenshot_b64,  # 处理后的截图：后续 OCR/相似度使用
+                "screenshot": screenshot_b64,  # 处理后的截图：后续 OCR/UIED/相似度使用
                 "screenshot_raw": screenshot_b64_raw,  # 原始截图：保留给调试对照
                 "uist": uist2,  # 后处理后的 UI 树：签名、LLM、动作定位都基于它
                 "vid_map": vid_map,  # element_id -> 节点映射：动作执行时靠它找元素
@@ -2615,9 +2626,9 @@ class WorkflowRunner:
                     "cache_size": len(self.snapshot_cache),  # 当前 snapshot cache 大小
                     "xml_hash": xml_hash,  # 处理后 XML 的 hash
                     "screenshot_hash": screenshot_hash,  # 处理后截图的 hash
+                    "screenshot_phash": screenshot_phash,  # 处理后截图的感知 hash（视觉相似度）
                     "xml_hash_raw": xml_hash_raw,  # 原始 XML 的 hash
                     "screenshot_hash_raw": screenshot_hash_raw,  # 原始截图的 hash
-                    "screenshot_phash": screenshot_phash,  # 处理后截图的感知 hash（视觉相似度）
                     "xml_reliable": xml_reliable,  # XML 是否足够可靠，可用于状态判断
                     "coord_scale": coord_scale,  # XML 坐标到截图坐标的缩放比例
                     "coarse_sig": coarse_sig,  # 粗粒度签名：宽松比较页面
@@ -2661,6 +2672,9 @@ class WorkflowRunner:
         except Exception:
             logger.exception("capture_and_process failed")
             return None
+        
+
+
 
     def _snapshot_cache_key(
         self,
