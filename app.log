@@ -59781,3 +59781,944 @@ IndexError: list index out of range
 [2026-05-03 16:16:52,315] WARNING [workflow:5482] No probe outcomes for forward selection at src_sig=phash:12
 [2026-05-03 16:17:11,458] WARNING [workflow:6187] APP restart triggered: reason=beam_in_graph_navigation_diverged best_target=xml:bbc2
 [2026-05-03 16:18:16,821] WARNING [workflow:1321] Stop condition reached: time_budget_reached
+[2026-05-13 21:13:33,574] INFO [__main__:309] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-13 21:13:33,575] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-13 21:13:40,784] INFO [appium_android:144] Appium driver created
+[2026-05-13 21:13:40,787] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=39
+[2026-05-13 21:13:40,789] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260513_211332_bim.app", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\app_metadata_context.json"}
+[2026-05-13 21:13:40,801] INFO [appium_android:208] Force-stop bim.app via adb
+[2026-05-13 21:13:41,575] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:13:44,258] DEBUG [appium_android:224] Page stable with hash=6c8f0dbe0181d4e5b9c42f22583e534b
+[2026-05-13 21:13:45,129] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:13:50,148] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 5.0046303272247314 seconds
+[2026-05-13 21:13:50,155] DEBUG [ui_cls:416] UIED start: key=24a7769f00689605e67ae2d41ae68fdf output_root=F:\workplace\framework\mytests\outputs\uied_runtime\24a7769f00689605e67ae2d41ae68fdf image=F:\workplace\framework\mytests\outputs\uied_runtime\24a7769f00689605e67ae2d41ae68fdf\24a7769f00689605e67ae2d41ae68fdf.png
+[2026-05-13 21:13:56,446] DEBUG [ui_cls:460] UIED outputs: key=24a7769f00689605e67ae2d41ae68fdf ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\24a7769f00689605e67ae2d41ae68fdf
+[2026-05-13 21:13:56,447] DEBUG [ui_cls:493] UIED success: key=24a7769f00689605e67ae2d41ae68fdf ocr_texts=0 ip_compos=1 merge_compos=1
+[2026-05-13 21:13:56,637] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.1115875244140625 seconds
+[2026-05-13 21:13:56,638] DEBUG [ui_cls:1542] Assigned 1 ids (all nodes)
+[2026-05-13 21:13:56,638] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=0 uied_raw=1 uied_filtered=1 template_raw=3 template_filtered=1 final=1 ids=1
+[2026-05-13 21:13:56,639] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 11.510548830032349 seconds
+[2026-05-13 21:13:56,639] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 0, "cur_sig": "8bf33284", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "raw_key": "6c8f0dbe0181d4e5b9c42f22583e534b:96ad989782f34aea1efb257e52582b25:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 1}
+[2026-05-13 21:13:56,740] DEBUG [workflow:3200] Schedule NAV for sig=phash:9e blocks=39
+[2026-05-13 21:13:56,740] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260513_211332_bim.app", "step_id": 2, "cur_sig": "phash:9e", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "blocks": 39, "enqueue_ts": 1778678036.7405074}
+[2026-05-13 21:13:56,744] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 4, "cur_sig": "phash:9e", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "kind": "entry_state", "level": "strong"}
+[2026-05-13 21:13:56,745] INFO [workflow:1343] Loop: sig=phash:9e stack_depth=1 actions=0 blocks=39 pending(nav=1 block_router=1) no_progress=1 no_new=0
+[2026-05-13 21:13:57,185] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:13:57,824] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:13:58,232] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:13:58,770] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.5360655784606934 seconds
+[2026-05-13 21:13:58,774] DEBUG [ui_cls:416] UIED start: key=a90332ec1bf9f39c995f63e3926a41f6 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\a90332ec1bf9f39c995f63e3926a41f6 image=F:\workplace\framework\mytests\outputs\uied_runtime\a90332ec1bf9f39c995f63e3926a41f6\a90332ec1bf9f39c995f63e3926a41f6.png
+[2026-05-13 21:14:03,330] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=phash:9e prompt=3919 completion=30 total=3949 duration_s=6.586 path=parse
+[2026-05-13 21:14:03,330] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 6.5858869552612305 seconds
+[2026-05-13 21:14:06,861] DEBUG [ui_cls:460] UIED outputs: key=a90332ec1bf9f39c995f63e3926a41f6 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\a90332ec1bf9f39c995f63e3926a41f6
+[2026-05-13 21:14:06,862] DEBUG [ui_cls:493] UIED success: key=a90332ec1bf9f39c995f63e3926a41f6 ocr_texts=7 ip_compos=64 merge_compos=7
+[2026-05-13 21:14:07,058] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.051842689514160156 seconds
+[2026-05-13 21:14:07,111] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05315232276916504 seconds
+[2026-05-13 21:14:07,170] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.057320594787597656 seconds
+[2026-05-13 21:14:07,220] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04819917678833008 seconds
+[2026-05-13 21:14:07,271] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.050208330154418945 seconds
+[2026-05-13 21:14:07,324] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05287766456604004 seconds
+[2026-05-13 21:14:07,387] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.06313109397888184 seconds
+[2026-05-13 21:14:07,446] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05647444725036621 seconds
+[2026-05-13 21:14:07,500] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.051639556884765625 seconds
+[2026-05-13 21:14:07,502] DEBUG [ui_cls:1542] Assigned 16 ids (all nodes)
+[2026-05-13 21:14:07,502] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=7 uied_raw=6 uied_filtered=6 template_raw=16 template_filtered=12 final=16 ids=16
+[2026-05-13 21:14:07,502] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 9.27005648612976 seconds
+[2026-05-13 21:14:07,503] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 4, "cur_sig": "f7d1f06f", "stack_depth": 1, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:2afd0b09ea6f8aa77e2d77f215dff2c2:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 2}
+[2026-05-13 21:14:07,804] WARNING [workflow:1391] DRIFT: old=phash:9e new=phash:fc. Replanning.
+[2026-05-13 21:14:07,807] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 7, "cur_sig": "phash:fc", "stack_depth": 1, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "kind": "state_changed", "level": "weak", "src": "phash:9eab36632a0dbafff13729b81b21e994", "dst": "phash:fcfb9cc5ec29d7bb8d78a28afe15b6cf"}
+[2026-05-13 21:14:07,807] DEBUG [workflow:3200] Schedule NAV for sig=phash:fc blocks=39
+[2026-05-13 21:14:07,807] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260513_211332_bim.app", "step_id": 7, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "blocks": 39, "enqueue_ts": 1778678047.8076973}
+[2026-05-13 21:14:07,836] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260513_211332_bim.app", "step_id": 9, "cur_sig": "phash:9e", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\router\\1778678047835_phash_9eab36632a0dbafff13729b81b21e994.json"}
+[2026-05-13 21:14:07,848] INFO [workflow:1343] Loop: sig=phash:fc stack_depth=2 actions=0 blocks=39 pending(nav=2 block_router=1) no_progress=2 no_new=1
+[2026-05-13 21:14:10,316] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=phash:9e prompt=7578 completion=275 total=7853 duration_s=13.573 path=parse
+[2026-05-13 21:14:10,318] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 13.575664520263672 seconds
+[2026-05-13 21:14:10,488] DEBUG [workflow:3427] NAV ready sig=phash:9e overlay=none cand=0 return_method=none return_actions=0
+[2026-05-13 21:14:10,488] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260513_211332_bim.app", "step_id": 12, "cur_sig": "phash:9e", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "overlay_kind": "none", "candidate_count": 0, "duration_s": 13.748354434967041}
+[2026-05-13 21:14:10,489] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260513_211332_bim.app", "step_id": 12, "cur_sig": "phash:9e", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\nav\\1778678050489_phash_9eab36632a0dbafff13729b81b21e994.json"}
+[2026-05-13 21:14:15,627] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=phash:fc prompt=3921 completion=32 total=3953 duration_s=7.803 path=parse
+[2026-05-13 21:14:15,627] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 7.8047873973846436 seconds
+[2026-05-13 21:14:15,693] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260513_211332_bim.app", "step_id": 13, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\router\\1778678055692_phash_fcfb9cc5ec29d7bb8d78a28afe15b6cf.json"}
+[2026-05-13 21:14:20,665] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=phash:9e prompt=3647 completion=463 total=4110 duration_s=12.826 path=parse
+[2026-05-13 21:14:20,666] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 12.82743525505066 seconds
+[2026-05-13 21:14:20,671] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 15, "cur_sig": "phash:9e", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 7}
+[2026-05-13 21:14:20,671] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260513_211332_bim.app", "step_id": 15, "cur_sig": "phash:9e", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "block_result_count": 7, "proposed_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\blocks_fill\\1778678060670_phash_9eab36632a0dbafff13729b81b21e994.json"}
+[2026-05-13 21:14:29,996] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=phash:fc prompt=3649 completion=477 total=4126 duration_s=14.302 path=parse
+[2026-05-13 21:14:29,996] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 14.30185604095459 seconds
+[2026-05-13 21:14:30,068] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 16, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 7}
+[2026-05-13 21:14:30,068] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260513_211332_bim.app", "step_id": 16, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 2, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "block_result_count": 7, "proposed_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\blocks_fill\\1778678070067_phash_fcfb9cc5ec29d7bb8d78a28afe15b6cf.json"}
+[2026-05-13 21:14:36,479] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=phash:fc prompt=9193 completion=856 total=10049 duration_s=28.669 path=parse
+[2026-05-13 21:14:36,480] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 28.669687271118164 seconds
+[2026-05-13 21:14:36,522] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 17, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "kind": "candidates_discovered", "level": "strong", "family": "49e97080d4aad723f21587a7bf1e3a24", "count": 4}
+[2026-05-13 21:14:36,523] DEBUG [workflow:3427] NAV ready sig=phash:fc overlay=dismiss cand=4 return_method=none return_actions=0
+[2026-05-13 21:14:36,523] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260513_211332_bim.app", "step_id": 17, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "overlay_kind": "dismiss", "candidate_count": 4, "duration_s": 28.716228485107422}
+[2026-05-13 21:14:36,525] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260513_211332_bim.app", "step_id": 17, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\nav\\1778678076524_phash_fcfb9cc5ec29d7bb8d78a28afe15b6cf.json"}
+[2026-05-13 21:14:36,527] INFO [workflow:1511] Overlay(DISMISS) at sig=phash:fc: A modal dialog is prompting the user to acknowledge an update notification.
+[2026-05-13 21:14:36,527] INFO [workflow:1108] {"event": "overlay_detected", "run_id": "20260513_211332_bim.app", "step_id": 18, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "overlay_kind": "dismiss", "reason": "A modal dialog is prompting the user to acknowledge an update notification."}
+[2026-05-13 21:14:36,527] INFO [workflow:3836] Overlay action at sig=phash:fc: click:8: (Clicking 'OK' will dismiss the update notification.)
+[2026-05-13 21:14:36,527] INFO [workflow:1108] {"event": "overlay_dismiss_attempt", "run_id": "20260513_211332_bim.app", "step_id": 18, "cur_sig": "phash:fc", "stack_depth": 2, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "click", "element_id": 8, "text": null}}
+[2026-05-13 21:14:36,529] DEBUG [workflow:6448] Executing action: click:8: on element {'class': 'template_rectangle', 'text': '', 'content_desc': 'OK', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 319, 'y': 1099, 'width': 443, 'height': 126}, 'subviews': {}, 'semantic_source': 'template', 'source_type': 'Rectangle', 'ocr_text': 'OK', 'id': 8}
+[2026-05-13 21:14:36,607] DEBUG [appium_android:408] Click by=accessibility id value=OK
+[2026-05-13 21:14:36,650] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=2
+[2026-05-13 21:14:36,918] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=1
+[2026-05-13 21:14:37,187] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=0
+[2026-05-13 21:14:37,187] DEBUG [appium_android:398] Tap at (540,1162)
+[2026-05-13 21:14:38,190] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:14:38,832] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:14:39,347] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:14:39,843] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.49320459365844727 seconds
+[2026-05-13 21:14:39,848] DEBUG [ui_cls:416] UIED start: key=35b4c2b9d2f824c1b2eaa763f5e1388d output_root=F:\workplace\framework\mytests\outputs\uied_runtime\35b4c2b9d2f824c1b2eaa763f5e1388d image=F:\workplace\framework\mytests\outputs\uied_runtime\35b4c2b9d2f824c1b2eaa763f5e1388d\35b4c2b9d2f824c1b2eaa763f5e1388d.png
+[2026-05-13 21:14:47,018] DEBUG [ui_cls:460] UIED outputs: key=35b4c2b9d2f824c1b2eaa763f5e1388d ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\35b4c2b9d2f824c1b2eaa763f5e1388d
+[2026-05-13 21:14:47,020] DEBUG [ui_cls:493] UIED success: key=35b4c2b9d2f824c1b2eaa763f5e1388d ocr_texts=6 ip_compos=11 merge_compos=10
+[2026-05-13 21:14:47,187] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04462909698486328 seconds
+[2026-05-13 21:14:47,228] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04019951820373535 seconds
+[2026-05-13 21:14:47,266] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03496384620666504 seconds
+[2026-05-13 21:14:47,268] DEBUG [ui_cls:1542] Assigned 7 ids (all nodes)
+[2026-05-13 21:14:47,268] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=6 uied_raw=10 uied_filtered=7 template_raw=21 template_filtered=7 final=7 ids=7
+[2026-05-13 21:14:47,270] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 7.9227049350738525 seconds
+[2026-05-13 21:14:47,270] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 20, "cur_sig": "eb2a6d07", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:8c11bde5e4d2dae1fc96e1e15a105f9d:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 3}
+[2026-05-13 21:14:47,645] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 22, "cur_sig": "phash:6e", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "kind": "state_changed", "level": "weak", "src": "phash:fcfb9cc5ec29d7bb8d78a28afe15b6cf", "dst": "phash:6e0d54667e75aefbb9581479d2b48d12"}
+[2026-05-13 21:14:47,646] DEBUG [workflow:3200] Schedule NAV for sig=phash:6e blocks=39
+[2026-05-13 21:14:47,646] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260513_211332_bim.app", "step_id": 22, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "blocks": 39, "enqueue_ts": 1778678087.646634}
+[2026-05-13 21:14:47,667] WARNING [workflow:1520] Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.
+[2026-05-13 21:14:47,668] INFO [workflow:1108] {"event": "recovery_start", "run_id": "20260513_211332_bim.app", "step_id": 26, "cur_sig": "phash:fc", "stack_depth": 3, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "reason": "overlay_unresolved", "target_sig": null}
+[2026-05-13 21:14:47,668] INFO [workflow:1108] {"event": "recovery_deterministic_step", "run_id": "20260513_211332_bim.app", "step_id": 26, "cur_sig": "phash:fc", "stack_depth": 3, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "action": {"action": "back", "element_id": null, "text": null}}
+[2026-05-13 21:14:47,671] DEBUG [workflow:6448] Executing action: back:None: on element {'subviews': {}}
+[2026-05-13 21:14:47,757] DEBUG [appium_android:403] Press back
+[2026-05-13 21:14:49,477] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:14:50,114] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:14:50,623] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:14:51,154] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.5276498794555664 seconds
+[2026-05-13 21:14:51,161] DEBUG [ui_cls:416] UIED start: key=9f06f17785425596630d9e929cf8cbc0 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9f06f17785425596630d9e929cf8cbc0 image=F:\workplace\framework\mytests\outputs\uied_runtime\9f06f17785425596630d9e929cf8cbc0\9f06f17785425596630d9e929cf8cbc0.png
+[2026-05-13 21:14:59,141] DEBUG [ui_cls:460] UIED outputs: key=9f06f17785425596630d9e929cf8cbc0 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9f06f17785425596630d9e929cf8cbc0
+[2026-05-13 21:14:59,142] DEBUG [ui_cls:493] UIED success: key=9f06f17785425596630d9e929cf8cbc0 ocr_texts=6 ip_compos=8 merge_compos=7
+[2026-05-13 21:14:59,303] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03828763961791992 seconds
+[2026-05-13 21:14:59,348] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04295158386230469 seconds
+[2026-05-13 21:14:59,391] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0407254695892334 seconds
+[2026-05-13 21:14:59,392] DEBUG [ui_cls:1542] Assigned 8 ids (all nodes)
+[2026-05-13 21:14:59,392] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=7 uied_raw=7 uied_filtered=7 template_raw=22 template_filtered=7 final=8 ids=8
+[2026-05-13 21:14:59,392] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 8.768829584121704 seconds
+[2026-05-13 21:14:59,393] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 28, "cur_sig": "0ca22b39", "stack_depth": 3, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 4, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:8f2da3b9a022dfa8fe6079baf87f112c:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 4}
+[2026-05-13 21:14:59,817] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 30, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 4, "kind": "state_changed", "level": "weak", "src": "phash:fcfb9cc5ec29d7bb8d78a28afe15b6cf", "dst": "phash:6e0d54667e75aefbb9581479d2b48d12"}
+[2026-05-13 21:14:59,817] INFO [workflow:1108] {"event": "recovery_deterministic_step", "run_id": "20260513_211332_bim.app", "step_id": 30, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 4, "action": {"action": "back", "element_id": null, "text": null}}
+[2026-05-13 21:14:59,819] DEBUG [workflow:6448] Executing action: back:None: on element {'subviews': {}}
+[2026-05-13 21:14:59,899] DEBUG [appium_android:403] Press back
+[2026-05-13 21:15:01,577] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:15:02,217] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:15:02,676] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:15:03,143] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.46286797523498535 seconds
+[2026-05-13 21:15:03,149] DEBUG [ui_cls:416] UIED start: key=e6896d34198474532dee14d93c0ed088 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\e6896d34198474532dee14d93c0ed088 image=F:\workplace\framework\mytests\outputs\uied_runtime\e6896d34198474532dee14d93c0ed088\e6896d34198474532dee14d93c0ed088.png
+[2026-05-13 21:15:05,025] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=phash:6e prompt=3921 completion=80 total=4001 duration_s=17.368 path=parse
+[2026-05-13 21:15:05,104] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 17.44800353050232 seconds
+[2026-05-13 21:15:11,398] DEBUG [ui_cls:460] UIED outputs: key=e6896d34198474532dee14d93c0ed088 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\e6896d34198474532dee14d93c0ed088
+[2026-05-13 21:15:11,400] DEBUG [ui_cls:493] UIED success: key=e6896d34198474532dee14d93c0ed088 ocr_texts=6 ip_compos=8 merge_compos=7
+[2026-05-13 21:15:11,558] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03868889808654785 seconds
+[2026-05-13 21:15:11,600] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03922319412231445 seconds
+[2026-05-13 21:15:11,646] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0439603328704834 seconds
+[2026-05-13 21:15:11,647] DEBUG [ui_cls:1542] Assigned 7 ids (all nodes)
+[2026-05-13 21:15:11,648] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=6 uied_raw=7 uied_filtered=7 template_raw=22 template_filtered=7 final=7 ids=7
+[2026-05-13 21:15:11,649] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 8.973005533218384 seconds
+[2026-05-13 21:15:11,649] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 32, "cur_sig": "578884e5", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 5, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:940ce6118223b1bb77d2e7b06693c64c:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 5}
+[2026-05-13 21:15:12,060] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260513_211332_bim.app", "step_id": 34, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 5, "router_update_count": 1, "matched_block_count": 8, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\router\\1778678112060_phash_6e0d54667e75aefbb9581479d2b48d12.json"}
+[2026-05-13 21:15:12,071] INFO [workflow:5698] Recovery attempt 1/2 at sig=phash:6e reason=overlay_unresolved
+[2026-05-13 21:15:32,004] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=phash:6e prompt=8235 completion=767 total=9002 duration_s=44.356 path=parse
+[2026-05-13 21:15:32,005] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 44.357388496398926 seconds
+[2026-05-13 21:15:33,964] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=phash:6e prompt=3975 completion=212 total=4187 duration_s=21.902 path=parse
+[2026-05-13 21:15:33,965] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 21.903533458709717 seconds
+[2026-05-13 21:15:48,464] INFO [gpt_cls:1625] LLM_USAGE stage=LLM3 op=recover_state sig=phash:6e prompt=3367 completion=571 total=3938 duration_s=36.390 path=parse
+[2026-05-13 21:15:48,464] DEBUG [utils:206] Function GPTClient.recover_state consumed 36.391047954559326 seconds
+[2026-05-13 21:15:48,466] INFO [workflow:5741] LLM3 recovery steps=4 why=The screen appears to be a main menu with no active overlay. Clicking on interactive elements like the settings icon or navigation buttons c
+[2026-05-13 21:15:48,466] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260513_211332_bim.app", "step_id": 38, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 5, "action": {"action": "click", "element_id": 7, "text": null}}
+[2026-05-13 21:15:48,468] DEBUG [workflow:6448] Executing action: click:7: on element {'class': 'template_rectangle', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 904, 'y': 39, 'width': 136, 'height': 125}, 'subviews': {}, 'semantic_source': 'template', 'source_type': 'Rectangle', 'icon_label': 'ICON_SETTINGS', 'icon_conf': 0.5609217882156372, 'id': 7}
+[2026-05-13 21:15:48,543] DEBUG [appium_android:398] Tap at (972,101)
+[2026-05-13 21:15:49,537] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:15:50,181] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:15:50,480] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:15:51,222] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.7391505241394043 seconds
+[2026-05-13 21:15:51,224] DEBUG [ui_cls:416] UIED start: key=171bc447419079ce2b3b46a164b67f22 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\171bc447419079ce2b3b46a164b67f22 image=F:\workplace\framework\mytests\outputs\uied_runtime\171bc447419079ce2b3b46a164b67f22\171bc447419079ce2b3b46a164b67f22.png
+[2026-05-13 21:15:59,867] DEBUG [ui_cls:460] UIED outputs: key=171bc447419079ce2b3b46a164b67f22 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\171bc447419079ce2b3b46a164b67f22
+[2026-05-13 21:15:59,868] DEBUG [ui_cls:493] UIED success: key=171bc447419079ce2b3b46a164b67f22 ocr_texts=18 ip_compos=138 merge_compos=32
+[2026-05-13 21:16:00,022] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.045623064041137695 seconds
+[2026-05-13 21:16:00,063] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.039223432540893555 seconds
+[2026-05-13 21:16:00,097] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03223562240600586 seconds
+[2026-05-13 21:16:00,125] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.027463436126708984 seconds
+[2026-05-13 21:16:00,163] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.036425113677978516 seconds
+[2026-05-13 21:16:00,204] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03917264938354492 seconds
+[2026-05-13 21:16:00,239] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03483939170837402 seconds
+[2026-05-13 21:16:00,280] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03930091857910156 seconds
+[2026-05-13 21:16:00,319] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03874039649963379 seconds
+[2026-05-13 21:16:00,362] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.042168617248535156 seconds
+[2026-05-13 21:16:00,417] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0523371696472168 seconds
+[2026-05-13 21:16:00,418] DEBUG [ui_cls:1542] Assigned 29 ids (all nodes)
+[2026-05-13 21:16:00,419] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=18 uied_raw=32 uied_filtered=25 template_raw=24 template_filtered=17 final=29 ids=29
+[2026-05-13 21:16:00,419] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 9.938829898834229 seconds
+[2026-05-13 21:16:00,420] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 40, "cur_sig": "f0de5a6f", "stack_depth": 3, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:610045cd1a6f963680e83f3824d8e383:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 6}
+[2026-05-13 21:16:00,643] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 42, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "kind": "state_changed", "level": "weak", "src": "phash:6e0d54667e75aefbb9581479d2b48d12", "dst": "phash:ffc10ce4b41fcfe9131b6414bc392585"}
+[2026-05-13 21:16:00,644] DEBUG [workflow:3200] Schedule NAV for sig=phash:ff blocks=39
+[2026-05-13 21:16:00,644] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260513_211332_bim.app", "step_id": 42, "cur_sig": "phash:ff", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "blocks": 39, "enqueue_ts": 1778678160.6446009}
+[2026-05-13 21:16:00,657] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 44, "cur_sig": "phash:6e", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "kind": "candidates_discovered", "level": "strong", "family": "c5b346c587e25440e694f3ae22c962a3", "count": 4}
+[2026-05-13 21:16:00,665] DEBUG [workflow:3427] NAV ready sig=phash:6e overlay=none cand=4 return_method=back return_actions=0
+[2026-05-13 21:16:00,666] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260513_211332_bim.app", "step_id": 44, "cur_sig": "phash:6e", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "overlay_kind": "none", "candidate_count": 4, "duration_s": 73.02033543586731}
+[2026-05-13 21:16:00,669] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260513_211332_bim.app", "step_id": 44, "cur_sig": "phash:6e", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\nav\\1778678160668_phash_6e0d54667e75aefbb9581479d2b48d12.json"}
+[2026-05-13 21:16:00,671] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 45, "cur_sig": "phash:6e", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 3}
+[2026-05-13 21:16:00,671] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260513_211332_bim.app", "step_id": 45, "cur_sig": "phash:6e", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "block_result_count": 2, "proposed_count": 3, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\blocks_fill\\1778678160671_phash_6e0d54667e75aefbb9581479d2b48d12.json"}
+[2026-05-13 21:16:00,672] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260513_211332_bim.app", "step_id": 46, "cur_sig": "phash:ff", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 6, "action": {"action": "click", "element_id": 4, "text": null}}
+[2026-05-13 21:16:00,674] DEBUG [workflow:6448] Executing action: click:4: on element {'class': 'uied_compo', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 574, 'y': 1373, 'width': 149, 'height': 168}, 'subviews': {}, 'semantic_source': 'uied', 'source_type': 'Compo', 'uied_class': 'Compo', 'icon_label': 'ICON_ENVELOPE', 'icon_conf': 0.9998546838760376, 'id': 4}
+[2026-05-13 21:16:00,728] DEBUG [appium_android:398] Tap at (648,1457)
+[2026-05-13 21:16:01,722] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:16:02,356] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:16:02,672] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:16:03,316] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.6420078277587891 seconds
+[2026-05-13 21:16:03,321] DEBUG [ui_cls:416] UIED start: key=9a3fa5a67a85a2254f179ee1feefbd12 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9a3fa5a67a85a2254f179ee1feefbd12 image=F:\workplace\framework\mytests\outputs\uied_runtime\9a3fa5a67a85a2254f179ee1feefbd12\9a3fa5a67a85a2254f179ee1feefbd12.png
+[2026-05-13 21:16:11,668] DEBUG [ui_cls:460] UIED outputs: key=9a3fa5a67a85a2254f179ee1feefbd12 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9a3fa5a67a85a2254f179ee1feefbd12
+[2026-05-13 21:16:11,670] DEBUG [ui_cls:493] UIED success: key=9a3fa5a67a85a2254f179ee1feefbd12 ocr_texts=18 ip_compos=139 merge_compos=31
+[2026-05-13 21:16:11,855] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.06292033195495605 seconds
+[2026-05-13 21:16:11,917] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.059854984283447266 seconds
+[2026-05-13 21:16:11,987] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.06880903244018555 seconds
+[2026-05-13 21:16:12,044] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05622053146362305 seconds
+[2026-05-13 21:16:12,106] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.06103849411010742 seconds
+[2026-05-13 21:16:12,162] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05522966384887695 seconds
+[2026-05-13 21:16:12,217] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05353093147277832 seconds
+[2026-05-13 21:16:12,260] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04325270652770996 seconds
+[2026-05-13 21:16:12,302] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.04095458984375 seconds
+[2026-05-13 21:16:12,346] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0419316291809082 seconds
+[2026-05-13 21:16:12,386] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.038756370544433594 seconds
+[2026-05-13 21:16:12,424] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03602433204650879 seconds
+[2026-05-13 21:16:12,466] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03957080841064453 seconds
+[2026-05-13 21:16:12,467] DEBUG [ui_cls:1542] Assigned 30 ids (all nodes)
+[2026-05-13 21:16:12,467] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=18 uied_raw=31 uied_filtered=24 template_raw=24 template_filtered=17 final=30 ids=30
+[2026-05-13 21:16:12,468] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 9.794757604598999 seconds
+[2026-05-13 21:16:12,470] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 48, "cur_sig": "9cdda7a0", "stack_depth": 4, "action_count": 5, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 7, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:cbb7b4effacbb8038926a7a09954310f:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 7}
+[2026-05-13 21:16:12,707] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260513_211332_bim.app", "step_id": 50, "cur_sig": "phash:ff", "stack_depth": 4, "action_count": 5, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 7, "action": {"action": "click", "element_id": 3, "text": null}}
+[2026-05-13 21:16:12,708] DEBUG [workflow:6448] Executing action: click:3: on element {'class': 'uied_compo', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 801, 'y': 1374, 'width': 146, 'height': 143}, 'subviews': {}, 'semantic_source': 'uied', 'source_type': 'Compo', 'uied_class': 'Compo', 'icon_label': 'ICON_SHARE', 'icon_conf': 0.9994601607322693, 'id': 3}
+[2026-05-13 21:16:12,778] DEBUG [appium_android:398] Tap at (874,1445)
+[2026-05-13 21:16:13,775] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:16:14,408] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:16:15,004] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:16:15,828] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.8216462135314941 seconds
+[2026-05-13 21:16:15,831] DEBUG [ui_cls:416] UIED start: key=9365be263438cf00b2de09d734e7164e output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9365be263438cf00b2de09d734e7164e image=F:\workplace\framework\mytests\outputs\uied_runtime\9365be263438cf00b2de09d734e7164e\9365be263438cf00b2de09d734e7164e.png
+[2026-05-13 21:16:16,233] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=phash:ff prompt=3917 completion=28 total=3945 duration_s=15.575 path=parse
+[2026-05-13 21:16:16,234] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 15.57635235786438 seconds
+[2026-05-13 21:16:24,133] DEBUG [ui_cls:460] UIED outputs: key=9365be263438cf00b2de09d734e7164e ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\9365be263438cf00b2de09d734e7164e
+[2026-05-13 21:16:24,134] DEBUG [ui_cls:493] UIED success: key=9365be263438cf00b2de09d734e7164e ocr_texts=17 ip_compos=142 merge_compos=38
+[2026-05-13 21:16:24,245] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02816629409790039 seconds
+[2026-05-13 21:16:24,275] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.028438091278076172 seconds
+[2026-05-13 21:16:24,307] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.030863046646118164 seconds
+[2026-05-13 21:16:24,338] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03137993812561035 seconds
+[2026-05-13 21:16:24,370] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.031301021575927734 seconds
+[2026-05-13 21:16:24,400] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02897167205810547 seconds
+[2026-05-13 21:16:24,426] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025012493133544922 seconds
+[2026-05-13 21:16:24,451] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02503824234008789 seconds
+[2026-05-13 21:16:24,477] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025904178619384766 seconds
+[2026-05-13 21:16:24,502] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.024050235748291016 seconds
+[2026-05-13 21:16:24,528] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02574443817138672 seconds
+[2026-05-13 21:16:24,553] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025026321411132812 seconds
+[2026-05-13 21:16:24,579] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025264739990234375 seconds
+[2026-05-13 21:16:24,605] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025003433227539062 seconds
+[2026-05-13 21:16:24,634] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.027496814727783203 seconds
+[2026-05-13 21:16:24,663] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02845287322998047 seconds
+[2026-05-13 21:16:24,691] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025814294815063477 seconds
+[2026-05-13 21:16:24,692] DEBUG [ui_cls:1542] Assigned 34 ids (all nodes)
+[2026-05-13 21:16:24,692] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=18 uied_raw=38 uied_filtered=30 template_raw=25 template_filtered=18 final=34 ids=34
+[2026-05-13 21:16:24,693] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 9.688838243484497 seconds
+[2026-05-13 21:16:24,694] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 52, "cur_sig": "c339c3b9", "stack_depth": 4, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:9a5bb5908ad6549e48f4bcd23b209cab:1.0000:e55959137319823bde22c828fef14527:com.sgiggle.production:com.sgiggle.app.main_screen.DeeplinkActivity:three_tools", "cache_size": 8}
+[2026-05-13 21:16:24,867] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 54, "cur_sig": "phash:93", "stack_depth": 4, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "kind": "state_changed", "level": "weak", "src": "phash:ffc10ce4b41fcfe9131b6414bc392585", "dst": "phash:938a42de27ca63dac19d2b4ad2b1dda9"}
+[2026-05-13 21:16:24,868] DEBUG [workflow:3200] Schedule NAV for sig=phash:93 blocks=39
+[2026-05-13 21:16:24,868] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260513_211332_bim.app", "step_id": 54, "cur_sig": "phash:93", "stack_depth": 5, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "blocks": 39, "enqueue_ts": 1778678184.8687272}
+[2026-05-13 21:16:24,884] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260513_211332_bim.app", "step_id": 56, "cur_sig": "phash:ff", "stack_depth": 5, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\router\\1778678184883_phash_ffc10ce4b41fcfe9131b6414bc392585.json"}
+[2026-05-13 21:16:24,891] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260513_211332_bim.app", "step_id": 58, "cur_sig": "phash:93", "stack_depth": 5, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "action": {"action": "click", "element_id": 2, "text": null}}
+[2026-05-13 21:16:24,892] DEBUG [workflow:6448] Executing action: click:2: on element {'class': 'uied_compo', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 437, 'y': 1820, 'width': 30, 'height': 52}, 'subviews': {}, 'semantic_source': 'uied', 'source_type': 'Compo', 'uied_class': 'Compo', 'id': 2}
+[2026-05-13 21:16:24,953] INFO [workflow:1108] {"event": "foreground_mismatch_during_action", "run_id": "20260513_211332_bim.app", "step_id": 59, "cur_sig": "phash:93", "stack_depth": 5, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "action": {"action": "click", "element_id": 2, "text": null}, "foreground_package": "com.sgiggle.production", "streak": 1, "total": 1}
+[2026-05-13 21:16:25,575] INFO [workflow:5698] Recovery attempt 2/2 at sig=phash:93 reason=overlay_unresolved
+[2026-05-13 21:16:32,118] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=phash:93 prompt=3920 completion=31 total=3951 duration_s=7.241 path=parse
+[2026-05-13 21:16:32,118] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 7.241056680679321 seconds
+[2026-05-13 21:16:36,898] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=phash:ff prompt=3645 completion=174 total=3819 duration_s=12.012 path=parse
+[2026-05-13 21:16:36,899] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 12.013676166534424 seconds
+[2026-05-13 21:16:42,220] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=phash:ff prompt=10561 completion=1216 total=11777 duration_s=41.574 path=parse
+[2026-05-13 21:16:42,221] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 41.57459282875061 seconds
+[2026-05-13 21:16:53,595] INFO [gpt_cls:1625] LLM_USAGE stage=LLM3 op=recover_state sig=phash:93 prompt=6275 completion=825 total=7100 duration_s=28.019 path=parse
+[2026-05-13 21:16:53,596] DEBUG [utils:206] Function GPTClient.recover_state consumed 28.020281553268433 seconds
+[2026-05-13 21:16:53,597] INFO [workflow:5741] LLM3 recovery steps=2 why=The screen is a settings menu without any overlay. Clicking OK or the close icon will likely resolve the state.
+[2026-05-13 21:16:53,597] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260513_211332_bim.app", "step_id": 62, "cur_sig": "phash:93", "stack_depth": 5, "action_count": 6, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 8, "action": {"action": "click", "element_id": 3, "text": null}}
+[2026-05-13 21:16:53,598] DEBUG [workflow:6448] Executing action: click:3: on element {'class': 'uied_compo', 'text': '', 'content_desc': 'OK', 'resource_id': '', 'clickable': True, 'enabled': True, 'absolute_frame': {'x': 280, 'y': 1570, 'width': 518, 'height': 212}, 'subviews': {}, 'semantic_source': 'uied', 'source_type': 'Compo', 'ocr_text': 'OK', 'uied_class': 'Compo', 'id': 3}
+[2026-05-13 21:16:53,641] DEBUG [appium_android:408] Click by=accessibility id value=OK
+[2026-05-13 21:16:53,656] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=2
+[2026-05-13 21:16:53,920] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=1
+[2026-05-13 21:16:54,189] DEBUG [appium_android:62] Retryable failure: Message: An element could not be located on the page using the given search parameters.; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#nosuchelementexception
+Stacktrace:
+NoSuchElementError: An element could not be located on the page using the given search parameters.
+    at AndroidUiautomator2Driver.findElOrEls (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\appium-android-driver\lib\commands\find.ts:86:11)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at AndroidUiautomator2Driver.findElOrElsWithProcessing (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:60:12)
+    at AndroidUiautomator2Driver.findElement (F:\workplace\framework\node_modules\appium-uiautomator2-driver\node_modules\@appium\base-driver\lib\basedriver\commands\find.ts:75:12), remaining=0
+[2026-05-13 21:16:54,189] DEBUG [appium_android:398] Tap at (539,1676)
+[2026-05-13 21:16:55,181] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:16:55,808] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:16:56,205] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:16:56,599] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.3913402557373047 seconds
+[2026-05-13 21:16:56,605] DEBUG [ui_cls:416] UIED start: key=d08dfdfbbcc7e341525f12ef0afa350e output_root=F:\workplace\framework\mytests\outputs\uied_runtime\d08dfdfbbcc7e341525f12ef0afa350e image=F:\workplace\framework\mytests\outputs\uied_runtime\d08dfdfbbcc7e341525f12ef0afa350e\d08dfdfbbcc7e341525f12ef0afa350e.png
+[2026-05-13 21:17:01,904] DEBUG [ui_cls:460] UIED outputs: key=d08dfdfbbcc7e341525f12ef0afa350e ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\d08dfdfbbcc7e341525f12ef0afa350e
+[2026-05-13 21:17:01,905] DEBUG [ui_cls:493] UIED success: key=d08dfdfbbcc7e341525f12ef0afa350e ocr_texts=6 ip_compos=9 merge_compos=7
+[2026-05-13 21:17:02,033] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.028737545013427734 seconds
+[2026-05-13 21:17:02,063] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02835679054260254 seconds
+[2026-05-13 21:17:02,094] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.029352426528930664 seconds
+[2026-05-13 21:17:02,131] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.027966022491455078 seconds
+[2026-05-13 21:17:02,132] DEBUG [ui_cls:1542] Assigned 8 ids (all nodes)
+[2026-05-13 21:17:02,132] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=7 uied_raw=7 uied_filtered=7 template_raw=21 template_filtered=7 final=8 ids=8
+[2026-05-13 21:17:02,133] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 5.928441286087036 seconds
+[2026-05-13 21:17:02,133] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 64, "cur_sig": "789ef7fb", "stack_depth": 5, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:455d0ced435ab26fe24c55a37e1907af:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 9}
+[2026-05-13 21:17:02,493] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 66, "cur_sig": "phash:6e", "stack_depth": 5, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "kind": "state_changed", "level": "weak", "src": "phash:938a42de27ca63dac19d2b4ad2b1dda9", "dst": "phash:6e0d54667e75aefbb9581479d2b48d12"}
+[2026-05-13 21:17:02,493] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 66, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "kind": "candidates_discovered", "level": "strong", "family": "5ff0936db255086196e60856b69c660f", "count": 5}
+[2026-05-13 21:17:02,493] DEBUG [workflow:3427] NAV ready sig=phash:ff overlay=none cand=5 return_method=back return_actions=0
+[2026-05-13 21:17:02,493] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260513_211332_bim.app", "step_id": 66, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "overlay_kind": "none", "candidate_count": 5, "duration_s": 61.848824977874756}
+[2026-05-13 21:17:02,495] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260513_211332_bim.app", "step_id": 66, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\nav\\1778678222494_phash_ffc10ce4b41fcfe9131b6414bc392585.json"}
+[2026-05-13 21:17:02,497] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260513_211332_bim.app", "step_id": 67, "cur_sig": "phash:93", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\router\\1778678222497_phash_938a42de27ca63dac19d2b4ad2b1dda9.json"}
+[2026-05-13 21:17:02,506] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260513_211332_bim.app", "step_id": 69, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 2}
+[2026-05-13 21:17:02,506] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260513_211332_bim.app", "step_id": 69, "cur_sig": "phash:ff", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 9, "block_result_count": 2, "proposed_count": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\observations\\blocks_fill\\1778678222505_phash_ffc10ce4b41fcfe9131b6414bc392585.json"}
+[2026-05-13 21:17:02,508] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-13 21:17:03,138] DEBUG [appium_android:224] Page stable with hash=5fff3e110ec158f018be1352c88fbaf7
+[2026-05-13 21:17:03,540] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-13 21:17:03,944] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=phash:93 prompt=11112 completion=875 total=11987 duration_s=39.075 path=parse
+[2026-05-13 21:17:03,946] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.40163660049438477 seconds
+[2026-05-13 21:17:03,946] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 39.07650136947632 seconds
+[2026-05-13 21:17:03,951] DEBUG [ui_cls:416] UIED start: key=0fec130aa3588ffeab36ae245599e4f9 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\0fec130aa3588ffeab36ae245599e4f9 image=F:\workplace\framework\mytests\outputs\uied_runtime\0fec130aa3588ffeab36ae245599e4f9\0fec130aa3588ffeab36ae245599e4f9.png
+[2026-05-13 21:17:09,246] DEBUG [ui_cls:460] UIED outputs: key=0fec130aa3588ffeab36ae245599e4f9 ocr_ok=True ip_ok=True merge_ok=True output_root=F:\workplace\framework\mytests\outputs\uied_runtime\0fec130aa3588ffeab36ae245599e4f9
+[2026-05-13 21:17:09,247] DEBUG [ui_cls:493] UIED success: key=0fec130aa3588ffeab36ae245599e4f9 ocr_texts=6 ip_compos=9 merge_compos=8
+[2026-05-13 21:17:09,369] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02799391746520996 seconds
+[2026-05-13 21:17:09,398] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.026925086975097656 seconds
+[2026-05-13 21:17:09,428] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.027611732482910156 seconds
+[2026-05-13 21:17:09,429] DEBUG [ui_cls:1542] Assigned 8 ids (all nodes)
+[2026-05-13 21:17:09,429] DEBUG [ui_cls:2126] three-tools debug post-process: ocr=7 uied_raw=8 uied_filtered=7 template_raw=21 template_filtered=7 final=8 ids=8
+[2026-05-13 21:17:09,429] DEBUG [utils:206] Function BaseUI.post_process_ui_three_tools_debug consumed 5.887874126434326 seconds
+[2026-05-13 21:17:09,429] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260513_211332_bim.app", "step_id": 71, "cur_sig": "d57e261b", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 10, "raw_key": "5fff3e110ec158f018be1352c88fbaf7:224274849aabf9b20e8221fe11d31c16:1.0000:e55959137319823bde22c828fef14527:bim.app:.AppActivity:three_tools", "cache_size": 10}
+[2026-05-13 21:17:09,759] WARNING [workflow:1324] Stop condition reached: time_budget_reached
+[2026-05-13 21:17:09,761] INFO [workflow:1108] {"event": "run_stop_condition", "run_id": "20260513_211332_bim.app", "step_id": 72, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 10, "reason": "time_budget_reached"}
+[2026-05-13 21:17:09,763] INFO [workflow:1108] {"event": "analysis_snapshot_exported", "run_id": "20260513_211332_bim.app", "step_id": 72, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 10, "out_dir": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\analysis", "stop_reason": "time_budget_reached"}
+[2026-05-13 21:17:09,764] INFO [workflow:1108] {"event": "analysis_snapshot_exported", "run_id": "20260513_211332_bim.app", "step_id": 72, "cur_sig": "phash:6e", "stack_depth": 3, "action_count": 7, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 10, "out_dir": "F:\\workplace\\framework\\traces\\20260513_211332_bim.app\\analysis", "stop_reason": "run_exit"}
+[2026-05-13 21:17:09,764] INFO [__main__:372] Run finished: elapsed_s=208.894
+[2026-05-13 21:17:09,764] INFO [__main__:373] LLM token usage summary: {"calls": 16, "prompt_tokens": 90835, "completion_tokens": 6912, "total_tokens": 97747, "by_op": {"propose_router_answers": {"calls": 5, "prompt_tokens": 19598, "completion_tokens": 201, "total_tokens": 19799}, "propose_navigation": {"calls": 5, "prompt_tokens": 46679, "completion_tokens": 3989, "total_tokens": 50668}, "propose_blocks_fill": {"calls": 4, "prompt_tokens": 14916, "completion_tokens": 1326, "total_tokens": 16242}, "recover_state": {"calls": 2, "prompt_tokens": 9642, "completion_tokens": 1396, "total_tokens": 11038}}}
+[2026-05-13 21:17:09,787] INFO [appium_android:208] Force-stop bim.app via adb
+[2026-05-13 21:17:10,225] INFO [__main__:403] Final block_status:
+{'controlled.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'controlled.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.fantasy_drugs': {'id': 'controlled.controlled_substance_includes.fantasy_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.medical_drugs': {'id': 'controlled.controlled_substance_includes.medical_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.alcohol': {'id': 'controlled.controlled_substance_includes.alcohol', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.tobacco': {'id': 'controlled.controlled_substance_includes.tobacco', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'crude.crude_humor_content': {'id': 'crude.crude_humor_content', 'module': 'crude', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'digital.digital_purchases_includes.purchases_of_digital_goods': {'id': 'digital.digital_purchases_includes.purchases_of_digital_goods', 'module': 'digital', 'topic': '', 'visit_count': 1, 'hit_count': 1}, 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.scary_elements': {'id': 'fear.scary_elements_includes.scary_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.horrifying_elements': {'id': 'fear.scary_elements_includes.horrifying_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.gambling_themes': {'id': 'gambling.gambling_includes.gambling_themes', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_bingo_games': {'id': 'gambling.gambling_includes.playable_bingo_games', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'language.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'language.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.discriminatory_language_against_race_rel': {'id': 'language.language_includes.discriminatory_language_against_race_rel', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.sexual_expletives': {'id': 'language.language_includes.sexual_expletives', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.misc_user_interaction': {'id': 'misc.misc_user_interaction', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'misc.realistic_crime_descriptions': {'id': 'misc.realistic_crime_descriptions', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'misc.share_precise_location': {'id': 'misc.share_precise_location', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'misc.nazi_symbols': {'id': 'misc.nazi_symbols', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'misc.south_korea_national_identity': {'id': 'misc.south_korea_national_identity', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'misc.advocate_terrorism': {'id': 'misc.advocate_terrorism', 'module': 'misc', 'topic': '', 'visit_count': 5, 'hit_count': 5}, 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage': {'id': 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'sexuality.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.nudity_common': {'id': 'sexuality.revealing_outfits_nudity_includes.nudity_common', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.human_buttocks': {'id': 'sexuality.nudity_includes.human_buttocks', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_human_breasts_with_nipples': {'id': 'sexuality.nudity_includes.female_human_breasts_with_nipples', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.genitalia': {'id': 'sexuality.nudity_includes.genitalia', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_or_implied_violence_against_hum': {'id': 'violence.violence_content.violence_or_implied_violence_against_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_against_anything_other_than_hum': {'id': 'violence.violence_content.violence_against_anything_other_than_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'violence.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}}
+[2026-05-13 21:17:17,024] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=phash:93 prompt=3648 completion=175 total=3823 duration_s=14.526 path=parse
+[2026-05-13 21:17:17,025] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 14.526924133300781 seconds
+[2026-05-14 14:04:13,852] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-14 14:04:13,853] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:04:15,860] WARNING [urllib3.connectionpool:868] Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='127.0.0.1', port=4723): Failed to establish a new connection: [WinError 10061] 由于目标计算机积极拒绝，无法连接。")': /session
+[2026-05-14 14:04:17,867] WARNING [urllib3.connectionpool:868] Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='127.0.0.1', port=4723): Failed to establish a new connection: [WinError 10061] 由于目标计算机积极拒绝，无法连接。")': /session
+[2026-05-14 14:04:19,870] WARNING [urllib3.connectionpool:868] Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError("HTTPConnection(host='127.0.0.1', port=4723): Failed to establish a new connection: [WinError 10061] 由于目标计算机积极拒绝，无法连接。")': /session
+[2026-05-14 14:04:21,875] ERROR [appium_android:146] Failed to create Appium driver
+Traceback (most recent call last):
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connection.py", line 204, in _new_conn
+    sock = connection.create_connection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\util\connection.py", line 85, in create_connection
+    raise err
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\util\connection.py", line 73, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+               ^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 493, in _make_request
+    conn.request(
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connection.py", line 500, in request
+    self.endheaders()
+  File "C:\Users\ruogan\AppData\Local\Programs\Python\Python312\Lib\http\client.py", line 1314, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+  File "C:\Users\ruogan\AppData\Local\Programs\Python\Python312\Lib\http\client.py", line 1074, in _send_output
+    self.send(msg)
+  File "C:\Users\ruogan\AppData\Local\Programs\Python\Python312\Lib\http\client.py", line 1018, in send
+    self.connect()
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connection.py", line 331, in connect
+    self.sock = self._new_conn()
+                ^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connection.py", line 219, in _new_conn
+    raise NewConnectionError(
+urllib3.exceptions.NewConnectionError: HTTPConnection(host='127.0.0.1', port=4723): Failed to establish a new connection: [WinError 10061] 由于目标计算机积极拒绝，无法连接。
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "F:\workplace\framework\appium_android.py", line 143, in init_connection
+    self.driver = WebDriver(command_executor=self.server_url, options=options)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\appium\webdriver\webdriver.py", line 251, in __init__
+    super().__init__(
+  File "F:\workplace\framework\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 271, in __init__
+    self.start_session(capabilities)
+  File "F:\workplace\framework\.venv\Lib\site-packages\appium\webdriver\webdriver.py", line 344, in start_session
+    response = self.execute(RemoteCommand.NEW_SESSION, w3c_caps)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\selenium\webdriver\remote\webdriver.py", line 443, in execute
+    response = cast(RemoteConnection, self.command_executor).execute(driver_command, params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\selenium\webdriver\remote\remote_connection.py", line 407, in execute
+    return self._request(command_info[0], url, body=data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\selenium\webdriver\remote\remote_connection.py", line 431, in _request
+    response = self._conn.request(method, url, body=body, headers=headers, timeout=self._client_config.timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\_request_methods.py", line 143, in request
+    return self.request_encode_body(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\_request_methods.py", line 278, in request_encode_body
+    return self.urlopen(method, url, **extra_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\poolmanager.py", line 457, in urlopen
+    response = conn.urlopen(method, u.request_uri, **kw)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 871, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 871, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 871, in urlopen
+    return self.urlopen(
+           ^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\.venv\Lib\site-packages\urllib3\util\retry.py", line 535, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='127.0.0.1', port=4723): Max retries exceeded with url: /session (Caused by NewConnectionError("HTTPConnection(host='127.0.0.1', port=4723): Failed to establish a new connection: [WinError 10061] 由于目标计算机积极拒绝，无法连接。"))
+[2026-05-14 14:04:35,283] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-14 14:04:35,283] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:04:37,656] INFO [appium_android:144] Appium driver created
+[2026-05-14 14:04:37,658] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=39
+[2026-05-14 14:04:37,658] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260514_140434_com.gtsy.annoying.punch.game", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260514_140434_com.gtsy.annoying.punch.game\\app_metadata_context.json"}
+[2026-05-14 14:04:37,670] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:04:38,323] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:04:39,223] DEBUG [appium_android:224] Page stable with hash=af85fd118ea9c63b5766a9e1b05fddec
+[2026-05-14 14:04:39,473] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-14 14:04:42,317] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 2.8349928855895996 seconds
+[2026-05-14 14:04:42,322] DEBUG [ui_cls:416] UIED start: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 image=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png
+[2026-05-14 14:04:46,293] ERROR [ui_cls:432] UIED execution failed: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 error=IndexError('list index out of range') stdout_tail=====enter====[ocr]
+*** Detect Text through Google OCR ***
+[Text Detection Completed in 8.766 s] Input: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png Output: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\ocr\c0308c8d7c294fdaea54dad4ea235a01.json
+====exit====[ocr]
+====enter====[ip]
+ stderr_tail=
+Traceback (most recent call last):
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:04:46,295] ERROR [workflow:2480] capture_and_process failed
+Traceback (most recent call last):
+  File "F:\workplace\framework\workflow.py", line 2387, in _capture_and_process_debug
+    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\utils.py", line 201, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 2056, in post_process_ui_three_tools_debug
+    uied_nodes_raw = BaseUI._tt_extract_uied_nodes(screenshot_b64, include_block=bool(include_uied_block))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 1774, in _tt_extract_uied_nodes
+    uied_result = BaseUI._run_uied_cached(screenshot_b64)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:04:46,298] ERROR [workflow:1293] Initial capture failed; abort.
+[2026-05-14 14:04:46,298] INFO [__main__:373] Run finished: elapsed_s=8.582
+[2026-05-14 14:04:46,298] INFO [__main__:374] LLM token usage summary: {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "by_op": {}}
+[2026-05-14 14:04:46,319] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:04:46,629] INFO [__main__:404] Final block_status:
+{'controlled.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'controlled.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.fantasy_drugs': {'id': 'controlled.controlled_substance_includes.fantasy_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.medical_drugs': {'id': 'controlled.controlled_substance_includes.medical_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.alcohol': {'id': 'controlled.controlled_substance_includes.alcohol', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.tobacco': {'id': 'controlled.controlled_substance_includes.tobacco', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'crude.crude_humor_content': {'id': 'crude.crude_humor_content', 'module': 'crude', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.purchases_of_digital_goods': {'id': 'digital.digital_purchases_includes.purchases_of_digital_goods', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.scary_elements': {'id': 'fear.scary_elements_includes.scary_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.horrifying_elements': {'id': 'fear.scary_elements_includes.horrifying_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.gambling_themes': {'id': 'gambling.gambling_includes.gambling_themes', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_bingo_games': {'id': 'gambling.gambling_includes.playable_bingo_games', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'language.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'language.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.discriminatory_language_against_race_rel': {'id': 'language.language_includes.discriminatory_language_against_race_rel', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.sexual_expletives': {'id': 'language.language_includes.sexual_expletives', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.misc_user_interaction': {'id': 'misc.misc_user_interaction', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.realistic_crime_descriptions': {'id': 'misc.realistic_crime_descriptions', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.share_precise_location': {'id': 'misc.share_precise_location', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.nazi_symbols': {'id': 'misc.nazi_symbols', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.south_korea_national_identity': {'id': 'misc.south_korea_national_identity', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.advocate_terrorism': {'id': 'misc.advocate_terrorism', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage': {'id': 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'sexuality.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.nudity_common': {'id': 'sexuality.revealing_outfits_nudity_includes.nudity_common', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.human_buttocks': {'id': 'sexuality.nudity_includes.human_buttocks', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_human_breasts_with_nipples': {'id': 'sexuality.nudity_includes.female_human_breasts_with_nipples', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.genitalia': {'id': 'sexuality.nudity_includes.genitalia', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_or_implied_violence_against_hum': {'id': 'violence.violence_content.violence_or_implied_violence_against_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_against_anything_other_than_hum': {'id': 'violence.violence_content.violence_against_anything_other_than_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'violence.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}}
+[2026-05-14 14:05:39,153] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-14 14:05:39,154] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:05:40,866] INFO [appium_android:144] Appium driver created
+[2026-05-14 14:05:40,868] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=39
+[2026-05-14 14:05:40,869] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260514_140538_com.gtsy.annoying.punch.game", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260514_140538_com.gtsy.annoying.punch.game\\app_metadata_context.json"}
+[2026-05-14 14:05:40,880] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:05:41,582] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:05:42,790] DEBUG [appium_android:224] Page stable with hash=1e66be1713d625db32d210e1b2d7bfc8
+[2026-05-14 14:05:43,039] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-14 14:05:45,687] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 2.642315149307251 seconds
+[2026-05-14 14:05:45,690] DEBUG [ui_cls:416] UIED start: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 image=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png
+[2026-05-14 14:05:49,357] ERROR [ui_cls:432] UIED execution failed: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 error=IndexError('list index out of range') stdout_tail=====enter====[ocr]
+*** Detect Text through Google OCR ***
+[Text Detection Completed in 11.359 s] Input: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png Output: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\ocr\c0308c8d7c294fdaea54dad4ea235a01.json
+====exit====[ocr]
+====enter====[ip]
+ stderr_tail=
+Traceback (most recent call last):
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:05:49,358] ERROR [workflow:2480] capture_and_process failed
+Traceback (most recent call last):
+  File "F:\workplace\framework\workflow.py", line 2387, in _capture_and_process_debug
+    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\utils.py", line 201, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 2056, in post_process_ui_three_tools_debug
+    uied_nodes_raw = BaseUI._tt_extract_uied_nodes(screenshot_b64, include_block=bool(include_uied_block))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 1774, in _tt_extract_uied_nodes
+    uied_result = BaseUI._run_uied_cached(screenshot_b64)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:05:49,360] ERROR [workflow:1293] Initial capture failed; abort.
+[2026-05-14 14:05:49,360] INFO [__main__:373] Run finished: elapsed_s=8.402
+[2026-05-14 14:05:49,360] INFO [__main__:374] LLM token usage summary: {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "by_op": {}}
+[2026-05-14 14:05:49,382] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:05:49,669] INFO [__main__:404] Final block_status:
+{'controlled.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'controlled.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.fantasy_drugs': {'id': 'controlled.controlled_substance_includes.fantasy_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.medical_drugs': {'id': 'controlled.controlled_substance_includes.medical_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.alcohol': {'id': 'controlled.controlled_substance_includes.alcohol', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.tobacco': {'id': 'controlled.controlled_substance_includes.tobacco', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'crude.crude_humor_content': {'id': 'crude.crude_humor_content', 'module': 'crude', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.purchases_of_digital_goods': {'id': 'digital.digital_purchases_includes.purchases_of_digital_goods', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.scary_elements': {'id': 'fear.scary_elements_includes.scary_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.horrifying_elements': {'id': 'fear.scary_elements_includes.horrifying_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.gambling_themes': {'id': 'gambling.gambling_includes.gambling_themes', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_bingo_games': {'id': 'gambling.gambling_includes.playable_bingo_games', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'language.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'language.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.discriminatory_language_against_race_rel': {'id': 'language.language_includes.discriminatory_language_against_race_rel', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.sexual_expletives': {'id': 'language.language_includes.sexual_expletives', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.misc_user_interaction': {'id': 'misc.misc_user_interaction', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.realistic_crime_descriptions': {'id': 'misc.realistic_crime_descriptions', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.share_precise_location': {'id': 'misc.share_precise_location', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.nazi_symbols': {'id': 'misc.nazi_symbols', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.south_korea_national_identity': {'id': 'misc.south_korea_national_identity', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.advocate_terrorism': {'id': 'misc.advocate_terrorism', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage': {'id': 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'sexuality.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.nudity_common': {'id': 'sexuality.revealing_outfits_nudity_includes.nudity_common', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.human_buttocks': {'id': 'sexuality.nudity_includes.human_buttocks', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_human_breasts_with_nipples': {'id': 'sexuality.nudity_includes.female_human_breasts_with_nipples', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.genitalia': {'id': 'sexuality.nudity_includes.genitalia', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_or_implied_violence_against_hum': {'id': 'violence.violence_content.violence_or_implied_violence_against_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_against_anything_other_than_hum': {'id': 'violence.violence_content.violence_against_anything_other_than_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'violence.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}}
+[2026-05-14 14:06:23,945] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-14 14:06:23,946] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:06:25,637] INFO [appium_android:144] Appium driver created
+[2026-05-14 14:06:25,639] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=39
+[2026-05-14 14:06:25,641] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260514_140623_com.gtsy.annoying.punch.game", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260514_140623_com.gtsy.annoying.punch.game\\app_metadata_context.json"}
+[2026-05-14 14:06:25,652] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:06:26,305] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:06:27,452] DEBUG [appium_android:224] Page stable with hash=5ef6a0ff033b96c0ef9a5c6808da9883
+[2026-05-14 14:06:27,683] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-14 14:06:30,335] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 2.643988847732544 seconds
+[2026-05-14 14:06:30,338] DEBUG [ui_cls:416] UIED start: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 image=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png
+[2026-05-14 14:06:33,962] ERROR [ui_cls:432] UIED execution failed: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 error=IndexError('list index out of range') stdout_tail=====enter====[ocr]
+*** Detect Text through Google OCR ***
+[Text Detection Completed in 10.828 s] Input: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png Output: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\ocr\c0308c8d7c294fdaea54dad4ea235a01.json
+====exit====[ocr]
+====enter====[ip]
+ stderr_tail=
+Traceback (most recent call last):
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:06:33,963] ERROR [workflow:2480] capture_and_process failed
+Traceback (most recent call last):
+  File "F:\workplace\framework\workflow.py", line 2387, in _capture_and_process_debug
+    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\utils.py", line 201, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 2056, in post_process_ui_three_tools_debug
+    uied_nodes_raw = BaseUI._tt_extract_uied_nodes(screenshot_b64, include_block=bool(include_uied_block))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 1774, in _tt_extract_uied_nodes
+    uied_result = BaseUI._run_uied_cached(screenshot_b64)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:06:33,965] ERROR [workflow:1293] Initial capture failed; abort.
+[2026-05-14 14:06:33,965] INFO [__main__:373] Run finished: elapsed_s=8.271
+[2026-05-14 14:06:33,965] INFO [__main__:374] LLM token usage summary: {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "by_op": {}}
+[2026-05-14 14:06:33,988] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:06:34,282] INFO [__main__:404] Final block_status:
+{'controlled.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'controlled.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.fantasy_drugs': {'id': 'controlled.controlled_substance_includes.fantasy_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.medical_drugs': {'id': 'controlled.controlled_substance_includes.medical_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.alcohol': {'id': 'controlled.controlled_substance_includes.alcohol', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.tobacco': {'id': 'controlled.controlled_substance_includes.tobacco', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'crude.crude_humor_content': {'id': 'crude.crude_humor_content', 'module': 'crude', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.purchases_of_digital_goods': {'id': 'digital.digital_purchases_includes.purchases_of_digital_goods', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.scary_elements': {'id': 'fear.scary_elements_includes.scary_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.horrifying_elements': {'id': 'fear.scary_elements_includes.horrifying_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.gambling_themes': {'id': 'gambling.gambling_includes.gambling_themes', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_bingo_games': {'id': 'gambling.gambling_includes.playable_bingo_games', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'language.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'language.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.discriminatory_language_against_race_rel': {'id': 'language.language_includes.discriminatory_language_against_race_rel', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.sexual_expletives': {'id': 'language.language_includes.sexual_expletives', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.misc_user_interaction': {'id': 'misc.misc_user_interaction', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.realistic_crime_descriptions': {'id': 'misc.realistic_crime_descriptions', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.share_precise_location': {'id': 'misc.share_precise_location', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.nazi_symbols': {'id': 'misc.nazi_symbols', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.south_korea_national_identity': {'id': 'misc.south_korea_national_identity', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.advocate_terrorism': {'id': 'misc.advocate_terrorism', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage': {'id': 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'sexuality.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.nudity_common': {'id': 'sexuality.revealing_outfits_nudity_includes.nudity_common', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.human_buttocks': {'id': 'sexuality.nudity_includes.human_buttocks', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_human_breasts_with_nipples': {'id': 'sexuality.nudity_includes.female_human_breasts_with_nipples', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.genitalia': {'id': 'sexuality.nudity_includes.genitalia', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_or_implied_violence_against_hum': {'id': 'violence.violence_content.violence_or_implied_violence_against_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_against_anything_other_than_hum': {'id': 'violence.violence_content.violence_against_anything_other_than_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'violence.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}}
+[2026-05-14 14:07:08,861] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/games type=games source=manual routers=9 blocks=39 block_status=39
+[2026-05-14 14:07:08,862] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:07:10,768] INFO [appium_android:144] Appium driver created
+[2026-05-14 14:07:10,770] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=39
+[2026-05-14 14:07:10,771] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260514_140707_com.gtsy.annoying.punch.game", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260514_140707_com.gtsy.annoying.punch.game\\app_metadata_context.json"}
+[2026-05-14 14:07:10,782] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:07:11,458] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:07:12,584] DEBUG [appium_android:224] Page stable with hash=f671fbac612f5876e5db7f82a8bd28b6
+[2026-05-14 14:07:12,810] INFO [workflow:2355] main post-process mode: three_tools (xml_reliable=False)
+[2026-05-14 14:07:15,436] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 2.618027687072754 seconds
+[2026-05-14 14:07:15,439] DEBUG [ui_cls:416] UIED start: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 image=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png
+[2026-05-14 14:07:19,155] ERROR [ui_cls:432] UIED execution failed: key=c0308c8d7c294fdaea54dad4ea235a01 output_root=F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01 error=IndexError('list index out of range') stdout_tail=====enter====[ocr]
+*** Detect Text through Google OCR ***
+[Text Detection Completed in 11.078 s] Input: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\c0308c8d7c294fdaea54dad4ea235a01.png Output: F:\workplace\framework\mytests\outputs\uied_runtime\c0308c8d7c294fdaea54dad4ea235a01\ocr\c0308c8d7c294fdaea54dad4ea235a01.json
+====exit====[ocr]
+====enter====[ip]
+ stderr_tail=
+Traceback (most recent call last):
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:07:19,157] ERROR [workflow:2480] capture_and_process failed
+Traceback (most recent call last):
+  File "F:\workplace\framework\workflow.py", line 2387, in _capture_and_process_debug
+    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\utils.py", line 201, in wrapper
+    result = func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 2056, in post_process_ui_three_tools_debug
+    uied_nodes_raw = BaseUI._tt_extract_uied_nodes(screenshot_b64, include_block=bool(include_uied_block))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 1774, in _tt_extract_uied_nodes
+    uied_result = BaseUI._run_uied_cached(screenshot_b64)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\workplace\framework\ui_cls.py", line 429, in _run_uied_cached
+    uied(input_path_img=str(img_path), output_root=str(runtime_root))
+  File "F:\workplace\framework\LayoutCoder_develop\run_single.py", line 105, in uied
+    ip.compo_detection(input_path_img, output_root, key_params,
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\ip_region_proposal.py", line 99, in compo_detection
+    file.save_corners_json(pjoin(ip_root, name + '.json'), uicompos)
+  File "F:\workplace\framework\LayoutCoder_develop\UIED\detect_compo\lib_ip\file_utils.py", line 29, in save_corners_json
+    img_shape = compos[0].image_shape
+                ~~~~~~^^^
+IndexError: list index out of range
+[2026-05-14 14:07:19,158] ERROR [workflow:1293] Initial capture failed; abort.
+[2026-05-14 14:07:19,158] INFO [__main__:373] Run finished: elapsed_s=8.325
+[2026-05-14 14:07:19,158] INFO [__main__:374] LLM token usage summary: {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "by_op": {}}
+[2026-05-14 14:07:19,170] INFO [appium_android:208] Force-stop com.gtsy.annoying.punch.game via adb
+[2026-05-14 14:07:19,446] INFO [__main__:404] Final block_status:
+{'controlled.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'controlled.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.fantasy_drugs': {'id': 'controlled.controlled_substance_includes.fantasy_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.medical_drugs': {'id': 'controlled.controlled_substance_includes.medical_drugs', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.alcohol': {'id': 'controlled.controlled_substance_includes.alcohol', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'controlled.controlled_substance_includes.tobacco': {'id': 'controlled.controlled_substance_includes.tobacco', 'module': 'controlled', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'crude.crude_humor_content': {'id': 'crude.crude_humor_content', 'module': 'crude', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.purchases_of_digital_goods': {'id': 'digital.digital_purchases_includes.purchases_of_digital_goods', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'digital.digital_purchases_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'digital.digital_purchases_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'digital', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.scary_elements': {'id': 'fear.scary_elements_includes.scary_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'fear.scary_elements_includes.horrifying_elements': {'id': 'fear.scary_elements_includes.horrifying_elements', 'module': 'fear', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.gambling_themes': {'id': 'gambling.gambling_includes.gambling_themes', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_bingo_games': {'id': 'gambling.gambling_includes.playable_bingo_games', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'gambling.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'gambling', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'language.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'language.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.discriminatory_language_against_race_rel': {'id': 'language.language_includes.discriminatory_language_against_race_rel', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'language.language_includes.sexual_expletives': {'id': 'language.language_includes.sexual_expletives', 'module': 'language', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.misc_user_interaction': {'id': 'misc.misc_user_interaction', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.realistic_crime_descriptions': {'id': 'misc.realistic_crime_descriptions', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.share_precise_location': {'id': 'misc.share_precise_location', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.nazi_symbols': {'id': 'misc.nazi_symbols', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.south_korea_national_identity': {'id': 'misc.south_korea_national_identity', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'misc.advocate_terrorism': {'id': 'misc.advocate_terrorism', 'module': 'misc', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'sexuality.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'sexuality.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage': {'id': 'sexuality.sexuality_includes.dating_games_interactive_dating_marriage', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'sexuality.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'sexuality.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.revealing_outfits_nudity_includes.nudity_common': {'id': 'sexuality.revealing_outfits_nudity_includes.nudity_common', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.human_buttocks': {'id': 'sexuality.nudity_includes.human_buttocks', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'sexuality.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'sexuality.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.female_human_breasts_with_nipples': {'id': 'sexuality.nudity_includes.female_human_breasts_with_nipples', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'sexuality.nudity_includes.genitalia': {'id': 'sexuality.nudity_includes.genitalia', 'module': 'sexuality', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_or_implied_violence_against_hum': {'id': 'violence.violence_content.violence_or_implied_violence_against_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.violence_against_anything_other_than_hum': {'id': 'violence.violence_content.violence_against_anything_other_than_hum', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'violence.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'violence.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'violence', 'topic': '', 'visit_count': 0, 'hit_count': 0}}
+[2026-05-14 14:10:45,172] INFO [__main__:310] Loaded questionnaire_state2: dir=./questionnaire-v2/others type=others source=manual routers=9 blocks=38 block_status=38
+[2026-05-14 14:10:45,172] INFO [appium_android:139] Initializing Appium connection at http://127.0.0.1:4723
+[2026-05-14 14:10:46,812] INFO [appium_android:144] Appium driver created
+[2026-05-14 14:10:46,813] INFO [workflow:673] QuestionnaireState2 active: routers=9 blocks=38
+[2026-05-14 14:10:46,814] INFO [workflow:1108] {"event": "app_metadata_context_saved", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 0, "cur_sig": "", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 0, "path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\app_metadata_context.json"}
+[2026-05-14 14:10:46,826] INFO [appium_android:208] Force-stop com.lemonpiggy.drinkwater via adb
+[2026-05-14 14:10:47,470] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:10:50,083] DEBUG [appium_android:224] Page stable with hash=f36355fe554c8da4c4a9a22542806726
+[2026-05-14 14:10:50,385] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:10:50,386] DEBUG [ui_cls:2168] Post-process start: 1 root nodes; 156 nodes
+[2026-05-14 14:10:50,387] DEBUG [ui_cls:2193] After dedupe/sort: 1 root nodes, 155 nodes
+[2026-05-14 14:10:53,511] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 3.123689889907837 seconds
+[2026-05-14 14:10:53,625] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.07670760154724121 seconds
+[2026-05-14 14:10:53,646] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019530057907104492 seconds
+[2026-05-14 14:10:53,666] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0185544490814209 seconds
+[2026-05-14 14:10:53,684] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018718719482421875 seconds
+[2026-05-14 14:10:53,704] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019109725952148438 seconds
+[2026-05-14 14:10:53,725] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01953911781311035 seconds
+[2026-05-14 14:10:53,745] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019531726837158203 seconds
+[2026-05-14 14:10:53,766] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020330429077148438 seconds
+[2026-05-14 14:10:53,787] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0211334228515625 seconds
+[2026-05-14 14:10:53,808] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019983291625976562 seconds
+[2026-05-14 14:10:53,827] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019526958465576172 seconds
+[2026-05-14 14:10:53,849] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01951456069946289 seconds
+[2026-05-14 14:10:53,869] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019618749618530273 seconds
+[2026-05-14 14:10:53,889] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018860340118408203 seconds
+[2026-05-14 14:10:53,911] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02124953269958496 seconds
+[2026-05-14 14:10:53,931] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01855945587158203 seconds
+[2026-05-14 14:10:53,951] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01855945587158203 seconds
+[2026-05-14 14:10:53,973] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020343780517578125 seconds
+[2026-05-14 14:10:53,993] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019568920135498047 seconds
+[2026-05-14 14:10:54,018] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.023488521575927734 seconds
+[2026-05-14 14:10:54,043] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.023820161819458008 seconds
+[2026-05-14 14:10:54,067] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020505428314208984 seconds
+[2026-05-14 14:10:54,068] DEBUG [ui_cls:1519] Assigned 26 ids
+[2026-05-14 14:10:54,069] DEBUG [utils:206] Function BaseUI.post_process_ui consumed 3.6827774047851562 seconds
+[2026-05-14 14:10:54,072] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 0, "cur_sig": "06a446b8", "stack_depth": 0, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "raw_key": "453654a88df134a5bb42c69f484f5ce5:84cdba60eee5c84bddb5a40628854dd8:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 1}
+[2026-05-14 14:10:54,207] DEBUG [workflow:3200] Schedule NAV for sig=xml:06a4 blocks=38
+[2026-05-14 14:10:54,207] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 2, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "blocks": 38, "enqueue_ts": 1778739054.2070813}
+[2026-05-14 14:10:54,210] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 4, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "kind": "entry_state", "level": "strong"}
+[2026-05-14 14:10:54,210] INFO [workflow:1343] Loop: sig=xml:06a4 stack_depth=1 actions=0 blocks=38 pending(nav=1 block_router=1) no_progress=1 no_new=0
+[2026-05-14 14:11:00,449] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=xml:06a4 prompt=3834 completion=30 total=3864 duration_s=6.241 path=parse
+[2026-05-14 14:11:00,450] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 6.241858959197998 seconds
+[2026-05-14 14:11:00,463] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 5, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\router\\1778739060463_xml_06a446b83b9e713087f9682f6bc2390a.json"}
+[2026-05-14 14:11:06,435] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=xml:06a4 prompt=4091 completion=191 total=4282 duration_s=5.971 path=parse
+[2026-05-14 14:11:06,436] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 5.971782684326172 seconds
+[2026-05-14 14:11:06,503] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 7, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 2}
+[2026-05-14 14:11:06,503] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 7, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 1, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "block_result_count": 2, "proposed_count": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\blocks_fill\\1778739066502_xml_06a446b83b9e713087f9682f6bc2390a.json"}
+[2026-05-14 14:11:21,978] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=xml:06a4 prompt=22972 completion=726 total=23698 duration_s=27.771 path=parse
+[2026-05-14 14:11:21,979] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 27.771482706069946 seconds
+[2026-05-14 14:11:21,983] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 8, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "kind": "candidates_discovered", "level": "strong", "family": "a2eae10217f3be827c34ec357a1d2be2", "count": 2}
+[2026-05-14 14:11:21,983] DEBUG [workflow:3427] NAV ready sig=xml:06a4 overlay=dismiss cand=2 return_method=none return_actions=0
+[2026-05-14 14:11:21,983] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 8, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "overlay_kind": "dismiss", "candidate_count": 2, "duration_s": 27.77689242362976}
+[2026-05-14 14:11:21,984] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 8, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\nav\\1778739081983_xml_06a446b83b9e713087f9682f6bc2390a.json"}
+[2026-05-14 14:11:21,984] INFO [workflow:1511] Overlay(DISMISS) at sig=xml:06a4: A modal dialog is present with options to dismiss or confirm.
+[2026-05-14 14:11:21,984] INFO [workflow:1108] {"event": "overlay_detected", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 9, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "overlay_kind": "dismiss", "reason": "A modal dialog is present with options to dismiss or confirm."}
+[2026-05-14 14:11:21,985] INFO [workflow:3836] Overlay action at sig=xml:06a4: click:24: (Clicking 'Cancel' will dismiss the dialog without saving changes.)
+[2026-05-14 14:11:21,985] INFO [workflow:1108] {"event": "overlay_dismiss_attempt", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 9, "cur_sig": "xml:06a4", "stack_depth": 1, "action_count": 0, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 1, "action": {"action": "click", "element_id": 24, "text": null}}
+[2026-05-14 14:11:21,985] DEBUG [workflow:6448] Executing action: click:24: on element {'class': 'android.view.ViewGroup', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'selected': False, 'focused': False, 'focusable': True, 'scrollable': False, 'checkable': False, 'checked': False, 'long_clickable': False, 'password': False, 'absolute_frame': {'x': 135, 'y': 1347, 'width': 268, 'height': 135}, 'subviews': {}, 'icon_label': 'ICON_THREE_DOTS', 'icon_conf': 0.65303635597229, 'id': 24}
+[2026-05-14 14:11:22,031] DEBUG [appium_android:398] Tap at (269,1414)
+[2026-05-14 14:11:23,024] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:11:23,912] DEBUG [appium_android:224] Page stable with hash=cd455fb156cb9e9b606b63f934baeba7
+[2026-05-14 14:11:24,209] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:11:24,210] DEBUG [ui_cls:2168] Post-process start: 1 root nodes; 136 nodes
+[2026-05-14 14:11:24,210] DEBUG [ui_cls:2193] After dedupe/sort: 1 root nodes, 135 nodes
+[2026-05-14 14:11:24,812] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.6011102199554443 seconds
+[2026-05-14 14:11:24,897] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.048940181732177734 seconds
+[2026-05-14 14:11:24,927] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.028496265411376953 seconds
+[2026-05-14 14:11:24,945] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01859879493713379 seconds
+[2026-05-14 14:11:24,966] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020395517349243164 seconds
+[2026-05-14 14:11:24,985] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018565654754638672 seconds
+[2026-05-14 14:11:25,005] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019324064254760742 seconds
+[2026-05-14 14:11:25,026] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018499135971069336 seconds
+[2026-05-14 14:11:25,047] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020560503005981445 seconds
+[2026-05-14 14:11:25,068] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019530057907104492 seconds
+[2026-05-14 14:11:25,087] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018552064895629883 seconds
+[2026-05-14 14:11:25,109] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019537687301635742 seconds
+[2026-05-14 14:11:25,129] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019536256790161133 seconds
+[2026-05-14 14:11:25,151] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021038532257080078 seconds
+[2026-05-14 14:11:25,173] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021488189697265625 seconds
+[2026-05-14 14:11:25,194] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019520998001098633 seconds
+[2026-05-14 14:11:25,216] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02028799057006836 seconds
+[2026-05-14 14:11:25,237] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020571470260620117 seconds
+[2026-05-14 14:11:25,258] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018559694290161133 seconds
+[2026-05-14 14:11:25,281] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021485328674316406 seconds
+[2026-05-14 14:11:25,282] DEBUG [ui_cls:1519] Assigned 22 ids
+[2026-05-14 14:11:25,283] DEBUG [utils:206] Function BaseUI.post_process_ui consumed 1.0736806392669678 seconds
+[2026-05-14 14:11:25,288] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 11, "cur_sig": "12760fc9", "stack_depth": 1, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "raw_key": "9750ce483d3278fb2cee7e88e3f6b224:47a35de03363505779537444404c9a0d:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 2}
+[2026-05-14 14:11:25,410] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 13, "cur_sig": "xml:1276", "stack_depth": 1, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "kind": "state_changed", "level": "weak", "src": "xml:06a446b83b9e713087f9682f6bc2390a", "dst": "xml:12760fc982fd2139e72626f2551c5066"}
+[2026-05-14 14:11:25,410] DEBUG [workflow:3200] Schedule NAV for sig=xml:1276 blocks=38
+[2026-05-14 14:11:25,410] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 13, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "blocks": 38, "enqueue_ts": 1778739085.4102314}
+[2026-05-14 14:11:25,417] INFO [workflow:3836] Overlay action at sig=xml:1276: click:25: (Clicking 'Ignore' will dismiss the dialog without saving changes.)
+[2026-05-14 14:11:25,420] INFO [workflow:1108] {"event": "overlay_dismiss_attempt", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 15, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "click", "element_id": 25, "text": null}}
+[2026-05-14 14:11:25,421] DEBUG [workflow:6448] Executing action: click:25: on element {'subviews': {}}
+[2026-05-14 14:11:25,448] DEBUG [workflow:6483] CLICK failed: element_id=25 not in vid_map
+[2026-05-14 14:11:25,449] WARNING [workflow:1520] Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.
+[2026-05-14 14:11:25,450] INFO [workflow:1108] {"event": "recovery_start", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 19, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "reason": "overlay_unresolved", "target_sig": null}
+[2026-05-14 14:11:25,450] INFO [workflow:1108] {"event": "recovery_deterministic_step", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 19, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "back", "element_id": null, "text": null}}
+[2026-05-14 14:11:25,451] DEBUG [workflow:6448] Executing action: back:None: on element {'subviews': {}}
+[2026-05-14 14:11:25,477] DEBUG [appium_android:403] Press back
+[2026-05-14 14:11:25,567] INFO [workflow:1108] {"event": "foreground_mismatch_during_action", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 20, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "back", "element_id": null, "text": null}, "foreground_package": "app.lawnchair", "streak": 1, "total": 1, "phase": "post_back"}
+[2026-05-14 14:11:26,180] INFO [workflow:1108] {"event": "recovery_deterministic_step", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 21, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "back", "element_id": null, "text": null}}
+[2026-05-14 14:11:26,181] DEBUG [workflow:6448] Executing action: back:None: on element {'subviews': {}}
+[2026-05-14 14:11:26,210] DEBUG [appium_android:403] Press back
+[2026-05-14 14:11:26,548] INFO [workflow:1108] {"event": "foreground_mismatch_during_action", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 22, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "back", "element_id": null, "text": null}, "foreground_package": "app.lawnchair", "streak": 2, "total": 2, "phase": "post_back"}
+[2026-05-14 14:11:27,149] INFO [workflow:5698] Recovery attempt 1/2 at sig=xml:06a4 reason=overlay_unresolved
+[2026-05-14 14:11:29,412] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=xml:1276 prompt=3831 completion=27 total=3858 duration_s=3.995 path=parse
+[2026-05-14 14:11:29,412] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 3.9952995777130127 seconds
+[2026-05-14 14:11:36,330] WARNING [gpt_cls:1426] Rate limited for recover_state (parse). Sleep 10s then retry. err=Error code: 429 - {'error': {'message': 'Rate limit reached for gpt-4o in organization org-BfuRBBF4aPjQONrGpIABMcSq on tokens per min (TPM): Limit 30000, Used 16396, Requested 13812. Please try again in 416ms. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', '
+[2026-05-14 14:12:14,484] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=xml:1276 prompt=20958 completion=894 total=21852 duration_s=49.074 path=parse
+[2026-05-14 14:12:14,484] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 49.0737190246582 seconds
+[2026-05-14 14:12:17,876] INFO [gpt_cls:1625] LLM_USAGE stage=LLM3 op=recover_state sig=xml:06a4 prompt=19150 completion=451 total=19601 duration_s=50.726 path=parse
+[2026-05-14 14:12:17,876] DEBUG [utils:206] Function GPTClient.recover_state consumed 50.72626447677612 seconds
+[2026-05-14 14:12:17,877] INFO [workflow:5741] LLM3 recovery steps=3 why=The dialog is blocking further interaction. Clicking 'Cancel', 'Ignore', or 'OK' will dismiss it, allowing navigation to continue.
+[2026-05-14 14:12:17,877] INFO [workflow:1108] {"event": "recovery_step_accept", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 25, "cur_sig": "xml:06a4", "stack_depth": 2, "action_count": 1, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 2, "action": {"action": "click", "element_id": 24, "text": null}}
+[2026-05-14 14:12:17,878] DEBUG [workflow:6448] Executing action: click:24: on element {'class': 'android.view.ViewGroup', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'selected': False, 'focused': False, 'focusable': True, 'scrollable': False, 'checkable': False, 'checked': False, 'long_clickable': False, 'password': False, 'absolute_frame': {'x': 135, 'y': 1347, 'width': 268, 'height': 135}, 'subviews': {}, 'icon_label': 'ICON_THREE_DOTS', 'icon_conf': 0.65303635597229, 'id': 24}
+[2026-05-14 14:12:17,926] DEBUG [appium_android:398] Tap at (269,1414)
+[2026-05-14 14:12:18,916] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:12:19,812] DEBUG [appium_android:224] Page stable with hash=cde54f2b72fc14ffa59579689b2ec2c4
+[2026-05-14 14:12:20,116] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:12:20,119] DEBUG [ui_cls:2168] Post-process start: 1 root nodes; 136 nodes
+[2026-05-14 14:12:20,120] DEBUG [ui_cls:2193] After dedupe/sort: 1 root nodes, 135 nodes
+[2026-05-14 14:12:20,722] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.6008970737457275 seconds
+[2026-05-14 14:12:20,811] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05171680450439453 seconds
+[2026-05-14 14:12:20,847] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.034880876541137695 seconds
+[2026-05-14 14:12:20,880] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.03158450126647949 seconds
+[2026-05-14 14:12:20,909] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02791619300842285 seconds
+[2026-05-14 14:12:20,933] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.023436307907104492 seconds
+[2026-05-14 14:12:20,959] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.024420499801635742 seconds
+[2026-05-14 14:12:20,983] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.023473024368286133 seconds
+[2026-05-14 14:12:21,012] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.027341127395629883 seconds
+[2026-05-14 14:12:21,037] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.023438453674316406 seconds
+[2026-05-14 14:12:21,065] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.025937318801879883 seconds
+[2026-05-14 14:12:21,089] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0234372615814209 seconds
+[2026-05-14 14:12:21,118] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.028318166732788086 seconds
+[2026-05-14 14:12:21,143] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022449731826782227 seconds
+[2026-05-14 14:12:21,167] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022034645080566406 seconds
+[2026-05-14 14:12:21,200] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.030266761779785156 seconds
+[2026-05-14 14:12:21,227] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.026363134384155273 seconds
+[2026-05-14 14:12:21,255] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.026362895965576172 seconds
+[2026-05-14 14:12:21,284] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02594280242919922 seconds
+[2026-05-14 14:12:21,308] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021482467651367188 seconds
+[2026-05-14 14:12:21,309] DEBUG [ui_cls:1519] Assigned 22 ids
+[2026-05-14 14:12:21,310] DEBUG [utils:206] Function BaseUI.post_process_ui consumed 1.190833568572998 seconds
+[2026-05-14 14:12:21,313] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 27, "cur_sig": "12760fc9", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "raw_key": "d31368622159ef46fef968db83e6c65a:f1edc32c12048a4f4ed5da29e25f8ae9:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 3}
+[2026-05-14 14:12:21,446] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 29, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "kind": "state_changed", "level": "weak", "src": "xml:06a446b83b9e713087f9682f6bc2390a", "dst": "xml:12760fc982fd2139e72626f2551c5066"}
+[2026-05-14 14:12:21,446] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 29, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "kind": "candidates_discovered", "level": "strong", "family": "6d7c425c6f4eedcbc76bbe6bdaf4c27e", "count": 3}
+[2026-05-14 14:12:21,446] DEBUG [workflow:3427] NAV ready sig=xml:1276 overlay=none cand=3 return_method=back return_actions=0
+[2026-05-14 14:12:21,446] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 29, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "overlay_kind": "none", "candidate_count": 3, "duration_s": 56.035866022109985}
+[2026-05-14 14:12:21,447] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 29, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\nav\\1778739141447_xml_12760fc982fd2139e72626f2551c5066.json"}
+[2026-05-14 14:12:21,449] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 30, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 0, "snapshot_cache_misses": 3, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\router\\1778739141448_xml_12760fc982fd2139e72626f2551c5066.json"}
+[2026-05-14 14:12:21,454] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:12:22,154] DEBUG [appium_android:224] Page stable with hash=cde54f2b72fc14ffa59579689b2ec2c4
+[2026-05-14 14:12:22,457] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:12:22,460] INFO [workflow:1108] {"event": "snapshot_cache_hit", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 33, "cur_sig": "12760fc9", "stack_depth": 2, "action_count": 2, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 3, "raw_key": "d31368622159ef46fef968db83e6c65a:f1edc32c12048a4f4ed5da29e25f8ae9:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 3}
+[2026-05-14 14:12:22,589] INFO [workflow:1343] Loop: sig=xml:1276 stack_depth=2 actions=2 blocks=38 pending(nav=0 block_router=0) no_progress=1 no_new=0
+[2026-05-14 14:12:22,617] INFO [workflow:1108] {"event": "foreground_recovered", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 34, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 3, "prev_streak": 2}
+[2026-05-14 14:12:22,667] INFO [workflow:1108] {"event": "nav_cache_hit", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 36, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 3}
+[2026-05-14 14:12:22,668] INFO [workflow:1108] {"event": "probe_skipped", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 37, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 3, "reason": "probe_return_disabled"}
+[2026-05-14 14:12:22,669] WARNING [workflow:5306] No probe outcomes for forward selection at src_sig=xml:1276
+[2026-05-14 14:12:22,669] INFO [workflow:1803] Forward commit from sig=xml:1276: click:1: (Clicking the menu button may reveal additional options or settings.)
+[2026-05-14 14:12:22,670] INFO [workflow:1108] {"event": "forward_score", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 40, "cur_sig": "xml:1276", "stack_depth": 2, "action_count": 2, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 3, "action_key": "click:1:", "dst_sig": null, "score": 2.4000000000000004, "candidate_score": 0.8, "novelty_score": 0.0, "q_yield": 0.0, "visit_score": 0.0, "back_penalty": 0.0}
+[2026-05-14 14:12:22,670] DEBUG [workflow:6448] Executing action: click:1: on element {'class': 'android.view.ViewGroup', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'selected': False, 'focused': False, 'focusable': True, 'scrollable': False, 'checkable': False, 'checked': False, 'long_clickable': False, 'password': False, 'absolute_frame': {'x': 0, 'y': 69, 'width': 174, 'height': 168}, 'subviews': {}, 'id': 1}
+[2026-05-14 14:12:22,705] DEBUG [appium_android:398] Tap at (87,153)
+[2026-05-14 14:12:23,696] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:12:24,941] DEBUG [appium_android:224] Page stable with hash=f69c6f7df602ce4efe9d63a77d086992
+[2026-05-14 14:12:25,232] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:12:25,234] DEBUG [ui_cls:2168] Post-process start: 1 root nodes; 200 nodes
+[2026-05-14 14:12:25,234] DEBUG [ui_cls:2193] After dedupe/sort: 1 root nodes, 199 nodes
+[2026-05-14 14:12:26,064] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.829174280166626 seconds
+[2026-05-14 14:12:26,150] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.049843788146972656 seconds
+[2026-05-14 14:12:26,178] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.026925325393676758 seconds
+[2026-05-14 14:12:26,200] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020505189895629883 seconds
+[2026-05-14 14:12:26,221] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020505905151367188 seconds
+[2026-05-14 14:12:26,241] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018555641174316406 seconds
+[2026-05-14 14:12:26,261] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019614458084106445 seconds
+[2026-05-14 14:12:26,282] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02006244659423828 seconds
+[2026-05-14 14:12:26,304] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0214841365814209 seconds
+[2026-05-14 14:12:26,326] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02138996124267578 seconds
+[2026-05-14 14:12:26,348] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02156996726989746 seconds
+[2026-05-14 14:12:26,370] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021105051040649414 seconds
+[2026-05-14 14:12:26,390] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020563840866088867 seconds
+[2026-05-14 14:12:26,410] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018486499786376953 seconds
+[2026-05-14 14:12:26,432] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020532846450805664 seconds
+[2026-05-14 14:12:26,453] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020551204681396484 seconds
+[2026-05-14 14:12:26,474] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020321130752563477 seconds
+[2026-05-14 14:12:26,498] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02237081527709961 seconds
+[2026-05-14 14:12:26,519] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019536495208740234 seconds
+[2026-05-14 14:12:26,544] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021567344665527344 seconds
+[2026-05-14 14:12:26,565] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019612789154052734 seconds
+[2026-05-14 14:12:26,589] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021955013275146484 seconds
+[2026-05-14 14:12:26,611] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01952981948852539 seconds
+[2026-05-14 14:12:26,637] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02238750457763672 seconds
+[2026-05-14 14:12:26,660] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021494150161743164 seconds
+[2026-05-14 14:12:26,661] DEBUG [ui_cls:1519] Assigned 34 ids
+[2026-05-14 14:12:26,661] DEBUG [utils:206] Function BaseUI.post_process_ui consumed 1.427368402481079 seconds
+[2026-05-14 14:12:26,666] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 43, "cur_sig": "2e9ccfa9", "stack_depth": 2, "action_count": 3, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "raw_key": "75d6222193977a96540960292392eb09:de184a2f5dc9d4444f7ef7d8e834ac31:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 4}
+[2026-05-14 14:12:26,785] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 45, "cur_sig": "xml:2e9c", "stack_depth": 2, "action_count": 3, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "kind": "state_changed", "level": "weak", "src": "xml:12760fc982fd2139e72626f2551c5066", "dst": "xml:2e9ccfa9cd4b6dfdef398c8e33acabc6"}
+[2026-05-14 14:12:26,786] DEBUG [workflow:3200] Schedule NAV for sig=xml:2e9c blocks=38
+[2026-05-14 14:12:26,786] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 45, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 1, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "blocks": 38, "enqueue_ts": 1778739146.7867627}
+[2026-05-14 14:12:26,799] INFO [workflow:1343] Loop: sig=xml:2e9c stack_depth=3 actions=3 blocks=38 pending(nav=1 block_router=1) no_progress=2 no_new=1
+[2026-05-14 14:12:37,504] WARNING [gpt_cls:1426] Rate limited for propose_blocks_fill (parse). Sleep 10s then retry. err=Error code: 429 - {'error': {'message': 'Rate limit reached for gpt-4o in organization org-BfuRBBF4aPjQONrGpIABMcSq on tokens per min (TPM): Limit 30000, Used 27271, Requested 3225. Please try again in 992ms. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'p
+[2026-05-14 14:12:40,907] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=xml:2e9c prompt=3835 completion=31 total=3866 duration_s=14.113 path=parse
+[2026-05-14 14:12:40,908] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 14.11413025856018 seconds
+[2026-05-14 14:12:40,976] INFO [workflow:1108] {"event": "block_router_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 48, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 2, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "router_update_count": 0, "matched_block_count": 7, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\router\\1778739160975_xml_2e9ccfa9cd4b6dfdef398c8e33acabc6.json"}
+[2026-05-14 14:12:50,759] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=xml:2e9c prompt=4092 completion=184 total=4276 duration_s=9.781 path=parse
+[2026-05-14 14:12:50,759] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 9.781371116638184 seconds
+[2026-05-14 14:12:50,777] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 50, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 2, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 2}
+[2026-05-14 14:12:50,778] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 50, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 2, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "block_result_count": 2, "proposed_count": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\blocks_fill\\1778739170777_xml_2e9ccfa9cd4b6dfdef398c8e33acabc6.json"}
+[2026-05-14 14:13:01,050] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_blocks_fill sig=xml:1276 prompt=4088 completion=184 total=4272 duration_s=39.600 path=parse
+[2026-05-14 14:13:01,050] DEBUG [utils:206] Function GPTClient.propose_blocks_fill consumed 39.600423097610474 seconds
+[2026-05-14 14:13:01,094] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 51, "cur_sig": "xml:1276", "stack_depth": 3, "action_count": 3, "no_progress_loops": 2, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "kind": "blocks_fill_observed", "level": "weak", "proposed_count": 2}
+[2026-05-14 14:13:01,095] INFO [workflow:1108] {"event": "blocks_fill_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 51, "cur_sig": "xml:1276", "stack_depth": 3, "action_count": 3, "no_progress_loops": 2, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "block_result_count": 2, "proposed_count": 2, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\blocks_fill\\1778739181094_xml_12760fc982fd2139e72626f2551c5066.json"}
+[2026-05-14 14:14:05,400] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=xml:2e9c prompt=27366 completion=868 total=28234 duration_s=98.613 path=parse
+[2026-05-14 14:14:05,401] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 98.61364507675171 seconds
+[2026-05-14 14:14:05,453] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 52, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "kind": "candidates_discovered", "level": "strong", "family": "9730db2ae5fbf37deaaabec445dae7e5", "count": 3}
+[2026-05-14 14:14:05,453] DEBUG [workflow:3427] NAV ready sig=xml:2e9c overlay=none cand=3 return_method=back return_actions=0
+[2026-05-14 14:14:05,453] INFO [workflow:1108] {"event": "nav_ready", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 52, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "overlay_kind": "none", "candidate_count": 3, "duration_s": 98.66632223129272}
+[2026-05-14 14:14:05,454] INFO [workflow:1108] {"event": "nav_observation_saved", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 52, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "observation_path": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\observations\\nav\\1778739245453_xml_2e9ccfa9cd4b6dfdef398c8e33acabc6.json"}
+[2026-05-14 14:14:05,455] INFO [workflow:1108] {"event": "probe_skipped", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 54, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "reason": "probe_return_disabled"}
+[2026-05-14 14:14:05,456] WARNING [workflow:5306] No probe outcomes for forward selection at src_sig=xml:2e9c
+[2026-05-14 14:14:05,456] INFO [workflow:1803] Forward commit from sig=xml:2e9c: click:25: (Explore the Theme setting to gather more information.)
+[2026-05-14 14:14:05,457] INFO [workflow:1108] {"event": "forward_score", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 57, "cur_sig": "xml:2e9c", "stack_depth": 3, "action_count": 3, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 4, "action_key": "click:25:", "dst_sig": null, "score": 1.5, "candidate_score": 0.5, "novelty_score": 0.0, "q_yield": 0.0, "visit_score": 0.0, "back_penalty": 0.0}
+[2026-05-14 14:14:05,457] DEBUG [workflow:6448] Executing action: click:25: on element {'class': 'android.view.ViewGroup', 'text': '', 'content_desc': '', 'resource_id': '', 'clickable': True, 'enabled': True, 'selected': False, 'focused': False, 'focusable': True, 'scrollable': False, 'checkable': False, 'checked': False, 'long_clickable': False, 'password': False, 'absolute_frame': {'x': 90, 'y': 258, 'width': 662, 'height': 144}, 'subviews': {}, 'id': 25}
+[2026-05-14 14:14:05,504] DEBUG [appium_android:398] Tap at (421,330)
+[2026-05-14 14:14:06,494] DEBUG [appium_android:276] Capturing snapshot (xml + screenshot + device_info)
+[2026-05-14 14:14:07,808] DEBUG [appium_android:224] Page stable with hash=9bddd869cca4f83db9c33334e3c73e3e
+[2026-05-14 14:14:08,084] INFO [workflow:2355] main post-process mode: xml_only (xml_reliable=True)
+[2026-05-14 14:14:08,086] DEBUG [ui_cls:2168] Post-process start: 1 root nodes; 208 nodes
+[2026-05-14 14:14:08,086] DEBUG [ui_cls:2193] After dedupe/sort: 1 root nodes, 207 nodes
+[2026-05-14 14:14:08,482] DEBUG [utils:206] Function PaddleOCRClient.ocr consumed 0.3948221206665039 seconds
+[2026-05-14 14:14:08,574] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.05956578254699707 seconds
+[2026-05-14 14:14:08,604] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.029847145080566406 seconds
+[2026-05-14 14:14:08,625] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02050471305847168 seconds
+[2026-05-14 14:14:08,645] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02050638198852539 seconds
+[2026-05-14 14:14:08,669] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022550582885742188 seconds
+[2026-05-14 14:14:08,691] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020798444747924805 seconds
+[2026-05-14 14:14:08,712] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020200729370117188 seconds
+[2026-05-14 14:14:08,735] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022501230239868164 seconds
+[2026-05-14 14:14:08,757] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.01952838897705078 seconds
+[2026-05-14 14:14:08,777] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019384145736694336 seconds
+[2026-05-14 14:14:08,801] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022545814514160156 seconds
+[2026-05-14 14:14:08,822] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.020505666732788086 seconds
+[2026-05-14 14:14:08,844] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019823789596557617 seconds
+[2026-05-14 14:14:08,868] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.0234375 seconds
+[2026-05-14 14:14:08,889] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.018724918365478516 seconds
+[2026-05-14 14:14:08,912] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021396875381469727 seconds
+[2026-05-14 14:14:08,934] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.02000594139099121 seconds
+[2026-05-14 14:14:08,959] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022652626037597656 seconds
+[2026-05-14 14:14:08,981] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019631624221801758 seconds
+[2026-05-14 14:14:09,005] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.022084712982177734 seconds
+[2026-05-14 14:14:09,028] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.021489620208740234 seconds
+[2026-05-14 14:14:09,050] DEBUG [utils:206] Function EfficientNetClient.classify consumed 0.019521236419677734 seconds
+[2026-05-14 14:14:09,051] DEBUG [ui_cls:1519] Assigned 25 ids
+[2026-05-14 14:14:09,052] DEBUG [utils:206] Function BaseUI.post_process_ui consumed 0.9663858413696289 seconds
+[2026-05-14 14:14:09,056] INFO [workflow:1108] {"event": "snapshot_cache_miss", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 60, "cur_sig": "a11c65c8", "stack_depth": 3, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "raw_key": "7fb3d425c148aabc67baeba20474cc10:4172133e745c8aad3b310129bf30f129:1.0000:e55959137319823bde22c828fef14527:com.lemonpiggy.drinkwater:.HomeActivity:xml_only", "cache_size": 5}
+[2026-05-14 14:14:09,173] INFO [workflow:1108] {"event": "progress_event", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 62, "cur_sig": "xml:a11c", "stack_depth": 3, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "kind": "state_changed", "level": "weak", "src": "xml:2e9ccfa9cd4b6dfdef398c8e33acabc6", "dst": "xml:a11c65c8d86b03d33eaba298835db098"}
+[2026-05-14 14:14:09,173] DEBUG [workflow:3200] Schedule NAV for sig=xml:a11c blocks=38
+[2026-05-14 14:14:09,174] INFO [workflow:1108] {"event": "nav_scheduled", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 62, "cur_sig": "xml:a11c", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "blocks": 38, "enqueue_ts": 1778739249.1736763}
+[2026-05-14 14:14:09,182] WARNING [workflow:1324] Stop condition reached: time_budget_reached
+[2026-05-14 14:14:09,185] INFO [workflow:1108] {"event": "run_stop_condition", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 64, "cur_sig": "xml:a11c", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "reason": "time_budget_reached"}
+[2026-05-14 14:14:09,188] INFO [workflow:1108] {"event": "analysis_snapshot_exported", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 64, "cur_sig": "xml:a11c", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "out_dir": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\analysis", "stop_reason": "time_budget_reached"}
+[2026-05-14 14:14:09,190] INFO [workflow:1108] {"event": "analysis_snapshot_exported", "run_id": "20260514_141044_com.lemonpiggy.drinkwater", "step_id": 64, "cur_sig": "xml:a11c", "stack_depth": 4, "action_count": 4, "no_progress_loops": 0, "snapshot_cache_hits": 1, "snapshot_cache_misses": 5, "out_dir": "F:\\workplace\\framework\\traces\\20260514_141044_com.lemonpiggy.drinkwater\\analysis", "stop_reason": "run_exit"}
+[2026-05-14 14:14:09,190] INFO [__main__:373] Run finished: elapsed_s=202.311
+[2026-05-14 14:14:09,191] INFO [__main__:374] LLM token usage summary: {"calls": 10, "prompt_tokens": 114217, "completion_tokens": 3586, "total_tokens": 117803, "by_op": {"propose_router_answers": {"calls": 3, "prompt_tokens": 11500, "completion_tokens": 88, "total_tokens": 11588}, "propose_blocks_fill": {"calls": 3, "prompt_tokens": 12271, "completion_tokens": 559, "total_tokens": 12830}, "propose_navigation": {"calls": 3, "prompt_tokens": 71296, "completion_tokens": 2488, "total_tokens": 73784}, "recover_state": {"calls": 1, "prompt_tokens": 19150, "completion_tokens": 451, "total_tokens": 19601}}}
+[2026-05-14 14:14:09,203] INFO [appium_android:208] Force-stop com.lemonpiggy.drinkwater via adb
+[2026-05-14 14:14:09,492] INFO [__main__:404] Final block_status:
+{'down.violence_content.violence_or_implied_violence_against_hum': {'id': 'down.violence_content.violence_or_implied_violence_against_hum', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.violence_content.violence_against_anything_other_than_hum': {'id': 'down.violence_content.violence_against_anything_other_than_hum', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.violence_content.disturbing_or_gory_images_without_a_viol': {'id': 'down.violence_content.disturbing_or_gory_images_without_a_viol', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.violence_content.blood_that_isn_t_directly_related_to_a_v': {'id': 'down.violence_content.blood_that_isn_t_directly_related_to_a_v', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.scary_elements_includes.scary_elements': {'id': 'down.scary_elements_includes.scary_elements', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.scary_elements_includes.horrifying_elements': {'id': 'down.scary_elements_includes.horrifying_elements', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.sexuality_includes.sexual_activity_includes_both_moving_and': {'id': 'down.sexuality_includes.sexual_activity_includes_both_moving_and', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.sexuality_includes.suggestive_sexual_themes_or_references': {'id': 'down.sexuality_includes.suggestive_sexual_themes_or_references', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.sexuality_includes.nudity_or_revealing_outfits': {'id': 'down.sexuality_includes.nudity_or_revealing_outfits', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.sexuality_includes.depictions_of_or_references_to_sexual_vi': {'id': 'down.sexuality_includes.depictions_of_or_references_to_sexual_vi', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.revealing_outfits_nudity_includes.revealing_outfits': {'id': 'down.revealing_outfits_nudity_includes.revealing_outfits', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.revealing_outfits_nudity_includes.nudity': {'id': 'down.revealing_outfits_nudity_includes.nudity', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.nudity_includes.human_buttocks': {'id': 'down.nudity_includes.human_buttocks', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.nudity_includes.nipple_less_breasts_or_breasts_with_mini': {'id': 'down.nudity_includes.nipple_less_breasts_or_breasts_with_mini', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.nudity_includes.female_fantasy_creatures_breasts_e_g_har': {'id': 'down.nudity_includes.female_fantasy_creatures_breasts_e_g_har', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.nudity_includes.female_human_breasts_with_nipples': {'id': 'down.nudity_includes.female_human_breasts_with_nipples', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.nudity_includes.genitalia': {'id': 'down.nudity_includes.genitalia', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.gambling_includes.gambling_themes': {'id': 'down.gambling_includes.gambling_themes', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.gambling_includes.playable_bingo_games': {'id': 'down.gambling_includes.playable_bingo_games', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.gambling_includes.playable_casino_games_lotteries_or_racet': {'id': 'down.gambling_includes.playable_casino_games_lotteries_or_racet', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.language_includes.minor_profanities_e_g_go_to_hell': {'id': 'down.language_includes.minor_profanities_e_g_go_to_hell', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.language_includes.moderate_swearing_or_other_language_or_g': {'id': 'down.language_includes.moderate_swearing_or_other_language_or_g', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.language_includes.discriminatory_language_against_race_rel': {'id': 'down.language_includes.discriminatory_language_against_race_rel', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.language_includes.sexual_expletives': {'id': 'down.language_includes.sexual_expletives', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.controlled_substance_includes.illegal_or_recreational_drugs': {'id': 'down.controlled_substance_includes.illegal_or_recreational_drugs', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.controlled_substance_includes.fantasy_drugs': {'id': 'down.controlled_substance_includes.fantasy_drugs', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.controlled_substance_includes.medical_drugs': {'id': 'down.controlled_substance_includes.medical_drugs', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.controlled_substance_includes.alcohol': {'id': 'down.controlled_substance_includes.alcohol', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.controlled_substance_includes.tobacco': {'id': 'down.controlled_substance_includes.tobacco', 'module': 'down', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'down.crude_humor_content': {'id': 'down.crude_humor_content', 'module': 'down', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'miscell.misc_rewards_includes.cash_convertible_rewards_cash_rewards_re': {'id': 'miscell.misc_rewards_includes.cash_convertible_rewards_cash_rewards_re', 'module': 'miscell', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'miscell.misc_rewards_includes.issuance_e_g_minting_of_transferable_dig': {'id': 'miscell.misc_rewards_includes.issuance_e_g_minting_of_transferable_dig', 'module': 'miscell', 'topic': '', 'visit_count': 0, 'hit_count': 0}, 'miscell.misc_purchase_digital_goods': {'id': 'miscell.misc_purchase_digital_goods', 'module': 'miscell', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'miscell.misc_shares_location': {'id': 'miscell.misc_shares_location', 'module': 'miscell', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'miscell.is_web_browser_search': {'id': 'miscell.is_web_browser_search', 'module': 'miscell', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'miscell.is_news_or_educational': {'id': 'miscell.is_news_or_educational', 'module': 'miscell', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'promotion.promotion_age_restricted': {'id': 'promotion.promotion_age_restricted', 'module': 'promotion', 'topic': '', 'visit_count': 3, 'hit_count': 3}, 'user.user_content_interaction': {'id': 'user.user_content_interaction', 'module': 'user', 'topic': '', 'visit_count': 3, 'hit_count': 3}}
+[2026-05-14 14:14:12,823] INFO [gpt_cls:1625] LLM_USAGE stage=LLM2 op=propose_router_answers sig=xml:a11c prompt=3832 completion=28 total=3860 duration_s=3.641 path=parse
+[2026-05-14 14:14:12,823] DEBUG [utils:206] Function GPTClient.propose_router_answers consumed 3.6406455039978027 seconds
+[2026-05-14 14:14:53,761] INFO [gpt_cls:1625] LLM_USAGE stage=LLM1 op=propose_navigation sig=xml:a11c prompt=28062 completion=567 total=28629 duration_s=44.585 path=parse
+[2026-05-14 14:14:53,763] DEBUG [utils:206] Function GPTClient.propose_navigation consumed 44.58879351615906 seconds

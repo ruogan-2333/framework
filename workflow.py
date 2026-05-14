@@ -96,7 +96,7 @@ class BudgetConfig:
     # Per-page probing (bounded per loop; across loops we exhaust remaining candidates)
     enable_probe_return: bool = True
     per_page_probe_cap: int = 10
-    post_action_settle_s: float = 0.6
+    post_action_settle_s: float = 1
 
     # NAV barrier (wait + drift detection + timeout fallback)
     nav_timeout_s: float = 120.0  # LLM1 wait timeout before heuristic fallback
@@ -1290,9 +1290,12 @@ class WorkflowRunner:
         # 如果连初始页面都抓不到，整个探索流程无法继续，直接终止。
         if not snap:
             # 记录错误日志，说明这次 run 连入口状态都没有建立起来。
-            logger.error("Initial capture failed; abort.")
-            # 提前返回，不进入主循环。
-            return
+            time.sleep(3)
+            snap = self._capture_and_process()
+            if not snap:
+                logger.error("Initial capture failed; abort.")
+                # 提前返回，不进入主循环。
+                return
 
         # 当前状态签名，后面所有调度、缓存、图记录都围绕这个 sig 展开。
         cur_sig: str = snap["state_sig"]
@@ -1677,19 +1680,19 @@ class WorkflowRunner:
 
             # Beam-first: switch to a higher-value global opportunity if worth the travel cost.
             # 在真正前进之前，再比较一下全局状态图里是否存在更值得切换过去的目标页面。
-            beam_snap = self._maybe_beam_switch(cur_sig, local_score, snap, task)
-            # 如果 beam 策略决定切换，并且已经把我们导航到了新页面，就以新页面作为当前基准继续。
-            if beam_snap:
-                # 更新当前快照。
-                snap = beam_snap
-                # 更新当前状态签名。
-                cur_sig = snap["state_sig"]
-                # 对“通过 beam 跳转后的位置”修正 DFS 栈。
-                self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                # 为新页面重新安排分析。
-                self._schedule_state(cur_sig, snap, task)
-                # 当前轮结束。
-                continue
+            # beam_snap = self._maybe_beam_switch(cur_sig, local_score, snap, task)
+            # # 如果 beam 策略决定切换，并且已经把我们导航到了新页面，就以新页面作为当前基准继续。
+            # if beam_snap:
+            #     # 更新当前快照。
+            #     snap = beam_snap
+            #     # 更新当前状态签名。
+            #     cur_sig = snap["state_sig"]
+            #     # 对“通过 beam 跳转后的位置”修正 DFS 栈。
+            #     self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
+            #     # 为新页面重新安排分析。
+            #     self._schedule_state(cur_sig, snap, task)
+            #     # 当前轮结束。
+            #     continue
 
             # 如果没有选出 forward 候选，说明当前页此刻没有明确的前进动作可 commit。
             if forward is None:
@@ -2255,212 +2258,17 @@ class WorkflowRunner:
 
     def _capture_and_process(self, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
         """
-
-        (use uied)
-        IPO:
-          in : device UI state (implicit)
-          out: {xml, screenshot(b64), uist, vid_map, state_sig} or None
-
-        WHEN called:
-          - At entry
-          - Once per main-loop (drift check)
-          - After every action sequence (probe/overlay/recovery/forward/backtrace/replay)
-
-        WHY:
-          - Defines the single source of truth for current state_sig.
-          - Prevents planning on mixed frames (xml from one, screenshot from another).
+        Main snapshot entry point.
+        Fully switched to `_capture_and_process_debug` core implementation so
+        main flow and offline debug flow share the exact same capture + post-process path.
         """
-        try:
-            raw = self.appium.capture_snapshot(timeout=timeout)
-            xml_raw = raw.get("xml", "")
-            xml_hash_raw = str(raw.get("xml_hash") or "")
-            screenshot_b64_raw = raw.get("screenshot", "")
-            screenshot_hash_raw = str(raw.get("screenshot_hash") or "")
-            info = raw.get("device_info") or {}
-            device_pixel_ratio = float(info.get("pixelRatio", 1.0) or 1.0)
+        return self._capture_and_process_debug(timeout=timeout, debug=False)
 
-            # Decode screenshot bytes once for hashing/scale inference (best-effort).
-            png_bytes_raw: bytes = b""
-            if screenshot_b64_raw:
-                try:
-                    png_bytes_raw = base64.b64decode(str(screenshot_b64_raw) + "==", validate=False)
-                except Exception:
-                    png_bytes_raw = b""
-
-            # Back-compat: if older capture_snapshot doesn't provide hashes, compute them here.
-            if not xml_hash_raw:
-                xml_hash_raw = hashlib.md5((xml_raw or "").encode("utf-8")).hexdigest()
-            if not screenshot_hash_raw:
-                if png_bytes_raw:
-                    screenshot_hash_raw = hashlib.md5(png_bytes_raw).hexdigest()
-                else:
-                    # Last resort: stable-ish fallback (won't match screenshot_png_hash()).
-                    screenshot_hash_raw = hashlib.md5((screenshot_b64_raw or "").encode("utf-8")).hexdigest()
-
-            coord_scale, scale_meta = self._infer_coord_scale(xml=xml_raw, png=png_bytes_raw, device_pixel_ratio=device_pixel_ratio)
-
-            # Foreground context (package/activity) is part of the signature space:
-            # Launcher and target app must never collide even if UI text/structure looks similar.
-            try:
-                foreground_package = self.appium.foreground_package()
-            except Exception:
-                foreground_package = ""
-            try:
-                foreground_activity = self.appium.foreground_activity()
-            except Exception:
-                foreground_activity = ""
-
-            # --------- Normalization: mask status bar (screenshot + hierarchy) ---------
-            png_h_raw = int(scale_meta.get("png_h") or 0) if isinstance(scale_meta, dict) else 0
-            if png_h_raw <= 0 and png_bytes_raw:
-                _, png_h_raw = self._png_dimensions(png_bytes_raw)
-
-            crop_px, crop_meta = self._compute_status_bar_crop(
-                xml=xml_raw,
-                png_h=png_h_raw,
-                coord_scale=coord_scale,
-                target_package=str(self.target_package or ""),
-            )
-            crop_xml = int(crop_meta.get("status_bar_crop_xml") or 0)
-
-            # Processed screenshot (masked) for stable diffs; keep raw for debugging.
-            png_bytes = png_bytes_raw
-            screenshot_b64 = screenshot_b64_raw
-            if png_bytes_raw and crop_px > 0:
-                png_bytes = self._crop_png_top(png_bytes_raw, crop_px)
-                screenshot_b64 = base64.b64encode(png_bytes).decode("utf-8")
-            screenshot_hash = hashlib.md5((png_bytes or b"")).hexdigest() if png_bytes else hashlib.md5((screenshot_b64 or "").encode("utf-8")).hexdigest()
-            screenshot_phash = compute_screenshot_phash(screenshot_b64)
-
-            # Processed XML: remove top status bar region; keep raw for debugging.
-            xml = self._preprocess_hierarchy_xml(xml_raw, crop_top_xml=crop_xml) if crop_xml > 0 else (xml_raw or "")
-            xml_hash = hashlib.md5((xml or "").encode("utf-8")).hexdigest()
-
-            xml_reliable = count_meaningful_xml_nodes(xml) >= int(self.budget.meaningful_xml_nodes_threshold)
-            postprocess_mode = "xml_only" if xml_reliable else "uied_first"
-            logger.info("UIED mode: %s (xml_reliable=%s)", "skipped" if xml_reliable else "used", xml_reliable)
-
-            raw_key = self._snapshot_cache_key(
-                xml_hash,
-                screenshot_hash,
-                coord_scale,
-                foreground_package=foreground_package,
-                foreground_activity=foreground_activity,
-            ) + f":{postprocess_mode}"
-            cached = self.snapshot_cache.get(raw_key)
-            if cached:
-                self.snapshot_cache.move_to_end(raw_key)
-                self.snapshot_cache_hits += 1
-                uist2 = copy.deepcopy(cached["uist"])
-                vid_map = copy.deepcopy(cached["vid_map"])
-                sig = compute_state_signature(
-                    uist2,
-                    foreground_package=foreground_package,
-                    foreground_activity=foreground_activity,
-                )
-                self._log_event("snapshot_cache_hit", sig=sig, raw_key=raw_key, cache_size=len(self.snapshot_cache))
-            else:
-                self.snapshot_cache_misses += 1
-                uist = self.appium.parse_xml_to_uist(xml, pixel_ratio=coord_scale)
-                if xml_reliable:
-                    uist2, vid_map = BaseUI.post_process_ui(uist, screenshot_b64, device_info=info)
-                else:
-                    uist2, vid_map = BaseUI.post_process_ui_uied_first(uist, screenshot_b64, device_info=info)
-                sig = compute_state_signature(
-                    uist2,
-                    foreground_package=foreground_package,
-                    foreground_activity=foreground_activity,
-                )
-                # Store deep copies to avoid mutable sharing across cache hits.
-                self.snapshot_cache[raw_key] = {"uist": copy.deepcopy(uist2), "vid_map": copy.deepcopy(vid_map), "state_sig": sig}
-                if len(self.snapshot_cache) > self.snapshot_cache_max:
-                    self.snapshot_cache.popitem(last=False)
-                self._log_event("snapshot_cache_miss", sig=sig, raw_key=raw_key, cache_size=len(self.snapshot_cache))
-
-            coarse_sig = compute_coarse_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
-            struct_sig = compute_structural_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
-            fine_sig = compute_fine_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
-            identity = self._resolve_state_identity(
-                xml_reliable=xml_reliable,
-                xml_state_sig=sig,
-                struct_sig=struct_sig,
-                screenshot_phash=screenshot_phash,
-                foreground_package=foreground_package,
-                foreground_activity=foreground_activity,
-            )
-            sig = str(identity.get("state_sig") or sig or "")
-            try:
-                if sig and struct_sig:
-                    self.sig_to_family[sig] = struct_sig
-            except Exception:
-                pass
-            snap = {
-                "xml": xml,  # 处理后的 XML：后续解析/UI 判断真正使用的层级树
-                "xml_raw": xml_raw,  # 原始 XML：保留给调试对照
-                "screenshot": screenshot_b64,  # 处理后的截图：后续 OCR/UIED/相似度使用
-                "screenshot_raw": screenshot_b64_raw,  # 原始截图：保留给调试对照
-                "uist": uist2,  # 后处理后的 UI 树：签名、LLM、动作定位都基于它
-                "vid_map": vid_map,  # element_id -> 节点映射：动作执行时靠它找元素
-                "state_sig": sig,  # 当前页面主签名：状态图/cache 的核心 key
-                "xml_reliable": xml_reliable,  # 顶层冗余一份 XML 可信标记，方便调试和状态判断
-                "device_info": info,  # 设备信息：分辨率、像素比等
-                "meta": {
-                    "raw_key": raw_key,  # 这次快照在 snapshot cache 里的 key
-                    "cache_hit": bool(cached),  # 是否命中了 snapshot cache
-                    "cache_size": len(self.snapshot_cache),  # 当前 snapshot cache 大小
-                    "xml_hash": xml_hash,  # 处理后 XML 的 hash
-                    "screenshot_hash": screenshot_hash,  # 处理后截图的 hash
-                    "screenshot_phash": screenshot_phash,  # 处理后截图的感知 hash（视觉相似度）
-                    "xml_hash_raw": xml_hash_raw,  # 原始 XML 的 hash
-                    "screenshot_hash_raw": screenshot_hash_raw,  # 原始截图的 hash
-                    "xml_reliable": xml_reliable,  # XML 是否足够可靠，可用于状态判断
-                    "coord_scale": coord_scale,  # XML 坐标到截图坐标的缩放比例
-                    "coarse_sig": coarse_sig,  # 粗粒度签名：宽松比较页面
-                    "struct_sig": struct_sig,  # 结构签名：probe-return 回页时常用
-                    "fine_sig": fine_sig,  # 细粒度签名：更严格地区分页面
-                    "identity_source": str(identity.get("identity_source") or ""),  # 当前 state_sig 来自 xml 还是 phash
-                    "identity_hash": str(identity.get("identity_hash") or ""),  # 本次状态身份判定依赖的核心 hash
-                    "matched_existing": bool(identity.get("matched_existing")),  # phash 模式下是否复用了历史视觉状态
-                    "matched_similarity": float(identity.get("matched_similarity") or 0.0),  # 命中历史视觉状态时的相似度
-                    "foreground_package": foreground_package,  # 当前前台包名
-                    "foreground_activity": foreground_activity,  # 当前前台 activity
-                    **(crop_meta or {}),  # 裁切相关元信息：状态栏裁掉了多少等
-                    **scale_meta,  # 尺寸/缩放相关元信息：png/xml 尺寸等
-                },
-            }
-            # Keep hashes attached to graph nodes for debugging/disambiguation without inflating visits.
-            self._graph_annotate(
-                sig,
-                meta={
-                    "coarse_sig": coarse_sig,
-                    "struct_sig": struct_sig,
-                    "fine_sig": fine_sig,
-                    "xml_reliable": xml_reliable,
-                    "xml_hash": xml_hash,
-                    "screenshot_hash": screenshot_hash,
-                    "screenshot_phash": screenshot_phash,
-                    "xml_hash_raw": xml_hash_raw,
-                    "screenshot_hash_raw": screenshot_hash_raw,
-                    "identity_source": str(identity.get("identity_source") or ""),
-                    "identity_hash": str(identity.get("identity_hash") or ""),
-                    "matched_existing": bool(identity.get("matched_existing")),
-                    "matched_similarity": float(identity.get("matched_similarity") or 0.0),
-                    "coord_scale": coord_scale,
-                    "foreground_package": foreground_package,
-                    "foreground_activity": foreground_activity,
-                    **(crop_meta or {}),
-                },
-            )
-            self._emit_snapshot(snap)
-            return snap
-        except Exception:
-            logger.exception("capture_and_process failed")
-            return None
-        
     def _capture_and_process_debug(self, timeout: float = 10.0, debug: bool = False, raw=None, xml_raw=None) -> Optional[Dict[str, Any]]:
         """
-
-        (use uied)
+        Unified capture + post-process implementation used by both:
+        - main flow (`debug=False`)
+        - offline/local debug (`debug=True` with optional raw/xml injection)
         IPO:
           in : device UI state (implicit)
           out: {xml, screenshot(b64), uist, vid_map, state_sig} or None
@@ -2545,10 +2353,12 @@ class WorkflowRunner:
             xml_hash = hashlib.md5((xml or "").encode("utf-8")).hexdigest()
 
             xml_reliable = count_meaningful_xml_nodes(xml) >= int(self.budget.meaningful_xml_nodes_threshold)
-            postprocess_mode = "xml_only" if xml_reliable else "three_tools_debug"
+            postprocess_mode = "xml_only" if xml_reliable else "three_tools"
+            scope = "debug" if debug else "main"
             logger.info(
-                "Debug post-process mode: %s (xml_reliable=%s)",
-                "xml_only" if xml_reliable else "three_tools_debug",
+                "%s post-process mode: %s (xml_reliable=%s)",
+                scope,
+                postprocess_mode,
                 xml_reliable,
             )
 
@@ -3937,7 +3747,7 @@ class WorkflowRunner:
 
         now = time.time()
         if now < self.nav_cooldown_until.get(sig, 0.0):
-            return None, True
+            return None, False
 
         t0 = time.time()
         timeout_s = float(timeout_s if timeout_s is not None else self.budget.nav_timeout_s)
@@ -3998,7 +3808,7 @@ class WorkflowRunner:
         self._nav_enqueue_ts.pop(sig, None)
         self._emit_decision(sig, "nav_timeout", {"timeout_s": timeout_s})
         self._log_event("nav_timeout", sig=sig, timeout_s=timeout_s)
-        return None, True
+        return None, False
 
     # ---------------------------
     # Overlay handling

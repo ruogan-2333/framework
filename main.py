@@ -195,13 +195,9 @@ def parse_args(argv) -> argparse.Namespace:
     return p.parse_args(argv)
 
 #============================  # Dev-default args for quick local run; comment out in production.
-#package = "com.netease.a13.avg"
-# package = "com.netease.a13.avg"
-
-# package = "com.netease.a13.avg"
-# package = "com.netease.a13.avg"
-# package = "com.netease.a13.avg"
-package = "com.maimemo.android.momo"
+package="bim.app"
+package="com.lemonpiggy.drinkwater"
+# package = "com.maimemo.android.momo"
 
 
 sys.argv = [sys.argv[0], 
@@ -210,8 +206,8 @@ sys.argv = [sys.argv[0],
             "--appium-url", "http://127.0.0.1:4723",
             "--device-name", "emulator-5554",
             "--package", package,
-            # "--questionnaire-dir", "./questionnaire-v2/others",
-            "--questionnaire-dir", "./questionnaire-v2/games",
+            "--questionnaire-dir", "./questionnaire-v2/others",
+            # "--questionnaire-dir", "./questionnaire-v2/games",
             "--trace-dir", "./traces/",
             "--run-id", time.strftime("%Y%m%d_%H%M%S") + "_" + package,
             "--time-budget", "180",
