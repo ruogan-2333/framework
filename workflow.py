@@ -1255,7 +1255,7 @@ class WorkflowRunner:
     # Main loop
     # ---------------------------
 
-    def run(self, task: str) -> None:
+    def run(self, task: str) -> None:#123
         """
         IPO:
           in : task string (questionnaire exploration goal)
