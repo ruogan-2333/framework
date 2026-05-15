@@ -42,6 +42,13 @@ from utils import time_consumed, token_record  # do NOT modify user's utils.py
 
 R = TypeVar("R", bound=BaseModel)
 
+# Hard-coded OpenAI-compatible API endpoint.
+# Fill this with your alternate provider URL, for example: "https://your-provider.example.com/v1".
+# Leave it empty to keep the SDK default endpoint.
+# HARDCODED_OPENAI_BASE_URL = "https://api.openai.com"
+HARDCODED_OPENAI_BASE_URL = "https://api.uniapi.io/v1"
+
+
 
 class ActionType(str, Enum):
     CLICK = "click"
@@ -349,6 +356,15 @@ class RouterResult(BaseModel):
     )
 
 
+class NavigationRouterResult(BaseModel):
+    """
+    Combined LLM output for navigation planning and router answering.
+    """
+    state_sig: str = Field(..., description="Echo input state_sig for staleness/debug")
+    navigation: NavigationProposal = Field(..., description="LLM1-compatible navigation proposal")
+    router: RouterResult = Field(..., description="LLM2-1-compatible router answer result")
+
+
 class AppMetadataSummary(BaseModel):
     """
     One-shot summary generated from app-level metadata (store description/category/etc.).
@@ -460,6 +476,9 @@ INPUTS (field-by-field meaning and format):
       clickable (bool), enabled (bool), bounds ([x,y,w,h]), class (string|null)
     - screenscale: number
   - IMPORTANT: element ids in output actions must come from ui_digest ids.
+- xml_reliable(bool):
+  - xml_reliable=true means ui_digest is mainly based on reliable XML.
+  - xml_reliable=false means ui_digest is produced from visual/OCR/UIED fallback;assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
 - screenshot (image):
   - Rendered current screen. Primary evidence source when text/structure is ambiguous.
 
@@ -623,6 +642,7 @@ RULES:
 - Do not invent element_ids not in ui_digest.
 - Do not spam random clicks.
 - Do not intentionally leave the app (external links) unless clearly necessary for questionnaire evidence.
+- If xml_reliable is false,assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
 - app_intro/focus_hints are weak priors only; if they conflict with current-screen evidence, trust current-screen evidence.
 - If unsure, omit rather than hallucinate.
 """
@@ -709,6 +729,39 @@ RULES:
 - For multiple-choice routers, `new_answer` should be a list of option ids.
 - For single-choice routers, `new_answer` should be one option id string.
 - app_intro/focus_hints are weak priors only; current-screen evidence has priority.
+"""
+
+
+_NAV_ROUTER_SYSTEM = """You are a model for an Android UI exploration agent.
+
+GOAL:
+- Produce the same two decisions that are currently made by separate models:
+  1) navigation: decide safe, useful next actions for exploring the current UI.
+  2) router: answer provided router questions supported by current-screen evidence.
+
+INPUTS:
+- state_sig: UI signature for staleness/debug.
+- task: current exploration goal.
+- app_intro/focus_hints: weak app-level priors; current-screen evidence has priority.
+- history: recent action/context strings.
+- block_status: existing block runtime status for navigation context.
+- router_questions: flat router question entries from the selected questionnaire.
+- ui_digest: compact UI tree digest; element ids here are the only valid ids for navigation actions.
+- xml_reliable: tells whether XML-derived UI structure is reliable for this snap.
+- screenshot: current UI screenshot; primary visual evidence.
+
+OUTPUT (strict JSON matching NavigationRouterResult):
+- state_sig
+- navigation: strict JSON matching NavigationProposal.
+- router: strict JSON matching RouterResult.
+
+RULES:
+- Preserve the existing split in the output: navigation belongs under `navigation`, router answers under `router`.
+- Navigation candidate element_id values MUST come from ui_digest ids.
+- If xml_reliable is false, assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
+- Router question_id values MUST come from router_questions; prefer full_id when present.
+- Answer router questions only when the current screen provides clear evidence.
+- If unsure, omit rather than hallucinate.
 """
 
 _APP_METADATA_SYSTEM = """You are an assistant that summarizes Android app metadata for downstream UI analysis.
@@ -933,6 +986,7 @@ class GPTClient:
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.model = model
+        self.base_url = HARDCODED_OPENAI_BASE_URL.strip()
         self.temperature = float(temperature)
         self.timeout_s = int(timeout_s)
         self.total_prompt_tokens: int = 0
@@ -954,12 +1008,23 @@ class GPTClient:
             http_client = httpx.Client(proxy=proxy_url) if proxy_url else None
 
             if hasattr(openai, "OpenAI"):
+                # Original official-endpoint initialization:
+                # kwargs = {"api_key": self.api_key}
                 kwargs = {"api_key": self.api_key}
+                if self.base_url:
+                    kwargs["base_url"] = self.base_url
                 if http_client is not None:
                     kwargs["http_client"] = http_client
                 self.client = openai.OpenAI(**kwargs)
             elif hasattr(openai, "Client"):
-                self.client = openai.Client(api_key=self.api_key) if self.api_key else openai.Client()
+                # Original official-endpoint initialization:
+                # self.client = openai.Client(api_key=self.api_key) if self.api_key else openai.Client()
+                client_kwargs: Dict[str, Any] = {}
+                if self.api_key:
+                    client_kwargs["api_key"] = self.api_key
+                if self.base_url:
+                    client_kwargs["base_url"] = self.base_url
+                self.client = openai.Client(**client_kwargs)
             else:
                 self.client = openai
         except Exception as e:
@@ -978,6 +1043,7 @@ class GPTClient:
         focus_hints: Optional[str] = None,
         history: Optional[List[str]] = None,
         state_sig: str = "",
+        xml_reliable: Optional[bool] = None,
     ) -> NavigationProposal:
         """
         Ask LLM1 to interpret the current UI and propose navigation actions.
@@ -1005,6 +1071,8 @@ class GPTClient:
             "focus_hints": focus_hints,
             "history": (history or [])[-12:],
             "ui_digest": ui_digest,
+            "xml_reliable": xml_reliable
+
         }
 
         messages: List[Dict[str, Any]] = [
@@ -1180,6 +1248,83 @@ class GPTClient:
         out = self._call_structured(messages, RouterResult, opname="propose_router_answers")
         out.router_updates = list(out.router_updates or [])[:12]
         out.state_sig = state_sig or out.state_sig
+        return out
+
+    @time_consumed
+    def propose_navigation_and_router(
+        self,
+        screenshot_b64: str,
+        ui_json: Dict[str, Any],
+        router_questions: List[Dict[str, Any]],
+        block_status: Dict[str, Any],
+        task: str,
+        app_intro: Optional[str] = None,
+        focus_hints: Optional[str] = None,
+        history: Optional[List[str]] = None,
+        state_sig: str = "",
+        xml_reliable: Optional[bool] = None,
+    ) -> NavigationRouterResult:
+        """
+        Ask one LLM call to produce both navigation planning and router answers.
+
+        Input:
+        - screenshot_b64: current screen screenshot.
+        - ui_json: post-processed UI tree from snap["uist"].
+        - router_questions: executable router questions loaded from the selected questionnaire.
+        - block_status: current block runtime status, used only as navigation context.
+        - task/history/state_sig: exploration goal, recent context, and current state id.
+
+        Output:
+        - NavigationRouterResult containing:
+          navigation: NavigationProposal-compatible result.
+          router: RouterResult-compatible result.
+        """
+        ui_digest = _compact_digest(ui_json, limit=260)
+        payload = {
+            "state_sig": state_sig,
+            "task": task,
+            "app_intro": app_intro,
+            "focus_hints": focus_hints,
+            "history": (history or [])[-12:],
+            "block_status": block_status,
+            "router_questions": router_questions[:40],
+            "ui_digest": ui_digest,
+            "xml_reliable": xml_reliable
+
+        }
+
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": _NAV_ROUTER_SYSTEM},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": json.dumps(payload, ensure_ascii=False)},
+                    {"type": "image_url", "image_url": {"url": _b64_image_url(screenshot_b64)}} if screenshot_b64 else {"type": "text", "text": "(no screenshot)"},
+                ],
+            },
+        ]
+
+        out = self._call_structured(messages, NavigationRouterResult, opname="propose_navigation_and_router")
+        out.state_sig = state_sig or out.state_sig
+        out.navigation.state_sig = state_sig or out.navigation.state_sig
+        out.router.state_sig = state_sig or out.router.state_sig
+
+        out.navigation.overlay_dismiss_actions = list(out.navigation.overlay_dismiss_actions or [])[:5]
+        out.navigation.candidate_actions = list(out.navigation.candidate_actions or [])[:10]
+        for candidate in out.navigation.candidate_actions:
+            candidate.actions = list(candidate.actions or [])[:3]
+            candidate.return_actions = list(candidate.return_actions or [])[:4]
+            candidate.tags = list(candidate.tags or [])[:6]
+        out.navigation.exhausted = bool(getattr(out.navigation, "exhausted", False))
+        try:
+            out.navigation.exhausted_confidence = max(0.0, min(1.0, float(getattr(out.navigation, "exhausted_confidence", 0.0) or 0.0)))
+        except Exception:
+            out.navigation.exhausted_confidence = 0.0
+        out.navigation.exhausted_reason = str(getattr(out.navigation, "exhausted_reason", "") or "")[:280]
+        out.navigation.key_interactables = list(out.navigation.key_interactables or [])[:12]
+        out.navigation.return_actions = list(out.navigation.return_actions or [])[:4]
+        out.navigation.page_tags = list(out.navigation.page_tags or [])[:10]
+        out.router.router_updates = list(out.router.router_updates or [])[:12]
         return out
 
     @time_consumed
@@ -1569,6 +1714,8 @@ class GPTClient:
     def _llm_stage_from_opname(opname: str) -> str:
         if opname == "propose_navigation":
             return "LLM1"
+        if opname == "propose_navigation_and_router":
+            return "LLM1+2"
         if opname in {
             "propose_questionnaire_updates",
             "propose_topic_routes",
@@ -1646,6 +1793,7 @@ __all__ = [
     "ActionType",
     "OverlayKind",
     "NavigationProposal",
+    "NavigationRouterResult",
     "RecoveryProposal",
     "QuestionnaireUpdate",
     "TopicRouteResult",
