@@ -43,10 +43,10 @@ OUTPUT_ROOT = PROJECT_ROOT / "test_debug" / "llm_navigation_router_output"
 QUESTIONNAIRE_DIR = PROJECT_ROOT / "questionnaire-v2" / "games"
 
 # Empty string means using the latest run directory under INTERMEDIATE_ROOT.
-SOURCE_RUN_ID = r"F:\workplace\framework\test_debug\intermediate\20260515_184745"
+SOURCE_RUN_ID = r"F:\workplace\framework\test_debug\intermediate\20260516_033838"
 
 # Empty string means processing all snap.json files in the selected run.
-SNAP_NAME = "000039_phash_565bcf4784968accfaf0809d1e2d91ef"
+SNAP_NAME = ""
 
 TASK = "Explore the app UI and propose useful navigation actions for questionnaire evidence collection."
 APP_INTRO = None

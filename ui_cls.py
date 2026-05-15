@@ -164,7 +164,7 @@ class BaseUI:
 
     # Post-process bundle versions for cache coherence.
     # NOTE: bump these when changing merge/threshold logic or provider outputs.
-    _POSTPROCESS_BUNDLE_VERSION: str = "v1"
+    _POSTPROCESS_BUNDLE_VERSION: str = "v2"
     _OCR_PROVIDER_VERSION: str = "paddleocr:v1"
     _ICON_PROVIDER_VERSION: str = "efficientnet:v1"
     _EXTERNAL_SEMANTIC_PROVIDER_VERSION: str = "external_semantic_provider:v1"
@@ -1542,6 +1542,20 @@ class BaseUI:
         logger.debug("Assigned %d ids (all nodes)", len(vid_map))
         return vid_map
 
+    @staticmethod
+    def _force_all_nodes_clickable(uist: Dict[str, Any]) -> int:
+        """
+        Input: UI tree dictionary whose nodes should all be actionable.
+        Output: number of nodes updated in-place.
+        Function: marks every node as clickable/enabled before id assignment.
+        """
+        count = 0
+        for n in BaseUI.iter_nodes(uist):
+            n["clickable"] = True
+            n["enabled"] = True
+            count += 1
+        return count
+
     # ---------------------------
     # Three-tools debug post-process
     # ---------------------------
@@ -2121,16 +2135,18 @@ class BaseUI:
         except Exception:
             logger.debug("External semantic attach failed in three-tools debug mode (continuing)", exc_info=True)
 
-        # 仅三工具调试分支使用全量 id 映射，便于核对融合后每个元素。
+        forced_clickable_count = BaseUI._force_all_nodes_clickable(out_uist)
+        # Assign ids after forcing clickability so uist and vid_map stay consistent.
         vid_map = BaseUI._assign_ids_all_nodes(out_uist)
         logger.debug(
-            "three-tools debug post-process: ocr=%d uied_raw=%d uied_filtered=%d template_raw=%d template_filtered=%d final=%d ids=%d",
+            "three-tools debug post-process: ocr=%d uied_raw=%d uied_filtered=%d template_raw=%d template_filtered=%d final=%d forced_clickable=%d ids=%d",
             len(ocr_nodes),
             len(uied_nodes_raw),
             len(uied_nodes),
             len(template_nodes_raw),
             len(template_nodes),
             len(final_nodes),
+            forced_clickable_count,
             len(vid_map),
         )
         return out_uist, vid_map
