@@ -1,21 +1,21 @@
-# gpt_cls.py (patched; key change: per-candidate return strategies)
+# gpt_cls.py (patched; key change: compact navigation output for debugging)
 
 """
 gpt_cls.py
 
 KEY CHANGE (requested):
-- Each candidate action now carries its own return_method / return_actions (ActionCandidate).
-  Reason: different probes on the same page may require different unwind strategies (e.g.,
-  tab click vs. close vs. back). The global return_method is now only a fallback.
+- Navigation output is compact for debug runs.
+- Candidate actions are exploration-only.
+- Page return controls are emitted separately as NavigationProposal.page_return_actions.
 
 WHAT WE ADD:
-- ActionCandidate wrapper (step + per-candidate return_method/return_actions).
+- ActionCandidate wrapper with actions + score only.
 - NavigationProposal.candidate_actions is List[ActionCandidate].
-- Global return_method/return_actions remain as defaults for legacy prompts.
+- NavigationProposal.page_return_actions stores visible page-level return/exit controls.
 
 WORKFLOW CONTRACT:
-- If a candidate supplies return_actions, they run first after that probe.
-- BACK is a last resort for tab-back/custom contexts; per-candidate return overrides global.
+- This compact schema is intended for LLM debugging scripts first.
+- Main workflow integration requires separate adaptation if it still expects legacy return fields.
 """
 
 from __future__ import annotations
@@ -116,145 +116,67 @@ class UIView(BaseModel):
 
 class ActionStep(BaseModel):
     action: ActionType = Field(..., description="Concrete action type")
-    element_id: Optional[int] = Field(None, description="UI element id for click/input")
+    element_id: Optional[int] = Field(None, description="UI element id for click/input/back-like visible controls")
     text: Optional[str] = Field(None, description="Text to input when action==input")
-    x: Optional[int] = Field(
-        None,
-        description="Optional absolute screenshot x coordinate for visual click fallback when element_id is null",
-    )
-    y: Optional[int] = Field(
-        None,
-        description="Optional absolute screenshot y coordinate for visual click fallback when element_id is null",
-    )
-    bbox: Optional[List[int]] = Field(
-        None,
-        description=(
-            "Optional absolute screenshot bbox [x1,y1,x2,y2] for bounded visual click probing "
-            "when an obvious target is missing from ui_digest and element_id is null"
-        ),
-    )
-    probe_grid: int = Field(
-        3,
-        ge=1,
-        le=5,
-        description="Grid size for bounded visual probing inside bbox when element_id is null",
-    )
     priority: int = Field(0, description="Higher executes earlier when same group")
-    reasoning: str = Field("", description="Short rationale (<=2 sentences). No chain-of-thought.")
+    reasoning: str = Field("", description="Short reason, preferably <=6 words. No chain-of-thought.")
 
 
 class ActionCandidate(BaseModel):
     """
-    Wraps one probe/forward plan with its own return strategy.
+    LLM navigation candidate for exploration only.
 
-    Rationale:
-      - Some probes need multi-step execution (e.g., input text then tap Confirm).
-      - Different probes on the same page may require different unwind methods
-        (tab click vs. close vs. back). Global return_method/return_actions are only defaults.
+    Input:
+    - Ordered action steps that may reveal new UI/evidence.
+
+    Output:
+    - A scored candidate that should not include page return/close/back controls.
     """
 
     actions: List[ActionStep] = Field(
         ...,
-        description="Ordered steps to perform this candidate (e.g., input then click). Must not be empty.",
+        description="Ordered exploration steps for this candidate. Must not be empty. Do not include page-return controls.",
         min_items=1,
-    )
-    return_method: Optional[Literal["back", "close", "tab-back", "custom", "none"]] = Field(
-        None,
-        description=(
-            "Preferred return method AFTER this candidate executes. "
-            "If null, the workflow inherits NavigationProposal.return_method."
-        ),
-    )
-    return_actions: List[ActionStep] = Field(
-        default_factory=list,
-        description=(
-            "Custom steps to restore the source state after THIS candidate. "
-            "If empty, workflow falls back to candidate.return_method, then NavigationProposal defaults. (max 4)"
-        ),
     )
     score: float = Field(
         0.0,
         ge=-1.0,
         le=1.0,
-        description=(
-            "LLM priority score for this candidate in [-1, 1]. "
-            "Negative to deprioritize (e.g., navigate back), positive to favor."
-        ),
-    )
-
-    tags: List[TagSignal] = Field(
-        default_factory=list,
-        description="Optional candidate-level tags bridging navigation to questionnaire topics (max 6).",
+        description="LLM priority score for this exploration candidate in [-1, 1].",
     )
 
 
 class NavigationProposal(BaseModel):
     """
-    LLM1 output: UI analysis + overlay resolution + exploration candidates.
+    LLM1 output: compact overlay handling, exploration candidates, and page-level return plan.
     """
     state_sig: str = Field(..., description="Echo input state_sig for staleness/debug")
-    ui_view: UIView = Field(..., description="Structured UI analysis (must be present)")
 
     page_summary: str = Field(..., description="One-line summary of current page")
-    ui_type: str = Field("unknown", description="Page type classification (stable, reusable)")
-    page_tags: List[TagSignal] = Field(default_factory=list, description="Page-level semantic tags (max 10)")
-    tag_evidence: str = Field("", description="Optional short evidence for tags/ui_type (<=1 sentence)")
-    key_interactables: List[int] = Field(default_factory=list, description="IDs worth attention (max 12)")
 
     overlay_kind: OverlayKind = Field(OverlayKind.NONE, description="Overlay type classification")
-    overlay_reason: str = Field("", description="Why overlay_kind was chosen (<=1 sentence)")
+    overlay_reason: str = Field("", description="Short reason for overlay_kind")
     overlay_dismiss_actions: List[ActionStep] = Field(
         default_factory=list,
-        description="Actions to dismiss blocking overlays (max 5); only for overlay_kind=dismiss",
-    )
-    workflow_hints: List[str] = Field(
-        default_factory=list,
-        description="Optional hints when overlay_kind=workflow (e.g., requires input, safe default query)",
-    )
-
-    exhausted: bool = Field(
-        False,
-        description=(
-            "Whether this page should be treated as exhausted for exploration in current run context. "
-            "True means no worthwhile next-step evidence is expected from further local exploration."
-        ),
-    )
-    exhausted_confidence: float = Field(
-        0.0,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in exhausted decision, used for conservative gating.",
-    )
-    exhausted_reason: str = Field(
-        "",
-        description=(
-            "Short reason when exhausted=true (for example: auth_gate_no_credentials, "
-            "registration_gate, dead_end_no_new_controls, duplicate_loop_state)."
-        ),
+        description="Actions to dismiss blocking overlays; only for overlay_kind=dismiss.",
     )
 
     candidate_actions: List[ActionCandidate] = Field(
         default_factory=list,
         description=(
-            "Probe/advance candidates (max 10). Each candidate supplies 1-3 ordered actions "
-            "and may include its own return_method/return_actions; otherwise global defaults apply."
+            "Exploration candidates only. Do not include back, close, up, or already-visited "
+            "tab-switch controls unless they are likely to reveal new content."
         ),
     )
 
-    # IMPORTANT: global return policy fallback (used when a candidate omits its own return_method/return_actions)
-    return_method: Literal["back", "close", "tab-back", "custom", "none"] = Field(
-        "back",
-        description="Default return method after probes when a candidate does not provide its own return_method.",
-    )
-    return_actions: List[ActionStep] = Field(
+    page_return_actions: List[ActionStep] = Field(
         default_factory=list,
         description=(
-            "Default custom steps to return to the source state after probes when a candidate does not "
-            "provide its own return_actions (max 4)."
+            "Visible page-level return/exit actions to use after candidate_actions are completed. "
+            "Examples: visible back arrow, close button, or tab switch to a previous/root page. "
+            "Do not duplicate candidate_actions. If no visible return control exists, keep empty."
         ),
     )
-
-    why_these_actions: str = Field("", description="Brief rationale linking actions to questionnaire evidence goals (no hidden CoT)")
 
 
 class RecoveryProposal(BaseModel):
@@ -451,200 +373,60 @@ def _compact_digest(ui_json: Dict[str, Any], limit: int = 220) -> Dict[str, Any]
 _NAV_SYSTEM = """You are LLM1 for an Android UI exploration agent.
 
 GOAL:
-- Explore the app efficiently to gather evidence for a fixed questionnaire.
-- Use block_status as coverage context (visited/hit blocks), not as a direct open-question list.
+- Produce a compact navigation plan for the current Android screen.
+- Separate exploration actions from page-return actions.
+- Prefer actions that can reveal new UI surfaces or questionnaire evidence.
 
-INPUTS (field-by-field meaning and format):
-- state_sig (string):
-  - Current UI signature for staleness/debug checks.
-- task (string):
-  - Current exploration objective.
-- block_status (object):
-  - Mapping: block_id -> {topic?, hit_count, visit_count, module?}.
-  - Use it to prioritize under-covered areas.
-- app_intro (string or null):
-  - Optional one-sentence app prior from metadata.
-- focus_hints (string or null):
-  - Optional semicolon-separated app-level hints from metadata.
-- history (array of strings):
-  - Recent action keys for short-term context. Context only; not authoritative.
-- ui_digest (object):
-  - Compact structured UI tree:
-    - elements: array of nodes. Each node may include:
-      id (int), parent_id (int|null), depth (int),
-      label/text/content_desc/resource_id/semantic_label/semantic_type/ocr_text/icon_label (string|null),
-      clickable (bool), enabled (bool), bounds ([x,y,w,h]), class (string|null)
-    - screenscale: number
-  - IMPORTANT: element ids in output actions must come from ui_digest ids.
-- xml_reliable(bool):
-  - xml_reliable=true means ui_digest is mainly based on reliable XML.
-  - xml_reliable=false means ui_digest is produced from visual/OCR/UIED fallback;assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
-- screenshot (image):
-  - Rendered current screen. Primary evidence source when text/structure is ambiguous.
-
-WORKFLOW (must be followed in order, and MUST cover all output fields):
-1) State echo and schema anchor.
-   - state_sig:
-     - Type: string.
-     - Value rule: copy input state_sig verbatim unless truly unavailable.
-
-2) Build ui_view (structured screen interpretation).
-   - ui_view.description:
-     - Type: natural-language string (1 short paragraph).
-     - Content: what the screen is and what user can do.
-   - ui_view.feedback_message:
-     - Type: natural-language string, can be empty.
-     - Content: visible toast/error/status text only.
-   - ui_view.is_alert_topmost:
-     - Type: boolean.
-     - True only when blocking dialog/overlay is visually topmost.
-   - ui_view.hint_elements:
-     - Type: array[UIElement], size 0..8.
-     - Content: informative, mostly non-interactive elements.
-   - ui_view.action_elements:
-     - Type: array[UIElement], size 0..12.
-     - Content: interactable controls likely useful for navigation.
-   - UIElement fields (for both arrays):
-     - id: int, MUST be from ui_digest.elements[].id.
-     - ui_type: enum string from UIElementType:
-       Button | TextButton | IconButton | InputText | Toggle | Checkbox | Radio | Tab |
-       ListItem | TextOnly | IconOnly | Dialog | OtherInteractable | Unknown
-     - description: natural-language short phrase (<=15 words).
-     - text: visible text/value string, can be empty.
-     - clickability: float in [0,1].
-     - location: short positional string (for example top-left, header, center, bottom-nav).
-   - ui_view.match_rate:
-     - Type: float in [0,1].
-     - Meaning: confidence that ui_digest and screenshot align.
-
-3) Build reusable page semantics.
-   - page_summary:
-     - Type: natural-language one-line summary string.
-   - ui_type:
-     - Type: stable label string (snake_case preferred).
-     - Recommended set: settings_list, detail_form, auth_flow, modal_dialog, feed, search,
-       subscription_paywall, permissions_dialog, webview, game_canvas, unknown.
-   - page_tags:
-     - Type: array[TagSignal], size 0..10.
-     - TagSignal schema: {tag: string, weight: float[0,1]}.
-     - tag should be short taxonomy-like token (snake_case preferred), such as privacy/billing/account/help.
-   - tag_evidence:
-     - Type: natural-language string <=1 sentence.
-     - Content: brief evidence for ui_type/page_tags.
-   - key_interactables:
-     - Type: array[int], size 0..12.
-     - Values MUST come from ui_digest ids.
-     - Content: ids worth priority attention.
-
-4) Classify overlay and prepare overlay-specific outputs.
-   - overlay_kind:
-     - Type: enum string; MUST be exactly one of:
-       none | dismiss | workflow | loading
-   - overlay_reason:
-     - Type: natural-language string <=1 sentence.
-   - overlay_dismiss_actions:
-     - Type: array[ActionStep], size 0..5.
-     - Primary use: when overlay_kind="dismiss".
-     - If overlay_kind="dismiss", usually provide 1..5 dismiss-safe actions.
-     - If overlay_kind!=dismiss, keep this empty unless truly justified.
-   - workflow_hints:
-     - Type: array[string], optional.
-     - Use mainly when overlay_kind="workflow".
-     - Content should be short actionable hints (for example "requires input before continue").
-
-5) Determine whether the current state is exhausted (`exhausted`).
-
-- exhausted:
-  - Type: boolean.
-  - Decide whether further exploration on the current page is necessary.
-  - Set to true if all clickable elements on the page are unlikely to lead to new UI surfaces or new evidence.
-  - Set to false if any element still has potential click value (i.e., may reveal new UI or new evidence).
-
-- exhausted_confidence:
-  - Type: float in [0,1].
-  - Must be provided when exhausted=true; otherwise set to an empty string "".
-  - Use >=0.75 only when the evidence is strong.
-
-- exhausted_reason:
-  - Type: short string.
-  - Must be provided when exhausted=true; otherwise set to an empty string "".
-  - Provide a brief natural-language reason.
-
-6) Propose candidate_actions for exploration.
-   - candidate_actions:
-      - Type: array[ActionCandidate].
-      - Count rule:
-        - normally 2..10 when exhausted=false;
-        - when overlay_kind="dismiss", can be 0 or minimal;
-        - when exhausted=true, should usually be empty or minimal safe exit actions only.
-   - ActionCandidate schema:
-     - actions: array[ActionStep], size 1..3, ordered execution sequence.
-     - return_method: optional enum string from:
-       back | close | tab-back | custom | none
-     - return_actions: array[ActionStep], size 0..4.
-     - score: float in [-1,1] where +1 strongly preferred, 0 neutral, -1 deprioritized.Actions more likely to reveal new UI for the app's core functionality should receive higher scores.Actions focused on minor details or unrelated to the app's core functionality should receive lower scores.
-     - tags: array[TagSignal], size 0..6.
-   - ActionStep schema:
-     - action: enum string from ActionType:
-       click | input | wait | back | restart | complete | none
-     - element_id: int|null.
-       - Required for click/input when targeting UI control.
-       - MUST be from ui_digest ids if present.
-     - text: string|null.
-       - Required when action="input"; otherwise null/empty.
-     - priority: int.
-       - Higher means earlier preference inside same candidate group.
-     - reasoning: natural-language short rationale (<=2 sentences), no hidden chain-of-thought.
-
-7) Set global probe-return fallback policy.
-   - return_method:
-     - Type: enum string; MUST be one of:
-       back | close | tab-back | custom | none
-     - Meaning: default return strategy when a candidate omits its own return_method.
-   - return_actions:
-     - Type: array[ActionStep], size 0..4.
-     - Meaning: default custom return steps when candidate.return_actions is empty.
-   - Policy rule:
-     - If BACK may be unsafe (tabs/webview/nested flows), prefer candidate-level custom/tab-back
-       with concrete return_actions over relying on global back.
-
-8) Final rationale and consistency check.
-   - why_these_actions:
-     - Type: natural-language short summary string.
-     - Content: explain how selected actions support evidence gathering goals.
-   - Consistency checks before output:
-     - Every referenced element_id exists in ui_digest.
-     - All enum fields use allowed values only.
-     - All array length caps are respected.
-     - Keep uncertain items omitted rather than guessed.
+INPUTS:
+- state_sig: current UI signature for debug/staleness checks.
+- task: current exploration objective.
+- block_status: questionnaire block coverage context; use it only as a weak priority signal.
+- app_intro/focus_hints: weak app-level priors; current-screen evidence has priority.
+- history: recent action context; avoid obvious loops.
+- ui_digest: compact UI tree. Action element_id values MUST come from ui_digest ids.
+- xml_reliable: whether XML-derived structure is reliable. If false, trust screenshot evidence more than labels/tree semantics.
+- screenshot: primary visual evidence.
 
 OUTPUT (strict JSON matching NavigationProposal):
 - state_sig
-- ui_view
 - page_summary
-- ui_type
-- page_tags
-- tag_evidence
-- key_interactables
 - overlay_kind
 - overlay_reason
 - overlay_dismiss_actions
-- workflow_hints
-- exhausted
-- exhausted_confidence
-- exhausted_reason
 - candidate_actions
-- return_method
-- return_actions
-- why_these_actions
+- page_return_actions
 
-RULES:
-- Do not invent element_ids not in ui_digest.
+ACTION STEP RULES:
+- action must be one of: click | input | wait | back | restart | complete | none.
+- element_id must be an id from ui_digest when targeting a visible UI control.
+- Do not output screenshot coordinates or bounding boxes.
+- text is used only for input actions.
+- reasoning should be short, preferably <=6 words.
+
+OVERLAY RULES:
+- overlay_kind must be one of: none | dismiss | workflow | loading.
+- If overlay_kind=dismiss, put safe close/deny/not-now/OK actions in overlay_dismiss_actions.
+- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty unless clearly justified.
+
+CANDIDATE ACTION RULES:
+- candidate_actions are exploration actions only.
+- Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+- Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
+- Prefer visible primary actions, menus, tabs, settings, shop/purchase, profile/account, help/about, game start/level, rewards, or other evidence-bearing surfaces.
+- Each candidate should have 1..3 actions and score in [-1, 1].
+
+PAGE RETURN RULES:
+- page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
+- Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.
+- Do not duplicate any element_id/action already listed in candidate_actions or overlay_dismiss_actions.
+- If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
+
+CONSISTENCY RULES:
+- Every referenced element_id must exist in ui_digest.
+- Never put the same element_id in candidate_actions and page_return_actions.
+- Keep uncertain actions omitted rather than guessed.
 - Do not spam random clicks.
-- Do not intentionally leave the app (external links) unless clearly necessary for questionnaire evidence.
-- If xml_reliable is false,assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
-- app_intro/focus_hints are weak priors only; if they conflict with current-screen evidence, trust current-screen evidence.
-- If unsure, omit rather than hallucinate.
+- Do not intentionally leave the app unless clearly necessary for questionnaire evidence.
 """
 #prompt调整
 
@@ -732,12 +514,11 @@ RULES:
 """
 
 
-_NAV_ROUTER_SYSTEM = """You are a model for an Android UI exploration agent.
+_NAV_ROUTER_SYSTEM = """You are a combined Navigation + Router model for an Android UI exploration agent.
 
 GOAL:
-- Produce the same two decisions that are currently made by separate models:
-  1) navigation: decide safe, useful next actions for exploring the current UI.
-  2) router: answer provided router questions supported by current-screen evidence.
+- navigation: produce a compact exploration plan plus page-level return actions.
+- router: answer provided router questions supported by current-screen evidence.
 
 INPUTS:
 - state_sig: UI signature for staleness/debug.
@@ -746,7 +527,7 @@ INPUTS:
 - history: recent action/context strings.
 - block_status: existing block runtime status for navigation context.
 - router_questions: flat router question entries from the selected questionnaire.
-- ui_digest: compact UI tree digest; element ids here are the only valid ids for navigation actions.
+- ui_digest: compact UI tree; element ids here are the only valid ids for navigation actions.
 - xml_reliable: tells whether XML-derived UI structure is reliable for this snap.
 - screenshot: current UI screenshot; primary visual evidence.
 
@@ -755,10 +536,19 @@ OUTPUT (strict JSON matching NavigationRouterResult):
 - navigation: strict JSON matching NavigationProposal.
 - router: strict JSON matching RouterResult.
 
-RULES:
-- Preserve the existing split in the output: navigation belongs under `navigation`, router answers under `router`.
-- Navigation candidate element_id values MUST come from ui_digest ids.
-- If xml_reliable is false, assume that ui_digest was produced by visual/OCR-based tools rather than a trustworthy XML UI tree. Its elements, labels, text, and hierarchy may be unreliable. In such cases, base UI understanding and action decisions primarily on the screenshot, using ui_digest only as a rough auxiliary signal.
+NAVIGATION RULES:
+- navigation.candidate_actions are exploration actions only.
+- Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+- Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
+- navigation.page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
+- Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.
+- Do not duplicate any element_id/action between candidate_actions, overlay_dismiss_actions, and page_return_actions.
+- If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
+- Do not output screenshot coordinates or bounding boxes.
+- Navigation action element_id values MUST come from ui_digest ids.
+- If xml_reliable is false, trust screenshot evidence more than labels/tree semantics.
+
+ROUTER RULES:
 - Router question_id values MUST come from router_questions; prefer full_id when present.
 - Answer router questions only when the current screen provides clear evidence.
 - If unsure, omit rather than hallucinate.
@@ -966,8 +756,7 @@ OUTPUT (strict JSON matching RecoveryProposal):
 - candidate_actions <= 5
 - Allowed actions: click, input, back, wait, restart, none, complete
 - Choose overlay_kind from: none | dismiss | workflow | loading
-- If a visible recovery control is missing from ui_digest, a click may use element_id=null
-  with a tight absolute screenshot bbox=[x1,y1,x2,y2] and optional x/y for bounded visual probing.
+- For visible recovery controls, use element_id from ui_digest. Do not output screenshot coordinates or bounding boxes.
 
 STRATEGY:
 1) If overlay likely, propose click actions on Close/X/Cancel/Deny/Not now/OK (safe first).
@@ -1091,17 +880,7 @@ class GPTClient:
         out.candidate_actions = list(out.candidate_actions or [])[:10]
         for c in out.candidate_actions:
             c.actions = list(c.actions or [])[:3]
-            c.return_actions = list(c.return_actions or [])[:4]
-            c.tags = list(c.tags or [])[:6]
-        out.exhausted = bool(getattr(out, "exhausted", False))
-        try:
-            out.exhausted_confidence = max(0.0, min(1.0, float(getattr(out, "exhausted_confidence", 0.0) or 0.0)))
-        except Exception:
-            out.exhausted_confidence = 0.0
-        out.exhausted_reason = str(getattr(out, "exhausted_reason", "") or "")[:280]
-        out.key_interactables = list(out.key_interactables or [])[:12]
-        out.return_actions = list(out.return_actions or [])[:4]
-        out.page_tags = list(out.page_tags or [])[:10]
+        out.page_return_actions = list(out.page_return_actions or [])[:3]
         out.state_sig = state_sig or out.state_sig
         return out
 
@@ -1313,17 +1092,7 @@ class GPTClient:
         out.navigation.candidate_actions = list(out.navigation.candidate_actions or [])[:10]
         for candidate in out.navigation.candidate_actions:
             candidate.actions = list(candidate.actions or [])[:3]
-            candidate.return_actions = list(candidate.return_actions or [])[:4]
-            candidate.tags = list(candidate.tags or [])[:6]
-        out.navigation.exhausted = bool(getattr(out.navigation, "exhausted", False))
-        try:
-            out.navigation.exhausted_confidence = max(0.0, min(1.0, float(getattr(out.navigation, "exhausted_confidence", 0.0) or 0.0)))
-        except Exception:
-            out.navigation.exhausted_confidence = 0.0
-        out.navigation.exhausted_reason = str(getattr(out.navigation, "exhausted_reason", "") or "")[:280]
-        out.navigation.key_interactables = list(out.navigation.key_interactables or [])[:12]
-        out.navigation.return_actions = list(out.navigation.return_actions or [])[:4]
-        out.navigation.page_tags = list(out.navigation.page_tags or [])[:10]
+        out.navigation.page_return_actions = list(out.navigation.page_return_actions or [])[:3]
         out.router.router_updates = list(out.router.router_updates or [])[:12]
         return out
 

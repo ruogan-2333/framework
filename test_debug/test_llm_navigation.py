@@ -41,8 +41,8 @@ from gpt_cls import GPTClient, _compact_digest
 INTERMEDIATE_ROOT = PROJECT_ROOT / "test_debug" / "intermediate"
 OUTPUT_ROOT = PROJECT_ROOT / "test_debug" / "llm_navigation_output"
 
-SOURCE_RUN_ID = "20260516_clickable_all_000039"
-SNAP_NAME = "000039_phash_565bcf4784968accfaf0809d1e2d91ef"
+SOURCE_RUN_ID = "20260516_033838"
+SNAP_NAME = ""
 
 
 TASK = "Explore the app UI and propose useful navigation actions for questionnaire evidence collection."
@@ -151,16 +151,6 @@ def frame_from_step(step: Dict[str, Any], vid_map: Dict[Any, Any]) -> Optional[D
                 "height": int(frame.get("height", 0) or 0),
             }
 
-    bbox = step.get("bbox")
-    if isinstance(bbox, list) and len(bbox) >= 4:
-        x1, y1, x2, y2 = [int(v or 0) for v in bbox[:4]]
-        return {"x": x1, "y": y1, "width": max(1, x2 - x1), "height": max(1, y2 - y1)}
-
-    if step.get("x") is not None and step.get("y") is not None:
-        x = int(step.get("x") or 0)
-        y = int(step.get("y") or 0)
-        return {"x": x - 10, "y": y - 10, "width": 20, "height": 20}
-
     return None
 
 
@@ -191,7 +181,7 @@ def draw_labeled_box(draw: ImageDraw.ImageDraw, frame: Dict[str, int], label: st
 def iter_action_steps_for_overlay(result: Dict[str, Any]) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
     """
     Input: NavigationProposal JSON payload.
-    Output: labeled action steps with colors for overlay rendering.
+    Output: labeled overlay/candidate/page-return action steps with colors for rendering.
     """
     items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
     for idx, step in enumerate(result.get("overlay_dismiss_actions") or [], start=1):
@@ -204,13 +194,10 @@ def iter_action_steps_for_overlay(result: Dict[str, Any]) -> List[tuple[str, Dic
         for step_idx, step in enumerate(candidate.get("actions") or [], start=1):
             if isinstance(step, dict):
                 items.append((f"C{cand_idx}.{step_idx}", step, (30, 102, 245)))
-        for step_idx, step in enumerate(candidate.get("return_actions") or [], start=1):
-            if isinstance(step, dict):
-                items.append((f"CR{cand_idx}.{step_idx}", step, (191, 97, 0)))
 
-    for idx, step in enumerate(result.get("return_actions") or [], start=1):
+    for idx, step in enumerate(result.get("page_return_actions") or [], start=1):
         if isinstance(step, dict):
-            items.append((f"R{idx}", step, (96, 96, 96)))
+            items.append((f"PR{idx}", step, (191, 97, 0)))
     return items
 
 
