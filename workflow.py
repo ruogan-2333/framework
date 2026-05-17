@@ -96,6 +96,7 @@ class BudgetConfig:
     # Per-page probing (bounded per loop; across loops we exhaust remaining candidates)
     enable_probe_return: bool = True
     per_page_probe_cap: int = 10
+    max_dfs_depth: int = 999
     post_action_settle_s: float = 1
 
     # NAV barrier (wait + drift detection + timeout fallback)
@@ -107,7 +108,7 @@ class BudgetConfig:
     topic_route_conf_threshold: float = 0.55
     topic_fill_cooldown_s: float = 60.0
     topic_pack_limit: int = 18
-    screenshot_phash_similarity_threshold: float = 0.80# phash相似度判断阈值
+    screenshot_phash_similarity_threshold: float = 0.75# phash相似度判断阈值
     meaningful_xml_nodes_threshold: int = 2  #计算xml中有意义节点数阈值,用于判断xml是否可信
     visual_probe_max_taps: int = 6
     visual_probe_settle_s: float = 0.25
@@ -555,6 +556,7 @@ class WorkflowRunner:
 
     # Candidate memory per state (DFS completion)
     state_candidates: Dict[str, List[ActionCandidate]] = field(default_factory=dict, init=False)  # keyed by family_id
+    state_return_actions: Dict[str, List[ActionStep]] = field(default_factory=dict, init=False)  # keyed by family_id
     nav_candidates_noted: Set[str] = field(default_factory=set, init=False)
 
     # Counters (global)
@@ -1122,6 +1124,8 @@ class WorkflowRunner:
             "_recover",
             "_restart_and_replay",
             "_navigate_via_graph",
+            "_execute_candidate_branch",
+            "_return_from_current_state",
             "_execute_action_payload",
             "_replay_actions_to_target",
             "run",
@@ -1953,6 +1957,7 @@ class WorkflowRunner:
                 # 记录停止日志，方便从 trace / log 中看 run 为什么结束。
                 logger.warning("Stop condition reached: %s", stop_reason)
                 print(f"[STOP] {stop_reason}")
+                self._final_stop_reason = stop_reason
                 self._log_event("run_stop_condition", sig=cur_sig, reason=stop_reason)
                 self._export_analysis_snapshot(cur_sig=cur_sig, stop_reason=stop_reason)
                 # 跳出主循环，进入资源清理阶段。
@@ -2193,325 +2198,76 @@ class WorkflowRunner:
             if overlay_kind == OverlayKind.WORKFLOW.value:
                 self._log_event("overlay_workflow", sig=cur_sig, reason=getattr(nav, "overlay_reason", ""), hints=getattr(nav, "workflow_hints", []))
 
-            # Candidates: NAV if available; heuristics ONLY if NAV timed out/cooldown.
-            # 生成本轮可尝试的候选动作；优先使用 NAV 结果，只有 NAV 不可用时才退化到启发式。
+            # DFS candidate execution: NAV candidates are no longer probed and returned.
+            # The first unexplored candidate is executed as the next DFS branch.
             if nav_exhausted and nav_exhausted_conf >= 0.75:
                 candidates = []
+            elif len(self.dfs_stack) >= int(self.budget.max_dfs_depth):
+                candidates = []
+                self._log_event(
+                    "dfs_depth_limit_reached",
+                    sig=cur_sig,
+                    depth=len(self.dfs_stack),
+                    max_dfs_depth=int(self.budget.max_dfs_depth),
+                )
             else:
                 candidates = self._candidate_actions(nav=nav, snap=snap, allow_heuristics=using_heuristics)
+
+            self._remember_nav_plan(cur_sig, nav, candidates)
             self._emit_decision(
                 cur_sig,
                 "next_step",
                 {
-                    "plan": "evaluate_candidates",
+                    "plan": "dfs_evaluate_candidates",
                     "candidate_count": len(candidates or []),
                     "using_heuristics": bool(using_heuristics),
                     "overlay_kind": overlay_kind,
+                    "stack_depth": len(self.dfs_stack),
                 },
             )
-            # 如果本轮拿到的是正常 NAV 结果，就顺手检查候选是否还有真正可用的动作。
-            if nav is not None and (not using_heuristics) and not (nav_exhausted and nav_exhausted_conf >= 0.75):
-                # 统计有没有至少一个候选动作还没被探索、尝试或拉黑。
-                usable = 0
-                # 逐个检查候选。
-                for c in candidates:
-                    # 没有动作内容的候选直接跳过。
-                    if not getattr(c, "actions", None):
-                        continue
-                    # 构造候选动作的稳定 key，方便和尝试/黑名单集合做比对。
-                    ckey = self._candidate_key(c)
-                    # 如果这个候选已经探索过、尝试过或被临时拉黑，就不算“可用”。
-                    if self._is_explored(cur_sig, c) or self._already_attempted(cur_sig, c) or self._is_action_blacklisted(cur_sig, ckey):
-                        continue
-                    # 找到一个可用候选就够了，不需要继续统计。
-                    usable += 1
-                    # 直接结束循环。
+
+            next_candidate = self._next_unexplored_candidate(cur_sig, candidates)
+            if next_candidate is not None:
+                prev_sig = cur_sig
+                cur_sig, snap = self._execute_candidate_branch(cur_sig, snap, next_candidate, task)
+                if cur_sig != prev_sig:
+                    if cur_sig not in self.dfs_stack:
+                        self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=True)
+                    self._schedule_state(cur_sig, snap, task)
+                continue
+
+            # No remaining candidate: close the current DFS branch using page_return_actions, then BACK fallback.
+            if self._is_state_exhausted(cur_sig):
+                if len(self.dfs_stack) <= 1 or cur_sig == self.entry_sig:
+                    self._emit_decision(cur_sig, "dfs_complete", {"reason": "root_exhausted", "stack_depth": len(self.dfs_stack)})
+                    self._log_event("dfs_root_exhausted", sig=cur_sig, stack_depth=len(self.dfs_stack))
+                    self._final_stop_reason = "root_exhausted"
                     break
-                # 如果 NAV 给了一堆候选，但最后一个都用不上，说明这次 NAV 质量偏低。
-                if usable == 0:
-                    # 记录低质量 NAV 的上下文信息，方便后续排查模型输出问题。
-                    self._log_event(
-                        "nav_low_quality",
-                        sig=cur_sig,
-                        candidate_count=len(getattr(nav, "candidate_actions", []) or []),
-                        overlay_kind=self._overlay_kind_value(nav),
-                        has_page_summary=bool(getattr(nav, "page_summary", "") or ""),
-                        tag_count=len(getattr(nav, "page_tags", []) or []),
-                    )
-                    # 发出一个决策事件，标记这次 NAV 结果虽然完成了，但实际不可用。
-                    self._emit_decision(cur_sig, "nav_low_quality", {"candidate_count": len(getattr(nav, "candidate_actions", []) or [])})
 
-            # Probe-return exploration (evidence gathering for forward scoring)
-            # 先对候选做 probe 探测，而不是立刻前进；目的是先知道这些动作分别会通向哪里。
-            if self.budget.enable_probe_return:
-                self._emit_decision(
-                    cur_sig,
-                    "next_step",
-                    {"plan": "probe_candidates", "candidate_count": len(candidates or []), "probe_cap": int(self.budget.per_page_probe_cap)},
+                self._emit_decision(cur_sig, "next_step", {"plan": "dfs_return_from_exhausted_state", "stack_depth": len(self.dfs_stack)})
+                cur_sig, snap = self._return_from_current_state(cur_sig, snap, task)
+                continue
+
+            # NAV may still be pending/low quality. Keep scheduling and wait rather than guessing.
+            if self._should_recover_stuck():
+                logger.warning(
+                    "STUCK: no progress loops=%d age=%.1fs at sig=%s -> recovery.",
+                    self.no_progress_loops,
+                    (time.time() - self.last_strong_progress_ts),
+                    cur_sig[:8],
                 )
-                self._probe_candidates(cur_sig, snap, nav, candidates, task)
-            else:
-                self._log_event("probe_skipped", sig=cur_sig, reason="probe_return_disabled")
-                self._emit_decision(cur_sig, "probe_skipped", {"reason": "probe_return_disabled"})
-
-            # Probe can request forced replan (back-like / return_method=none / source mismatch)
-            # probe 期间如果发现“实际上已经跳走了”，这里会触发强制重规划。
-            if self.budget.enable_probe_return and self._consume_forced_replan():
-                # 切换到 probe 过程确定的新状态与快照。
-                cur_sig, snap = self._force_replan_sig, self._force_replan_snap  # type: ignore[assignment]
-                # 读取是否已有记录边。
-                has_edge = self._force_replan_has_edge
-                # 清除该标记。
-                self._clear_forced_replan()
-                # 根据是否已有边来修正当前位置与 DFS 栈。
-                self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=not has_edge)
-                # 对当前位置重新安排分析。
-                self._schedule_state(cur_sig, snap, task)
-                # 结束当前轮。
-                continue
-
-            # Optional post-probe wait (let pipelined Q updates land)
-            # probe 之后可短暂等待一下，让刚刚 pipeline 出去的问卷更新任务有时间完成并落回状态。
-            if self.budget.enable_probe_return:
-                self._post_probe_wait()
-
-            # Choose forward commit based on probe evidence + novelty + questionnaire yield.
-            # 基于 probe 的落点、新颖度、问卷收益等信息，挑出本轮真正要 commit 的前进动作。
-            self._emit_decision(cur_sig, "next_step", {"plan": "choose_forward"})
-            forward = self._choose_forward(cur_sig, nav, candidates=candidates)
-
-            # Beam switching compares against a *verified* local option only.
-            # If forward is speculative (no probe outcome), treat local_score as -inf.
-            # 默认把本地候选分数记成负无穷，意思是“还没有足够证据与全局切换比较”。
-            local_score = float("-inf")
-            # 只有当 forward 候选有明确评分且来自 probe 证据时，才把它当作有效本地方案。
-            if forward is not None and self._last_forward_detail and self._last_forward_detail.get("score") is not None:
-                try:
-                    # 拿到 forward 候选的稳定 key。
-                    fkey = self._candidate_key(forward)
-                    # 查出 probe 期间这个候选实际落到的目标状态。
-                    dst_sig = (self.probe_outcomes.get(self._family_id(cur_sig), {}) or {}).get(fkey)
-                    # 只有确实落到了不同页面，才算一个有效的“前进选项”。
-                    dst_ok = bool(dst_sig and dst_sig != cur_sig)
-                    # 目标状态不能已经被探索穷尽。
-                    if dst_ok and (not self._is_state_exhausted(str(dst_sig))):
-                        # 看一下目标状态是否已经被判断为 overlay 阻塞页。
-                        dst_nav = self.nav_cache.get(str(dst_sig))
-                        # 提取目标状态的 overlay 类型。
-                        overlay = self._overlay_kind_value(dst_nav)
-                        # 只有目标状态不是 dismiss/loading 阻塞页，才采用它的本地评分。
-                        if overlay not in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
-                            local_score = float(self._last_forward_detail.get("score") or 0.0)
-                # 如果评分计算过程中出了异常，退回到“没有可靠本地分数”。
-                except Exception:
-                    local_score = float("-inf")
-
-            # Beam-first: switch to a higher-value global opportunity if worth the travel cost.
-            # 在真正前进之前，再比较一下全局状态图里是否存在更值得切换过去的目标页面。
-            # beam_snap = self._maybe_beam_switch(cur_sig, local_score, snap, task)
-            # # 如果 beam 策略决定切换，并且已经把我们导航到了新页面，就以新页面作为当前基准继续。
-            # if beam_snap:
-            #     # 更新当前快照。
-            #     snap = beam_snap
-            #     # 更新当前状态签名。
-            #     cur_sig = snap["state_sig"]
-            #     # 对“通过 beam 跳转后的位置”修正 DFS 栈。
-            #     self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-            #     # 为新页面重新安排分析。
-            #     self._schedule_state(cur_sig, snap, task)
-            #     # 当前轮结束。
-            #     continue
-
-            # 如果没有选出 forward 候选，说明当前页此刻没有明确的前进动作可 commit。
-            if forward is None:
-                # Only backtrace when truly exhausted (all branches explored).
-                # 如果当前状态已经被完全探索完，就优先考虑 DFS 回退，而不是原地乱试。
-                if self._is_state_exhausted(cur_sig):
-                    # 找最近一个还有剩余工作可做的祖先状态。
-                    target = self._nearest_ancestor_with_remaining_work(cur_sig)
-
-                    # 如果能找到这样的祖先，就执行回溯。
-                    if target:
-                        # 记录回溯目标。
-                        logger.info("Exhausted sig=%s. Backtrace to ancestor sig=%s.", cur_sig[:8], target[:8])
-                        # 试着按 DFS 路径退回去。
-                        self._emit_decision(cur_sig, "next_step", {"plan": "backtrace_to_ancestor", "target_sig": target})
-                        ok = self._backtrace_to(target_sig=target, task=task, start_snap=snap)
-                        # 如果回溯失败，则进入恢复流程。
-                        if not ok:
-                            # 记录回溯失败。
-                            logger.warning("Backtrace failed. Recover/restart.")
-                            # recovery 尝试把我们拉回目标祖先或稳定页。
-                            ok2 = self._recover(cur_sig, snap, reason=RecoveryReason.BACKTRACE_FAILED, task=task, target_sig=target)
-                            # 如果 recovery 还失败，再升级到重启 + replay。
-                            if not ok2:
-                                self._restart_and_replay(best_target=target, task=task, reason="backtrace_failed_recovery_failed")
-
-                        # 回溯 / 恢复 / 重启之后，重新抓当前真实页面。
-                        snap = self._capture_and_process() or snap
-                        # 更新当前 sig。
-                        cur_sig = snap["state_sig"]
-                        # 修正 DFS 栈与当前位置。
-                        self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                        # 重新安排分析。
-                        self._schedule_state(cur_sig, snap, task)
-                        # 当前轮结束。
-                        continue
-
-                    # 如果祖先里也没有剩余工作，就尝试从全局状态图里挑一个 frontier 状态。
-                    frontier = self._pick_global_frontier()
-                    # 只有 frontier 合法且不是当前页时，才值得进行跨分支跳转。
-                    if frontier and frontier != cur_sig:
-                        # 记录准备前往全局 frontier。
-                        logger.info("No ancestor work. Attempt to reach global frontier sig=%s", frontier[:8])
-                        # 先尝试不重启，直接沿已知状态图导航过去。
-                        self._emit_decision(cur_sig, "next_step", {"plan": "navigate_to_global_frontier", "target_sig": frontier})
-                        reached, snap2 = self._navigate_via_graph(start_sig=cur_sig, start_snap=snap, target_sig=frontier, task=task)
-                        # 如果状态图导航失败，则升级到重启 + replay。
-                        if not reached:
-                            self._restart_and_replay(best_target=frontier, task=task, reason="global_frontier_unreachable")
-                            # 重启后重新抓一次页面，得到最新快照。
-                            snap2 = self._capture_and_process(timeout=10.0) or snap2
-                        # 采用导航后的快照；如果没有新快照则保留原快照。
-                        snap = snap2 or snap
-                        # 更新当前 sig。
-                        cur_sig = snap["state_sig"]
-                        # 修正当前位置在 DFS 栈中的表达。
-                        self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                        # 对新页面重新安排分析。
-                        self._schedule_state(cur_sig, snap, task)
-                        # 本轮结束。
-                        continue
-
-                # 如果当前页不是 exhausted，但整体表现出“卡住”征兆，就走恢复分支。
-                if self._should_recover_stuck():
-                    # 打印 stuck 告警，包括卡了多少轮、多久没强进展。
-                    logger.warning(
-                        "STUCK: no progress loops=%d age=%.1fs at sig=%s -> recovery.",
-                        self.no_progress_loops,
-                        (time.time() - self.last_strong_progress_ts),
-                        cur_sig[:8],
-                    )
-                    # 把 stuck 事件写入日志与 trace。
-                    self._log_event("stuck_detected", sig=cur_sig, loops=self.no_progress_loops, age_s=(time.time() - self.last_strong_progress_ts))
-                    # 尝试 recovery，把流程拉回一个可继续探索的状态。
-                    self._emit_decision(
-                        cur_sig,
-                        "next_step",
-                        {"plan": "recover_stuck", "loops": self.no_progress_loops, "age_s": (time.time() - self.last_strong_progress_ts)},
-                    )
-                    ok = self._recover(cur_sig, snap, reason=RecoveryReason.STUCK_NO_PROGRESS, task=task, target_sig=None)
-                    # recovery 失败则走重启恢复。
-                    if not ok:
-                        self._restart_and_replay(best_target=None, task=task, reason="stuck_recovery_failed")
-
-                    # 恢复后重新抓当前页面。
-                    snap = self._capture_and_process() or snap
-                    # 更新当前 sig。
-                    cur_sig = snap["state_sig"]
-                    # 修正当前位置与 DFS 栈。
-                    self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                    # 重新安排分析。
-                    self._schedule_state(cur_sig, snap, task)
-                else:
-                    # keep scheduling/waiting; do not heuristic-click unless NAV timed out
-                    # 如果既不 exhausted 也不 stuck，就继续等待更多分析结果，不强行点击。
-                    self._schedule_state(cur_sig, snap, task)
-                # forward 不存在的分支到这里结束，本轮不再执行下面的 commit 逻辑。
-                continue
-
-            # Execute forward move (commit)
-            # 走到这里，说明已经为当前页选出了一个真正值得提交执行的前进候选。
-            cand_key = self._candidate_key(forward)
-            # 取出第一步动作附带的 reasoning，方便日志里看到“为什么选它”。
-            first_reason = (forward.actions[0].reasoning if forward.actions else "") or ""
-            # 记录本轮前进提交的候选动作。
-            self._emit_decision(
-                cur_sig,
-                "next_step",
-                {"plan": "forward_commit", "candidate_key": cand_key, "reason": first_reason, "actions": self._actions_signature(forward.actions)},
-            )
-            logger.info("Forward commit from sig=%s: %s (%s)", cur_sig[:8], cand_key, first_reason[:90])
-            # 如果有上一轮 forward 评分细节，也一起落到 trace 里。
-            if self._last_forward_detail:
-                self._log_event("forward_score", sig=cur_sig, **self._last_forward_detail)
-            # 发出决策事件，标记当前正式选择了哪个动作序列。
-            self._emit_decision(cur_sig, "forward_selected", {"actions": self._actions_signature(forward.actions)})
-            # 真正执行这个动作序列。
-            ok = self._execute_action_sequence(forward.actions, snap)
-
-            # 如果动作执行层面就失败了，不能继续信任当前状态，需要恢复。
-            if not ok:
-                # 记录前进动作执行失败。
-                logger.warning("Forward action failed at sig=%s -> recovery.", cur_sig[:8])
-                # 进入 recovery。
-                self._recover(cur_sig, snap, reason=RecoveryReason.FORWARD_ACTION_FAILED, task=task, target_sig=None)
-                # 恢复后重新抓页面。
-                snap = self._capture_and_process() or snap
-                # 更新当前 sig。
-                cur_sig = snap["state_sig"]
-                # 修正 DFS 栈。
+                self._log_event("stuck_detected", sig=cur_sig, loops=self.no_progress_loops, age_s=(time.time() - self.last_strong_progress_ts))
+                ok = self._recover(cur_sig, snap, reason=RecoveryReason.STUCK_NO_PROGRESS, task=task, target_sig=None)
+                if not ok:
+                    self._restart_and_replay(best_target=None, task=task, reason="stuck_recovery_failed")
+                refreshed = self._refresh_after_possible_change(snap)
+                cur_sig = str(refreshed.get("state_sig") or cur_sig)
+                snap = refreshed
                 self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                # 为当前位置重新安排分析。
                 self._schedule_state(cur_sig, snap, task)
-                # 本轮结束。
-                continue
-
-            # Capture post-forward authoritative snapshot
-            # 动作执行成功后，马上抓一份新的权威快照，确认我们实际落到了哪里。
-            snap_next = self._capture_and_process()
-            # 如果连前进后的快照都抓不到，同样需要恢复。
-            if not snap_next:
-                # 记录抓取失败。
-                logger.warning("Capture failed after forward at sig=%s -> recovery.", cur_sig[:8])
-                # 进入 recovery。
-                self._recover(cur_sig, snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=None)
-                # 恢复后重新抓当前页。
-                snap = self._capture_and_process() or snap
-                # 更新 sig。
-                cur_sig = snap["state_sig"]
-                # 修正 DFS 栈。
-                self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                # 重新安排分析。
-                self._schedule_state(cur_sig, snap, task)
-                # 本轮结束。
-                continue
-
-            # 提取前进后真正到达的新状态签名。
-            new_sig = snap_next["state_sig"]
-
-            # Record transition and get novelty-at-discovery
-            # 把这次“当前页 -> 前进后页面”的迁移正式写入状态图，并拿到目标页是否为新状态。
-            dst_was_new = self._graph_record_transition(
-                cur_sig,
-                new_sig,
-                self._actions_signature(forward.actions, vid_map=snap.get("vid_map") or {}),
-                src_snap=snap,
-                dst_snap=snap_next,
-            )
-            # 标记当前页上的这个 forward 候选已经至少尝试过一次。
-            self._mark_attempted(cur_sig, forward)
-
-            # If forward returned to an ancestor or did nothing, mark explored to avoid re-committing endlessly.
-            # 如果这个 forward 实际上没动，或者回到了祖先页，就把它标成 explored，避免以后重复提交。
-            if new_sig == cur_sig or new_sig in self.dfs_stack:
-                self._mark_explored(cur_sig, forward)
-
-            # 用这次前进迁移更新 DFS 路径与 parent 关系。
-            self._enter_state(from_sig=cur_sig, to_sig=new_sig, via_action=cand_key)
-
-            # Saturation counter uses novelty-at-discovery (not visit_count after touch)
-            # 如果发现了新状态，就重置“无新状态”计数。
-            if dst_was_new:
-                self.no_new_state_count = 0
-            # 否则继续累计“连续没有发现新状态”的次数。
             else:
-                self.no_new_state_count += 1
-
-            # 把当前基准切到前进后的新状态。
-            cur_sig, snap = new_sig, snap_next
-            # 为新状态安排下一轮异步分析。
-            self._schedule_state(cur_sig, snap, task)
+                self._schedule_state(cur_sig, snap, task)
+            continue
 
         # 退出主循环后，尽力关闭线程池并取消剩余 future，避免后台任务继续占资源。
         try:
@@ -2521,7 +2277,11 @@ class WorkflowRunner:
         except Exception:
             pass
         try:
-            self._export_analysis_snapshot(cur_sig=cur_sig, stop_reason="run_exit")
+            final_stop_reason = str(getattr(self, "_final_stop_reason", "run_exit") or "run_exit")
+            self._export_analysis_snapshot(cur_sig=cur_sig, stop_reason=final_stop_reason)
+            export_timeline = getattr(self.callbacks, "export_timeline", None)
+            if callable(export_timeline):
+                export_timeline(stop_reason=final_stop_reason)
         except Exception:
             logger.debug("final analysis export failed", exc_info=True)
 
@@ -4056,12 +3816,11 @@ class WorkflowRunner:
                     except Exception:
                         pass
                     logger.debug(
-                        "NAV ready sig=%s overlay=%s cand=%d return_method=%s return_actions=%d",
+                        "NAV ready sig=%s overlay=%s cand=%d page_return_actions=%d",
                         sig[:8],
                         self._overlay_kind_value(nav),
                         len(getattr(nav, "candidate_actions", []) or []),
-                        getattr(nav, "return_method", "back"),
-                        len(getattr(nav, "return_actions", []) or []),
+                        len(getattr(nav, "page_return_actions", []) or []),
                     )
                     start = self._nav_enqueue_ts.pop(sig, None)
                     duration_s = (time.time() - start) if start else None
@@ -4634,14 +4393,277 @@ class WorkflowRunner:
             step = ActionStep(action=ActionType.CLICK, element_id=eid, priority=len(out) + 1, reasoning="heuristic_timeout_nav")
             if sig and self._is_action_blacklisted(sig, self._actions_key([step])):
                 continue
-            out.append(ActionCandidate(actions=[step], return_method=None, return_actions=[]))
+            out.append(ActionCandidate(actions=[step]))
         if not out and scored:
             # Break-glass: if everything is blacklisted, take the top few anyway.
             self._log_event("blacklist_break_glass", sig=sig, kind="heuristic_candidates")
             for _, eid in scored[:4]:
                 step = ActionStep(action=ActionType.CLICK, element_id=eid, priority=len(out) + 1, reasoning="heuristic_timeout_nav_break_glass")
-                out.append(ActionCandidate(actions=[step], return_method=None, return_actions=[]))
+                out.append(ActionCandidate(actions=[step]))
         return out
+
+    def _remember_nav_plan(self, sig: str, nav: Optional[NavigationProposal], candidates: List[ActionCandidate]) -> None:
+        """
+        Input: current state signature, NavigationProposal, and candidate list selected for this state.
+        Output: updates per-family candidate and page-return-action memory.
+        Function: keeps DFS execution state separate from transient LLM objects.
+        """
+        fam = self._family_id(sig)
+        self.state_candidates[fam] = list(candidates or [])
+        if nav is not None:
+            return_actions = list(getattr(nav, "page_return_actions", []) or [])
+            self.state_return_actions[fam] = return_actions
+
+    def _append_state_return_actions(self, sig: str, steps: List[ActionStep]) -> None:
+        """
+        Input: state signature and action steps that behaved like a return from that state.
+        Output: appends non-duplicate steps to the state's stored return-action list.
+        Function: lets accidental ancestor jumps enrich page_return_actions without overwriting LLM output.
+        """
+        if not steps:
+            return
+        fam = self._family_id(sig)
+        bucket = self.state_return_actions.setdefault(fam, [])
+        existing = {self._action_key(step) for step in bucket}
+        for step in steps:
+            key = self._action_key(step)
+            if key in existing:
+                continue
+            bucket.append(step)
+            existing.add(key)
+
+    def _next_unexplored_candidate(self, sig: str, candidates: List[ActionCandidate]) -> Optional[ActionCandidate]:
+        """
+        Input: current state signature and ordered candidate list.
+        Output: first candidate that has not been fully explored, or None.
+        Function: implements the first DFS policy: execute LLM candidates in output order.
+        """
+        for cand in list(candidates or []):
+            if not getattr(cand, "actions", None):
+                continue
+            key = self._candidate_key(cand)
+            if self._is_explored(sig, cand):
+                continue
+            if self._is_action_blacklisted(sig, key):
+                continue
+            return cand
+        return None
+
+    def _mark_current_branch_explored(self, cur_sig: str) -> None:
+        """
+        Input: current state signature, expected to be at the top of dfs_stack.
+        Output: marks the parent candidate that entered this state as explored.
+        Function: closes a DFS branch when the child page has no remaining candidate work.
+        """
+        if not self.dfs_stack or self.dfs_stack[-1] != cur_sig:
+            return
+        if len(self.dfs_stack) < 2 or len(self.dfs_via) < 2:
+            return
+        parent_sig = self.dfs_stack[-2]
+        via_action = self.dfs_via[-1]
+        if parent_sig and via_action:
+            self.explored_actions.setdefault(self._family_id(parent_sig), set()).add(str(via_action))
+            self._log_event("dfs_parent_candidate_explored", sig=cur_sig, parent_sig=parent_sig, via_action=via_action)
+
+    def _refresh_after_possible_change(self, expected_snap: Dict[str, Any], *, timeout_s: float = 0.8) -> Dict[str, Any]:
+        """
+        Input: expected current snapshot and lightweight check timeout.
+        Output: either the original snapshot when UI appears unchanged, or a refreshed authoritative snap.
+        Function: reuses drift preflight so return/BACK recovery avoids expensive full snap work when stable.
+        """
+        try:
+            ok_pkg, _pkg = self._foreground_is_allowed()
+            if not ok_pkg and self.target_package:
+                self.appium.ensure_foreground(self.target_package, self.target_activity)
+                self.foreground_recoveries += 1
+        except Exception:
+            logger.debug("foreground check failed before preflight refresh", exc_info=True)
+        refreshed = self._preflight_refresh_if_changed(expected_snap, timeout_s=timeout_s)
+        return refreshed or expected_snap
+
+    @staticmethod
+    def _safe_filename_token(value: Any, default: str = "state") -> str:
+        """
+        Input: any state signature or debug identifier.
+        Output: a Windows-safe filename token.
+        Function: mirrors trace artifact naming by replacing characters such as ':' with '_'.
+        """
+        token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "")).strip("_")
+        return token or default
+
+    def _save_external_capture_after_candidate(self, src_sig: str, cand: ActionCandidate, action_key: str) -> None:
+        """
+        Input: source state, candidate that triggered the external foreground, and candidate key.
+        Output: writes external_meta.json plus best-effort screenshot/XML under the run artifact folder.
+        Function: records external browser/system jumps without exploring external UI as DFS states.
+        """
+        safe_sig = self._safe_filename_token(src_sig)[:48]
+        out_dir = self._run_output_root() / "external" / f"{self._step_seq:06d}_{safe_sig}"
+        pkg = ""
+        act = ""
+        raw: Dict[str, Any] = {}
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logger.warning("failed to prepare external capture artifact dir: %s", out_dir, exc_info=True)
+            return
+        try:
+            pkg = self.appium.foreground_package()
+        except Exception:
+            pkg = ""
+        try:
+            act = self.appium.foreground_activity()
+        except Exception:
+            act = ""
+        try:
+            raw = self.appium.capture_snapshot(timeout=3.0) or {}
+        except Exception:
+            raw = {}
+
+        meta = {
+            "src_sig": src_sig,
+            "candidate_key": action_key,
+            "foreground_package": pkg,
+            "foreground_activity": act,
+            "target_package": self.target_package,
+            "action": self._actions_signature(list(getattr(cand, "actions", []) or [])),
+            "timestamp_ms": int(time.time() * 1000),
+        }
+        try:
+            (out_dir / "external_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+            xml = str(raw.get("xml") or raw.get("page_source") or "")
+            if xml:
+                (out_dir / "external_xml.xml").write_text(xml, encoding="utf-8")
+            screenshot = str(raw.get("screenshot") or "")
+            if screenshot:
+                (out_dir / "external_screenshot.png").write_bytes(base64.b64decode(screenshot + "=="))
+        except Exception:
+            logger.warning("failed to save external capture artifact: %s", out_dir, exc_info=True)
+
+    def _classify_after_candidate(self, src_sig: str, dst_snap: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Input: source state signature and post-action snapshot.
+        Output: small classification dict: capture_failed, same_state, ancestor_state, or new_state.
+        Function: centralizes DFS branch routing after a candidate action succeeds.
+        """
+        if not dst_snap:
+            return {"kind": "capture_failed", "src_sig": src_sig, "dst_sig": ""}
+        dst_sig = str(dst_snap.get("state_sig") or "")
+        if not dst_sig:
+            return {"kind": "capture_failed", "src_sig": src_sig, "dst_sig": ""}
+        if dst_sig == src_sig:
+            return {"kind": "same_state", "src_sig": src_sig, "dst_sig": dst_sig}
+        if dst_sig in self.dfs_stack:
+            return {"kind": "ancestor_state", "src_sig": src_sig, "dst_sig": dst_sig}
+        return {"kind": "new_state", "src_sig": src_sig, "dst_sig": dst_sig}
+
+    def _execute_candidate_branch(self, src_sig: str, snap: Dict[str, Any], cand: ActionCandidate, task: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Input: current state snapshot and one LLM candidate.
+        Output: (next_sig, next_snap) after executing/classifying the candidate branch.
+        Function: replaces probe-return with direct DFS execution of one candidate in LLM order.
+        """
+        action_key = self._candidate_key(cand)
+        self._emit_decision(
+            src_sig,
+            "next_step",
+            {"plan": "dfs_candidate_commit", "candidate_key": action_key, "actions": self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {})},
+        )
+        ok = self._execute_action_sequence(cand.actions, snap)
+        self._mark_attempted(src_sig, cand)
+        if not ok:
+            self._mark_explored(src_sig, cand)
+            self._log_event("dfs_candidate_failed", sig=src_sig, action_key=action_key, failure=self.last_action_failure or {})
+            refreshed = self._refresh_after_possible_change(snap)
+            return str(refreshed.get("state_sig") or src_sig), refreshed
+
+        ok_pkg, pkg = self._foreground_is_allowed()
+        if not ok_pkg:
+            try:
+                self._save_external_capture_after_candidate(src_sig, cand, action_key)
+            except Exception:
+                logger.warning("external capture artifact failed; continuing foreground recovery", exc_info=True)
+            self._mark_explored(src_sig, cand)
+            self._log_event("dfs_candidate_external", sig=src_sig, action_key=action_key, foreground_package=pkg)
+            try:
+                if self.target_package:
+                    self.appium.ensure_foreground(self.target_package, self.target_activity)
+                    self.foreground_recoveries += 1
+            except Exception:
+                logger.debug("ensure_foreground failed after external candidate", exc_info=True)
+            refreshed = self._refresh_after_possible_change(snap)
+            return str(refreshed.get("state_sig") or src_sig), refreshed
+
+        dst_snap = self._capture_and_process()
+        if not dst_snap:
+            self._mark_explored(src_sig, cand)
+            self._recover(src_sig, snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=None)
+            refreshed = self._refresh_after_possible_change(snap)
+            return str(refreshed.get("state_sig") or src_sig), refreshed
+
+        dst_sig = str(dst_snap.get("state_sig") or "")
+        self._graph_record_transition(
+            src_sig,
+            dst_sig,
+            self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {}),
+            src_snap=snap,
+            dst_snap=dst_snap,
+        )
+        result = self._classify_after_candidate(src_sig, dst_snap)
+        kind = str(result.get("kind") or "")
+
+        if kind == "same_state":
+            self._mark_explored(src_sig, cand)
+            return src_sig, dst_snap
+
+        if kind == "ancestor_state":
+            self._mark_explored(src_sig, cand)
+            self._append_state_return_actions(src_sig, list(cand.actions or []))
+            reached, restored = self._navigate_via_graph(start_sig=dst_sig, start_snap=dst_snap, target_sig=src_sig, task=task)
+            if reached:
+                self._log_event("dfs_ancestor_restored", sig=src_sig, ancestor_sig=dst_sig, action_key=action_key)
+                return str(restored.get("state_sig") or src_sig), restored
+            self._log_event("dfs_ancestor_restore_failed", sig=src_sig, ancestor_sig=dst_sig, action_key=action_key)
+            self._reconcile_stack_on_external_move(dst_sig, snap=dst_snap, record_observation=False)
+            return dst_sig, dst_snap
+
+        if kind == "new_state":
+            self._enter_state(from_sig=src_sig, to_sig=dst_sig, via_action=action_key)
+            self._schedule_state(dst_sig, dst_snap, task)
+            return dst_sig, dst_snap
+
+        self._mark_explored(src_sig, cand)
+        return src_sig, snap
+
+    def _return_from_current_state(self, cur_sig: str, snap: Dict[str, Any], task: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Input: exhausted current state and its snapshot.
+        Output: (next_sig, next_snap) after page_return_actions/BACK and lightweight drift refresh.
+        Function: performs DFS branch closure, preferring LLM page_return_actions before system BACK.
+        """
+        self._mark_current_branch_explored(cur_sig)
+        return_actions = list(self.state_return_actions.get(self._family_id(cur_sig), []) or [])
+        ok = False
+        if return_actions:
+            self._emit_decision(cur_sig, "next_step", {"plan": "page_return_actions", "count": len(return_actions)})
+            ok = self._execute_action_sequence(return_actions, snap)
+        if not ok:
+            self._emit_decision(cur_sig, "next_step", {"plan": "fallback_back_after_page_return"})
+            back = ActionStep(action=ActionType.BACK, element_id=None, priority=1, reasoning="dfs_page_return_fallback_back")
+            ok = self._execute_action(back, snap.get("vid_map") or {}, cur_sig)
+            if ok:
+                self.action_count += 1
+                self.history.append(self._action_key(back))
+                time.sleep(self.budget.post_action_settle_s)
+
+        refreshed = self._refresh_after_possible_change(snap)
+        next_sig = str(refreshed.get("state_sig") or cur_sig)
+        if next_sig in self.dfs_stack:
+            self._pop_stack_to(next_sig, mark_explored=True)
+        else:
+            self._reconcile_stack_on_external_move(next_sig, snap=refreshed, record_observation=True)
+        self._schedule_state(next_sig, refreshed, task)
+        return next_sig, refreshed
 
     # ---------------------------
     # Probing with back-like detection + custom return support

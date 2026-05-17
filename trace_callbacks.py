@@ -13,6 +13,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import threading
@@ -248,20 +249,45 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         self.run_id = run_id or time.strftime("%Y%m%d_%H%M%S")
         self.root_dir = os.path.abspath(os.path.join(root_dir, self.run_id))
         self.trace_path = os.path.join(self.root_dir, "trace.jsonl")
+        self.debug_pages_dir = os.path.join(self.root_dir, "debug_pages")
 
-        os.makedirs(os.path.join(self.root_dir, "screens"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "screens_raw"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "xml"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "xml_raw"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "uist"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "screens_annotated"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "screens_annotated", "vid_map"), exist_ok=True)
-        os.makedirs(os.path.join(self.root_dir, "screens_annotated", "uist"), exist_ok=True)
+        os.makedirs(self.debug_pages_dir, exist_ok=True)
 
         self._lock = threading.Lock()
+        self._page_dirs_by_sig: Dict[str, str] = {}
+        self._page_prefix_by_sig: Dict[str, str] = {}
+        self._snap_cache_by_sig: Dict[str, Dict[str, Any]] = {}
+        self._timeline: List[Dict[str, Any]] = []
+        self._pending_actions: Dict[str, Dict[str, Any]] = {}
+        self._timeline_logger = logging.getLogger("run_timeline")
 
     # ------------ helpers ------------
+    @staticmethod
+    def _block_status_summary(block_status: Dict[str, Any]) -> Dict[str, int]:
+        """
+        Input: full block_status mapping from workflow context.
+        Output: small count summary safe to repeat inside trace.jsonl.
+        Function: avoids writing a huge questionnaire payload into every event.
+        """
+        rows = list((block_status or {}).values())
+        visited = 0
+        hit = 0
+        for row in rows:
+            try:
+                if int((row or {}).get("visit_count", 0) or 0) > 0:
+                    visited += 1
+                if int((row or {}).get("hit_count", 0) or 0) > 0:
+                    hit += 1
+            except Exception:
+                continue
+        return {"count": len(rows), "visited": visited, "hit": hit}
+
     def _write_event(self, event: str, ctx: StepCtx, payload: Dict[str, Any]) -> None:
+        """
+        Input: event name, workflow step context, and event payload.
+        Output: appends one compact JSON line to trace.jsonl.
+        Function: preserves machine-readable tracing without repeating large questionnaire state.
+        """
         rec = {
             "event": event,
             "ts": time.time(),
@@ -271,7 +297,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 "ts": ctx.ts,
                 "cur_sig": ctx.cur_sig,
                 "stack": ctx.stack,
-                "block_status": ctx.block_status,
+                "block_status_summary": self._block_status_summary(ctx.block_status),
                 "open_gaps": ctx.open_gaps,
                 "answered_ratio": ctx.answered_ratio,
             },
@@ -281,6 +307,18 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         with self._lock:
             with open(self.trace_path, "a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
+
+    def _add_timeline(self, entry: Dict[str, Any], message: Optional[str] = None) -> None:
+        """
+        Input: normalized timeline entry and optional concise console message.
+        Output: stores the entry in memory and logs the message to run_timeline.
+        Function: builds the final human-readable run timeline while keeping console concise.
+        """
+        row = {"ts": time.time(), **entry}
+        with self._lock:
+            self._timeline.append(row)
+        if message:
+            self._timeline_logger.info(message)
 
     @staticmethod
     def _safe_filename_token(value: Any, default: str = "state") -> str:
@@ -294,6 +332,61 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         """
         token = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "")).strip("_")
         return token or default
+
+    def _page_prefix(self, step_id: int, sig: str) -> str:
+        """
+        Input: workflow step id and state signature.
+        Output: standard page directory prefix such as 000005_phash_abcd.
+        Function: keeps debug_pages naming consistent with historical screenshot names.
+        """
+        return f"{int(step_id):06d}_{self._safe_filename_token(sig)[:48]}"
+
+    def _page_dir_for_sig(self, sig: str, step_id: int, *, create: bool = True) -> str:
+        """
+        Input: state signature and current step id.
+        Output: existing or newly created debug_pages directory for that state.
+        Function: lets snapshot, LLM, and action artifacts land in one human-readable page folder.
+        """
+        if sig in self._page_dirs_by_sig:
+            return self._page_dirs_by_sig[sig]
+        prefix = self._page_prefix(step_id, sig)
+        page_dir = os.path.join(self.debug_pages_dir, prefix)
+        if create:
+            os.makedirs(page_dir, exist_ok=True)
+        self._page_dirs_by_sig[sig] = page_dir
+        self._page_prefix_by_sig[sig] = prefix
+        return page_dir
+
+    @staticmethod
+    def _json_safe(value: Any) -> Any:
+        """
+        Input: arbitrary callback payload.
+        Output: JSON-serializable value.
+        Function: protects debug artifact writes from Pydantic or custom object instances.
+        """
+        if hasattr(value, "model_dump"):
+            return value.model_dump(mode="json")
+        if isinstance(value, dict):
+            return {str(k): JsonlTraceCallbacks._json_safe(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [JsonlTraceCallbacks._json_safe(v) for v in value]
+        if isinstance(value, tuple):
+            return [JsonlTraceCallbacks._json_safe(v) for v in value]
+        try:
+            json.dumps(value, ensure_ascii=False)
+            return value
+        except Exception:
+            return str(value)
+
+    @staticmethod
+    def _write_json(path: str, payload: Any) -> None:
+        """
+        Input: target path and JSON-like payload.
+        Output: writes UTF-8 pretty JSON.
+        Function: centralizes debug artifact JSON serialization.
+        """
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(JsonlTraceCallbacks._json_safe(payload), fh, ensure_ascii=False, indent=2)
 
     @staticmethod
     def _vid_map_summary(vid_map: Dict[Any, Any]) -> Dict[str, Any]:
@@ -388,15 +481,110 @@ class JsonlTraceCallbacks(NoOpCallbacks):
 
         return out
 
-    def _write_snapshot_overlays(self, prefix: str, snap: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    @staticmethod
+    def _frame_for_element(vid_map: Dict[Any, Any], element_id: Any) -> Optional[Dict[str, int]]:
+        """
+        Input: vid_map and an LLM element_id.
+        Output: drawable frame dict, or None when the element cannot be resolved.
+        Function: maps LLM action targets back to screenshot coordinates.
+        """
+        if element_id is None:
+            return None
+        node = (vid_map or {}).get(element_id)
+        if node is None:
+            node = (vid_map or {}).get(str(element_id))
+        if not isinstance(node, dict):
+            return None
+        frame = node.get("absolute_frame") or node.get("frame") or {}
+        try:
+            x = int(frame.get("x", 0))
+            y = int(frame.get("y", 0))
+            w = int(frame.get("width", 0))
+            h = int(frame.get("height", 0))
+        except Exception:
+            return None
+        if w <= 0 or h <= 0:
+            return None
+        return {"x": x, "y": y, "width": w, "height": h}
+
+    @staticmethod
+    def _iter_action_steps_for_overlay(navigation: Dict[str, Any]) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
+        """
+        Input: navigation result dict.
+        Output: labeled action steps and colors.
+        Function: mirrors test_debug overlays for dismiss, candidate, and page-return actions.
+        """
+        items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
+        for idx, step in enumerate(navigation.get("overlay_dismiss_actions") or [], start=1):
+            if isinstance(step, dict):
+                items.append((f"D{idx}", step, (220, 50, 47)))
+        for cand_idx, cand in enumerate(navigation.get("candidate_actions") or [], start=1):
+            if not isinstance(cand, dict):
+                continue
+            for step_idx, step in enumerate(cand.get("actions") or [], start=1):
+                if isinstance(step, dict):
+                    items.append((f"C{cand_idx}.{step_idx}", step, (38, 139, 210)))
+        for idx, step in enumerate(navigation.get("page_return_actions") or [], start=1):
+            if isinstance(step, dict):
+                items.append((f"R{idx}", step, (181, 137, 0)))
+        return items
+
+    @staticmethod
+    def _draw_labeled_box(draw: ImageDraw.ImageDraw, frame: Dict[str, int], label: str, color: tuple[int, int, int]) -> None:
+        """
+        Input: drawing context, element frame, text label, and RGB color.
+        Output: draws one labeled rectangle.
+        Function: renders LLM candidate action targets on screenshots.
+        """
+        x = int(frame["x"])
+        y = int(frame["y"])
+        w = int(frame["width"])
+        h = int(frame["height"])
+        draw.rectangle((x, y, x + w, y + h), outline=color, width=4)
+        box = draw.textbbox((x, y), label)
+        text_w = box[2] - box[0]
+        text_h = box[3] - box[1]
+        label_x = max(0, x)
+        label_y = max(0, y - text_h - 8)
+        if label_y == 0:
+            label_y = y + h + 2
+        draw.rectangle((label_x, label_y, label_x + text_w + 10, label_y + text_h + 8), fill=color)
+        draw.text((label_x + 5, label_y + 4), label, fill=(255, 255, 255))
+
+    def _write_llm_actions_overlay(self, sig: str, result: Dict[str, Any], out_path: str) -> Optional[str]:
+        """
+        Input: state signature, navigation result, and output image path.
+        Output: output path when the overlay was written.
+        Function: draws LLM action candidates into the page debug directory.
+        """
+        snap = self._snap_cache_by_sig.get(sig) or {}
+        image = self._decode_screenshot(str(snap.get("screenshot") or ""))
+        if image is None:
+            return None
+        draw = ImageDraw.Draw(image)
+        vid_map = snap.get("vid_map") or {}
+        drawn = 0
+        for label, step, color in self._iter_action_steps_for_overlay(result):
+            frame = self._frame_for_element(vid_map, step.get("element_id"))
+            if frame:
+                self._draw_labeled_box(draw, frame, label, color)
+                drawn += 1
+        if drawn <= 0:
+            return None
+        image.save(out_path)
+        return out_path
+
+    def _write_snapshot_overlays(self, page_dir: str, snap: Dict[str, Any]) -> Dict[str, Optional[str]]:
+        """
+        Input: page debug directory and snapshot.
+        Output: paths for vid_map and uist overlay images.
+        Function: writes human-readable element overlays beside each snapshot.
+        """
         screenshot_b64 = str(snap.get("screenshot") or "")
         base_img = self._decode_screenshot(screenshot_b64)
         if base_img is None:
             return {"vidmap_overlay_path": None, "uist_overlay_path": None}
 
-        annotated_dir = os.path.join(self.root_dir, "screens_annotated")
-        vidmap_dir = os.path.join(annotated_dir, "vid_map")
-        uist_dir = os.path.join(annotated_dir, "uist")
         vidmap_path = None
         uist_path = None
 
@@ -408,7 +596,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 id_getter=lambda n: n.get("id", ""),
                 color_getter=lambda n: (220, 50, 47) if bool(n.get("clickable")) else (46, 160, 67),
             )
-            vidmap_path = os.path.join(vidmap_dir, f"{prefix}.png")
+            vidmap_path = os.path.join(page_dir, "vid_map_overlay.png")
             vid_img.save(vidmap_path)
         except Exception:
             vidmap_path = None
@@ -423,7 +611,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 id_getter=lambda n: n.get("id", ""),
                 color_getter=lambda n: (203, 75, 22) if bool(n.get("clickable")) else (133, 153, 0),
             )
-            uist_path = os.path.join(uist_dir, f"{prefix}.png")
+            uist_path = os.path.join(page_dir, "uist_overlay.png")
             uist_img.save(uist_path)
         except Exception:
             uist_path = None
@@ -432,8 +620,18 @@ class JsonlTraceCallbacks(NoOpCallbacks):
 
     # ------------ event handlers ------------
     def on_snapshot(self, ctx: StepCtx, snap: Dict[str, Any]) -> None:  # type: ignore[override]
+        """
+        Input: authoritative workflow snapshot.
+        Output: writes one debug_pages/<step_sig>/ folder and a compact trace event.
+        Function: keeps all human-facing snapshot artifacts together for manual debugging.
+        """
         sig = str(snap.get("state_sig") or "")
-        prefix = f"{ctx.step_id:06d}_{self._safe_filename_token(sig)[:48]}"
+        prefix = self._page_prefix(ctx.step_id, sig)
+        page_dir = self._page_dir_for_sig(sig, ctx.step_id, create=True)
+        self._snap_cache_by_sig[sig] = {
+            "screenshot": snap.get("screenshot"),
+            "vid_map": snap.get("vid_map") or {},
+        }
 
         screenshot_path = None
         screenshot_hash = None
@@ -441,7 +639,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             try:
                 raw = base64.b64decode(snap.get("screenshot") or b"")
                 screenshot_hash = hashlib.md5(raw).hexdigest()
-                screenshot_path = os.path.join(self.root_dir, "screens", f"{prefix}.png")
+                screenshot_path = os.path.join(page_dir, "screenshot.png")
                 with open(screenshot_path, "wb") as fh:
                     fh.write(raw)
             except Exception:
@@ -453,7 +651,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             try:
                 raw2 = base64.b64decode(snap.get("screenshot_raw") or b"")
                 screenshot_raw_hash = hashlib.md5(raw2).hexdigest()
-                screenshot_raw_path = os.path.join(self.root_dir, "screens_raw", f"{prefix}.png")
+                screenshot_raw_path = os.path.join(page_dir, "screenshot_raw.png")
                 with open(screenshot_raw_path, "wb") as fh:
                     fh.write(raw2)
             except Exception:
@@ -462,7 +660,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         xml_path = None
         if snap.get("xml"):
             try:
-                xml_path = os.path.join(self.root_dir, "xml", f"{prefix}.xml")
+                xml_path = os.path.join(page_dir, "xml.xml")
                 with open(xml_path, "w", encoding="utf-8") as fh:
                     fh.write(str(snap.get("xml") or ""))
             except Exception:
@@ -471,7 +669,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         xml_raw_path = None
         if snap.get("xml_raw"):
             try:
-                xml_raw_path = os.path.join(self.root_dir, "xml_raw", f"{prefix}.xml")
+                xml_raw_path = os.path.join(page_dir, "xml_raw.xml")
                 with open(xml_raw_path, "w", encoding="utf-8") as fh:
                     fh.write(str(snap.get("xml_raw") or ""))
             except Exception:
@@ -480,16 +678,58 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         uist_path = None
         if snap.get("uist"):
             try:
-                uist_path = os.path.join(self.root_dir, "uist", f"{prefix}.json")
-                with open(uist_path, "w", encoding="utf-8") as fh:
-                    json.dump(snap.get("uist") or {}, fh, ensure_ascii=False)
+                uist_path = os.path.join(page_dir, "uist.json")
+                self._write_json(uist_path, snap.get("uist") or {})
             except Exception:
                 uist_path = None
 
-        overlay_paths = self._write_snapshot_overlays(prefix, snap)
+        vid_map_path = None
+        try:
+            vid_map_path = os.path.join(page_dir, "vid_map.json")
+            self._write_json(vid_map_path, snap.get("vid_map") or {})
+        except Exception:
+            vid_map_path = None
+
+        overlay_paths = self._write_snapshot_overlays(page_dir, snap)
+
+        meta = snap.get("meta", {}) or {}
+        summary_path = None
+        try:
+            summary_path = os.path.join(page_dir, "snap_summary.json")
+            self._write_json(
+                summary_path,
+                {
+                    "state_sig": sig,
+                    "page_dir": page_dir,
+                    "screenshot_hash": screenshot_hash,
+                    "screenshot_raw_hash": screenshot_raw_hash,
+                    "vid_map_count": len(snap.get("vid_map") or {}),
+                    "uist_root_count": len((snap.get("uist") or {}).get("elements") or []),
+                    "xml_reliable": meta.get("xml_reliable"),
+                    "identity_source": meta.get("identity_source"),
+                    "matched_existing": meta.get("matched_existing"),
+                    "matched_similarity": meta.get("matched_similarity"),
+                    "foreground_package": meta.get("foreground_package"),
+                    "foreground_activity": meta.get("foreground_activity"),
+                    "device_info": snap.get("device_info"),
+                    "artifact_paths": {
+                        "screenshot_path": screenshot_path,
+                        "screenshot_raw_path": screenshot_raw_path,
+                        "xml_path": xml_path,
+                        "xml_raw_path": xml_raw_path,
+                        "uist_path": uist_path,
+                        "vid_map_path": vid_map_path,
+                        **overlay_paths,
+                    },
+                },
+            )
+        except Exception:
+            summary_path = None
 
         payload = {
             "state_sig": sig,
+            "page_dir": page_dir,
+            "page_prefix": prefix,
             "xml_path": xml_path,
             "xml_raw_path": xml_raw_path,
             "screenshot_path": screenshot_path,
@@ -497,31 +737,247 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             "screenshot_raw_path": screenshot_raw_path,
             "screenshot_raw_hash": screenshot_raw_hash,
             "uist_path": uist_path,
+            "vid_map_path": vid_map_path,
+            "snap_summary_path": summary_path,
             **overlay_paths,
             "vid_map_summary": self._vid_map_summary(snap.get("vid_map", {})),
             "device_info": snap.get("device_info"),
-            "meta": snap.get("meta", {}),
+            "meta": meta,
         }
 
         self._write_event("snapshot", ctx, payload)
+        known = bool(meta.get("cache_hit") or meta.get("matched_existing"))
+        self._add_timeline(
+            {
+                "type": "snapshot",
+                "step_id": ctx.step_id,
+                "sig": sig,
+                "page": prefix,
+                "known": known,
+                "xml_reliable": meta.get("xml_reliable"),
+                "vid_count": len(snap.get("vid_map") or {}),
+                "page_dir": page_dir,
+            },
+            f"[SNAP] {prefix} known={str(known).lower()} xml_reliable={meta.get('xml_reliable')} vid={len(snap.get('vid_map') or {})}",
+        )
 
     def on_llm_enqueued(self, ctx: StepCtx, kind: str, payload: Dict[str, Any]) -> None:  # type: ignore[override]
-        self._write_event("llm_enqueued", ctx, {"kind": kind, **payload})
+        """
+        Input: LLM kind and business input payload.
+        Output: writes llm_<kind>_input.json into the page debug directory.
+        Function: preserves the model-call input visible to workflow callbacks.
+        """
+        sig = str(payload.get("state_sig") or ctx.cur_sig or "")
+        page_dir = self._page_dir_for_sig(sig, ctx.step_id, create=True)
+        input_path = os.path.join(page_dir, f"llm_{kind}_input.json")
+        try:
+            self._write_json(input_path, payload)
+        except Exception:
+            input_path = ""
+        self._write_event(
+            "llm_enqueued",
+            ctx,
+            {
+                "kind": kind,
+                "state_sig": sig,
+                "input_path": input_path,
+                "payload_keys": sorted([str(k) for k in payload.keys()]),
+                "block_status_summary": self._block_status_summary(payload.get("block_status") or {}),
+                "router_question_count": payload.get("router_question_count"),
+                "block_count": payload.get("block_count"),
+            },
+        )
+        self._add_timeline(
+            {"type": "llm_enqueued", "step_id": ctx.step_id, "sig": sig, "kind": kind, "input_path": input_path},
+            f"[LLM] enqueue {kind} sig={self._safe_filename_token(sig)[:16]} input={os.path.basename(input_path) if input_path else '-'}",
+        )
 
     def on_llm_result(self, ctx: StepCtx, kind: str, result: Dict[str, Any]) -> None:  # type: ignore[override]
-        self._write_event("llm_result", ctx, {"kind": kind, **result})
+        """
+        Input: LLM kind and structured result payload.
+        Output: writes llm_<kind>_result.json and optional navigation action overlay.
+        Function: keeps model outputs and visual action suggestions beside the relevant page.
+        """
+        sig = str(result.get("state_sig") or ctx.cur_sig or "")
+        page_dir = self._page_dir_for_sig(sig, ctx.step_id, create=True)
+        result_path = os.path.join(page_dir, f"llm_{kind}_result.json")
+        overlay_path = ""
+        try:
+            self._write_json(result_path, result)
+        except Exception:
+            result_path = ""
+        try:
+            nav_result = result.get("result") if isinstance(result.get("result"), dict) else {}
+            if kind == "nav" and nav_result:
+                overlay_path = self._write_llm_actions_overlay(sig, nav_result, os.path.join(page_dir, "llm_navigation_actions_overlay.png")) or ""
+        except Exception:
+            overlay_path = ""
+        result_body = result.get("result") if isinstance(result.get("result"), dict) else {}
+        cand_count = len((result_body or {}).get("candidate_actions") or [])
+        return_count = len((result_body or {}).get("page_return_actions") or [])
+        overlay_kind = (result_body or {}).get("overlay_kind") or "-"
+        self._write_event(
+            "llm_result",
+            ctx,
+            {
+                "kind": kind,
+                "state_sig": sig,
+                "duration_s": result.get("duration_s"),
+                "result_path": result_path,
+                "actions_overlay_path": overlay_path,
+                "error": result.get("error"),
+                "candidate_count": cand_count,
+                "return_count": return_count,
+                "overlay_kind": overlay_kind,
+                "matched_block_ids": result.get("matched_block_ids"),
+            },
+        )
+        self._add_timeline(
+            {
+                "type": "llm_result",
+                "step_id": ctx.step_id,
+                "sig": sig,
+                "kind": kind,
+                "duration_s": result.get("duration_s"),
+                "candidate_count": cand_count,
+                "return_count": return_count,
+                "overlay_kind": overlay_kind,
+                "result_path": result_path,
+                "actions_overlay_path": overlay_path,
+            },
+            f"[LLM] result {kind} sig={self._safe_filename_token(sig)[:16]} overlay={overlay_kind} candidates={cand_count} return={return_count} elapsed={result.get('duration_s')}",
+        )
 
     def on_action(self, ctx: StepCtx, action: Dict[str, Any], phase: str, extra: Dict[str, Any]) -> None:  # type: ignore[override]
+        """
+        Input: action event before/after execution.
+        Output: compact trace event and timeline row.
+        Function: records what was executed without creating per-action artifact files.
+        """
         self._write_event("action", ctx, {"phase": phase, "action": action, "extra": extra})
+        action_key = str(extra.get("action_key") or f"{action.get('action')}:{action.get('element_id')}")
+        if phase == "before":
+            self._pending_actions[action_key] = {"action": action, "extra": extra, "step_id": ctx.step_id, "sig": ctx.cur_sig}
+            label = action.get("text") or extra.get("label") or extra.get("reasoning") or ""
+            self._add_timeline(
+                {
+                    "type": "action_before",
+                    "step_id": ctx.step_id,
+                    "sig": ctx.cur_sig,
+                    "action_key": action_key,
+                    "action": action,
+                    "reasoning": extra.get("reasoning"),
+                },
+                f"[ACT] start sig={self._safe_filename_token(ctx.cur_sig)[:16]} {action.get('action')} element={action.get('element_id')} label={str(label)[:60]}",
+            )
+            return
+        success = bool(extra.get("success"))
+        reason = extra.get("reason") or ""
+        self._add_timeline(
+            {
+                "type": "action_after",
+                "step_id": ctx.step_id,
+                "sig": ctx.cur_sig,
+                "action_key": action_key,
+                "action": action,
+                "success": success,
+                "reason": reason,
+                "extra": extra,
+            },
+            f"[ACT] done sig={self._safe_filename_token(ctx.cur_sig)[:16]} {action.get('action')} element={action.get('element_id')} success={str(success).lower()} reason={reason or '-'}",
+        )
 
     def on_transition(self, ctx: StepCtx, tr: Dict[str, Any]) -> None:  # type: ignore[override]
+        """
+        Input: graph or drift transition payload.
+        Output: compact trace event and timeline row.
+        Function: makes page changes visible without opening trace.jsonl manually.
+        """
         self._write_event("transition", ctx, tr)
+        kind = str(tr.get("kind") or tr.get("action", {}).get("outcome", {}).get("change_type") or "-")
+        src = str(tr.get("src") or ctx.cur_sig or "")
+        dst = str(tr.get("dst") or tr.get("sig") or "")
+        dst_was_new = tr.get("dst_was_new")
+        self._add_timeline(
+            {
+                "type": "transition",
+                "step_id": ctx.step_id,
+                "sig": ctx.cur_sig,
+                "kind": kind,
+                "src": src,
+                "dst": dst,
+                "dst_was_new": dst_was_new,
+                "detail": tr,
+            },
+            f"[STATE] {self._safe_filename_token(src)[:16]} -> {self._safe_filename_token(dst)[:16]} kind={kind} new={dst_was_new}",
+        )
 
     def on_questionnaire_update(self, ctx: StepCtx, upd: Dict[str, Any]) -> None:  # type: ignore[override]
+        """
+        Input: questionnaire update payload.
+        Output: compact trace event.
+        Function: records questionnaire progress without console noise.
+        """
         self._write_event("questionnaire_update", ctx, upd)
 
     def on_decision(self, ctx: StepCtx, name: str, detail: Dict[str, Any]) -> None:  # type: ignore[override]
+        """
+        Input: workflow decision name and detail payload.
+        Output: compact trace event and selected timeline messages.
+        Function: surfaces only decisions that are important for debugging the main route.
+        """
         self._write_event("decision", ctx, {"name": name, **detail})
+        if name == "drift_detected":
+            src = str(detail.get("from_sig") or ctx.cur_sig or "")
+            dst = str(detail.get("to_sig") or "")
+            self._add_timeline(
+                {"type": "drift", "step_id": ctx.step_id, "from_sig": src, "to_sig": dst, "detail": detail},
+                f"[DRIFT] {self._safe_filename_token(src)[:16]} -> {self._safe_filename_token(dst)[:16]}",
+            )
+            return
+        if name == "next_step":
+            plan = str(detail.get("plan") or "-")
+            if plan in {"dfs_evaluate_candidates", "dfs_candidate_commit", "dfs_return_from_exhausted_state", "page_return_actions", "fallback_back_after_page_return"}:
+                self._add_timeline(
+                    {"type": "decision", "step_id": ctx.step_id, "sig": ctx.cur_sig, "name": name, "detail": detail},
+                    f"[DFS] sig={self._safe_filename_token(ctx.cur_sig)[:16]} plan={plan} detail={json.dumps(self._json_safe(detail), ensure_ascii=False)[:180]}",
+                )
+
+    def export_timeline(self, *, stop_reason: str = "run_exit") -> Dict[str, str]:
+        """
+        Input: final stop reason.
+        Output: paths to timeline.json and timeline.md.
+        Function: writes the complete human-readable run timeline after workflow completion.
+        """
+        timeline_json = os.path.join(self.root_dir, "timeline.json")
+        timeline_md = os.path.join(self.root_dir, "timeline.md")
+        with self._lock:
+            rows = list(self._timeline)
+        self._write_json(timeline_json, {"run_id": self.run_id, "stop_reason": stop_reason, "events": rows})
+        lines = [f"# Run Timeline", "", f"- run_id: `{self.run_id}`", f"- stop_reason: `{stop_reason}`", ""]
+        for idx, row in enumerate(rows, start=1):
+            typ = row.get("type") or "event"
+            step_id = row.get("step_id", "-")
+            if typ == "snapshot":
+                lines.append(f"{idx}. SNAP step={step_id} page={row.get('page')} known={row.get('known')} xml_reliable={row.get('xml_reliable')} vid={row.get('vid_count')}")
+            elif typ == "llm_result":
+                lines.append(f"{idx}. LLM step={step_id} kind={row.get('kind')} candidates={row.get('candidate_count')} return={row.get('return_count')} overlay={row.get('overlay_kind')}")
+            elif typ == "action_after":
+                act = row.get("action") or {}
+                lines.append(f"{idx}. ACT step={step_id} {act.get('action')} element={act.get('element_id')} success={row.get('success')} reason={row.get('reason') or '-'}")
+            elif typ == "transition":
+                lines.append(f"{idx}. STATE step={step_id} {self._safe_filename_token(row.get('src'))[:16]} -> {self._safe_filename_token(row.get('dst'))[:16]} kind={row.get('kind')} new={row.get('dst_was_new')}")
+            elif typ == "drift":
+                lines.append(f"{idx}. DRIFT step={step_id} {self._safe_filename_token(row.get('from_sig'))[:16]} -> {self._safe_filename_token(row.get('to_sig'))[:16]}")
+            elif typ == "decision":
+                detail = row.get("detail") or {}
+                lines.append(f"{idx}. DFS step={step_id} plan={detail.get('plan') or '-'} sig={self._safe_filename_token(row.get('sig'))[:16]}")
+            else:
+                lines.append(f"{idx}. {str(typ).upper()} step={step_id}")
+        with open(timeline_md, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        self._timeline_logger.info("[TRACE] timeline saved json=%s md=%s", timeline_json, timeline_md)
+        return {"timeline_json": timeline_json, "timeline_md": timeline_md}
 
 
 __all__ = [

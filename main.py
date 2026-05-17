@@ -36,10 +36,24 @@ _META_SELECTED_FIELDS = [
 ]
 
 
-def setup_logging(debug: bool, level: str, *, quiet_console: bool = False):
-    # Console + file logging with optional quieter console mode for interactive stepping.
+class MainlineConsoleFilter(logging.Filter):
+    """
+    Input: logging records from all project and dependency loggers.
+    Output: True only for concise timeline records and warnings/errors.
+    Function: keeps the console readable while app.log still receives full debug details.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "run_timeline":
+            return True
+        return record.levelno >= logging.WARNING
+
+
+def setup_logging(debug: bool, level: str, *, quiet_console: bool = False, verbose_console: bool = False):
+    # Console + file logging. The file keeps full logs; the console defaults to the human timeline.
     root_level = logging.DEBUG if debug else getattr(logging, level.upper(), logging.INFO)
     formatter = logging.Formatter('[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s')
+    console_formatter = logging.Formatter('%(message)s') if not verbose_console else formatter
 
     root = logging.getLogger()
     root.setLevel(root_level)
@@ -50,8 +64,10 @@ def setup_logging(debug: bool, level: str, *, quiet_console: bool = False):
     file_handler.setFormatter(formatter)
 
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING if quiet_console else root_level)
-    console_handler.setFormatter(formatter)
+    console_handler.setLevel(root_level if verbose_console else (logging.INFO if not quiet_console else logging.WARNING))
+    console_handler.setFormatter(console_formatter)
+    if not verbose_console:
+        console_handler.addFilter(MainlineConsoleFilter())
 
     root.addHandler(file_handler)
     root.addHandler(console_handler)
@@ -162,6 +178,7 @@ def parse_args(argv) -> argparse.Namespace:
     # Logging
     run.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG/INFO/WARNING)")
     run.add_argument("--debug", action="store_true")
+    run.add_argument("--verbose-console", action="store_true", help="Show full log stream on console instead of concise timeline only")
     run.add_argument("--pause", action="store_true")
     run.add_argument(
         "--interactive-debug",
@@ -196,7 +213,7 @@ def parse_args(argv) -> argparse.Namespace:
 
 #============================  # Dev-default args for quick local run; comment out in production.
 package="bim.app"
-package="com.lemonpiggy.drinkwater"
+# package="com.lemonpiggy.drinkwater"
 # package = "com.maimemo.android.momo"
 
 
@@ -206,11 +223,11 @@ sys.argv = [sys.argv[0],
             "--appium-url", "http://127.0.0.1:4723",
             "--device-name", "emulator-5554",
             "--package", package,
-            "--questionnaire-dir", "./questionnaire-v2/others",
-            # "--questionnaire-dir", "./questionnaire-v2/games",
+            # "--questionnaire-dir", "./questionnaire-v2/others",
+            "--questionnaire-dir", "./questionnaire-v2/games",
             "--trace-dir", "./traces/",
             "--run-id", time.strftime("%Y%m%d_%H%M%S") + "_" + package,
-            "--time-budget", "180",
+            "--time-budget", "600",
             #"--pause",
             # "--interactive-debug",
             "--disable-probe-return",
@@ -225,6 +242,7 @@ def main(argv=None):
         getattr(args, "debug", False),
         getattr(args, "log_level", "INFO"),
         quiet_console=bool(getattr(args, "interactive_debug", False)),
+        verbose_console=bool(getattr(args, "verbose_console", False)),
     )
     logger = logging.getLogger(__name__)
 
@@ -424,9 +442,6 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
-
-
 
 
 
