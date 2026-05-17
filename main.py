@@ -126,6 +126,35 @@ def _normalize_questionnaire_type(value: str) -> str:
     return ""
 
 
+def _maybe_build_interactive_visualization(args: argparse.Namespace, logger: logging.Logger) -> None:
+    """
+    Input: parsed CLI args and the main logger.
+    Output: writes interactive HTML artifacts when enabled, otherwise returns without side effects.
+    Function: optionally runs the post-run interactive UTG/timeline visualization for the current trace run.
+    """
+    if not bool(getattr(args, "auto_visualize_interactive", False)):
+        return
+
+    trace_dir = str(getattr(args, "trace_dir", "") or "").strip()
+    run_id = str(getattr(args, "run_id", "") or "").strip()
+    if not trace_dir:
+        logger.warning("--auto-visualize-interactive requires --trace-dir; skip visualization.")
+        return
+    if not run_id:
+        logger.warning("--auto-visualize-interactive requires --run-id; skip visualization.")
+        return
+
+    run_dir = Path(trace_dir) / run_id
+    try:
+        from visualize_run_interactive import build_interactive_html
+
+        out_html = build_interactive_html(run_dir)
+        logger.info("Interactive visualization generated: %s", out_html)
+        print(f"[VIS] interactive_html={out_html}")
+    except Exception:
+        logger.warning("Auto interactive visualization failed for run_dir=%s", run_dir, exc_info=True)
+
+
 def parse_args(argv) -> argparse.Namespace:
     # CLI supports the main exploration run plus lightweight device utilities.
     p = argparse.ArgumentParser(description="Run Appium + LLM exploration workflow or device utilities.")
@@ -156,7 +185,7 @@ def parse_args(argv) -> argparse.Namespace:
         help="Optional metadata CSV path (must contain appId). If set, metadata summary runs before exploration.",
     )
 
-    run.add_argument("--task", type=str, default="Explore the app to fill the questionnaire.", help="Exploration goal string")
+    run.add_argument("--task", type=str, default="Please explore this app with the goal of covering as many distinct major UI screens and flows as possible while using the fewest reasonable number of steps.Focus on the app’s main functions and representative interfaces.Please also look for and collect any Terms of Service, Privacy Policy, or similar legal/policy documents available within the app. In addition, please explore the app’s settings pages and any purchase-related pages, especially any screens related to subscriptions, in-app purchases, paid items, or “random loot box” / randomized reward mechanics.Please pay particular attention to UI related to user-generated content (UGC), social features, user interaction, sharing, messaging, profiles, comments, communities, or similar functions.Do not spend much effort on minor, repetitive, or highly detailed sub-features. The priority is to efficiently identify and capture the main categories of UI", help="Exploration goal string")
     run.add_argument("--relaunch", action="store_true", help="Relaunch app each time and kill once finished")
 
     # Budgets
@@ -174,6 +203,11 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument("--api-key", type=str, default=None, help="OpenAI API key (or use OPENAI_API_KEY env)")
     run.add_argument("--trace-dir", type=str, default=None, help="If set, writes JSONL trace + assets to this directory")
     run.add_argument("--run-id", type=str, default=None, help="Optional run id (defaults to timestamp)")
+    run.add_argument(
+        "--auto-visualize-interactive",
+        action="store_true",
+        help="After run finishes, build analysis/interactive/ui_transition_interactive.html for this trace run.",
+    )
 
     # Logging
     run.add_argument("--log-level", type=str, default="INFO", help="Logging level (DEBUG/INFO/WARNING)")
@@ -211,29 +245,30 @@ def parse_args(argv) -> argparse.Namespace:
 
     return p.parse_args(argv)
 
-#============================  # Dev-default args for quick local run; comment out in production.
-package="bim.app"
-# package="com.lemonpiggy.drinkwater"
+# #============================  # Dev-default args for quick local run; keep disabled for CLI-driven runs.
+# # package="bim.app"
+# # package="com.lemonpiggy.drinkwater"
 # package = "com.maimemo.android.momo"
-
-
-sys.argv = [sys.argv[0], 
-            "run", 
-            # "--appium-url", "http://localhost:4723",
-            "--appium-url", "http://127.0.0.1:4723",
-            "--device-name", "emulator-5554",
-            "--package", package,
-            # "--questionnaire-dir", "./questionnaire-v2/others",
-            "--questionnaire-dir", "./questionnaire-v2/games",
-            "--trace-dir", "./traces/",
-            "--run-id", time.strftime("%Y%m%d_%H%M%S") + "_" + package,
-            "--time-budget", "600",
-            #"--pause",
-            # "--interactive-debug",
-            "--disable-probe-return",
-            "--min-candidate-score", "0.0",
-            "--relaunch", "--debug"]
-#============================
+#
+#
+# sys.argv = [sys.argv[0],
+#             "run",
+#             # "--appium-url", "http://localhost:4723",
+#             "--appium-url", "http://127.0.0.1:4723",
+#             "--device-name", "emulator-5554",
+#             "--package", package,
+#             # "--questionnaire-dir", "./questionnaire-v2/others",
+#             "--questionnaire-dir", "./questionnaire-v2/games",
+#             "--trace-dir", "./traces/",
+#             "--run-id", time.strftime("%Y%m%d_%H%M%S") + "_" + package,
+#             "--time-budget", "300",
+#             # "--pause",
+#             # "--interactive-debug",
+#             # "--auto-visualize-interactive",
+#             "--disable-probe-return",
+#             "--min-candidate-score", "0.0",
+#             "--relaunch", "--debug"]
+# #============================
 def main(argv=None):
     # WHEN CALLED: process entry; sets up logging, loads questionnaires, initializes Appium/GPT, and calls WorkflowRunner.run.
     # POSITION: only place run() is invoked; other subcommands bypass workflow and perform utility actions.
@@ -416,6 +451,7 @@ def main(argv=None):
             if args.relaunch and args.package:
                 appium.force_stop(args.package)
             appium.quit()
+            _maybe_build_interactive_visualization(args, logger)
 
         # New workflow stores per-UI observations for later merge; there is no
         # old-style final answer export at runtime yet.
@@ -442,6 +478,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
-
 

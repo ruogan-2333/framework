@@ -1,0 +1,693 @@
+{
+  "questionnaire_dir": "F:\\workplace\\framework\\questionnaire-v2\\social_apps",
+  "ui_questionnaire_root": "F:\\workplace\\framework\\mytest2\\questionnaire_handler\\questionnaire_UI_level",
+  "questionnaire_collection": "social_apps",
+  "split_config": {
+    "split_nodes": {
+      "social_app": null
+    },
+    "ignored_namespaces": [],
+    "ignored_question_ids": {}
+  },
+  "deferred_namespaces": {},
+  "summary": [
+    {
+      "namespace": "social_app",
+      "source_file": "social_app.json",
+      "router_question_count": 0,
+      "subtree_count": 8,
+      "question_count_total": 12,
+      "question_count_min": 1,
+      "question_count_max": 4,
+      "deferred_reason": null
+    }
+  ],
+  "namespaces": [
+    {
+      "namespace": "social_app",
+      "source_file": "social_app.json",
+      "split_nodes_requested": [],
+      "deferred_reason": null,
+      "router_questions": [],
+      "router_edges": [],
+      "subtrees": [
+        {
+          "subtree_id": "social_app::app_type",
+          "block_name": "social_app.app_type",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::app_type",
+          "topic_title": "Which of the following would best describe the app?",
+          "entry_kind": "topic_root",
+          "entry_label": "Which of the following would best describe the app?",
+          "question_ids": [
+            "app_type",
+            "dating_or_sex",
+            "nudity",
+            "primary_focus"
+          ],
+          "questions": [
+            {
+              "id": "app_type",
+              "type": "single",
+              "question": "Which of the following would best describe the app?",
+              "options": [
+                {
+                  "id": "communication_used_to_communicate_with_p",
+                  "value": "Communication - used to communicate with people already known to the user in one-on-one or small group conversations. Skype, SMS, and Gmail are examples of these types of products."
+                },
+                {
+                  "id": "social_used_to_communicate_post_and_shar",
+                  "value": "Social - used to communicate, post, and share content with large groups of people or for meeting new people. Facebook, Twitter, Instagram, Tinder are examples of these types of products."
+                }
+              ]
+            },
+            {
+              "id": "dating_or_sex",
+              "type": "single",
+              "question": "Is a significant portion of the app used to connect people for the purposes of dating or sexual relationships or endeavors?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            },
+            {
+              "id": "nudity",
+              "type": "single",
+              "question": "Does the app permit the public sharing of nudity?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            },
+            {
+              "id": "primary_focus",
+              "type": "single",
+              "question": "Is this (permit the public sharing of nudity) the primary focus of the app?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "source": "app_type",
+              "target": "dating_or_sex",
+              "label": "Which of the following would best describe the app? == Social - used to communicate, post, and share content with large groups of people or for meeting new people. Facebook, Twitter, Instagram, Tinder are examples of these types of products."
+            },
+            {
+              "source": "app_type",
+              "target": "nudity",
+              "label": "Which of the following would best describe the app? == Social - used to communicate, post, and share content with large groups of people or for meeting new people. Facebook, Twitter, Instagram, Tinder are examples of these types of products."
+            },
+            {
+              "source": "nudity",
+              "target": "primary_focus",
+              "label": "Does the app permit the public sharing of nudity? == Yes"
+            }
+          ],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::digital_purchase",
+          "block_name": "social_app.digital_purchase",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::digital_purchase",
+          "topic_title": "Does the app allow users to purchase digital goods?",
+          "entry_kind": "topic_root",
+          "entry_label": "Does the app allow users to purchase digital goods?",
+          "question_ids": [
+            "digital_purchase",
+            "random_items"
+          ],
+          "questions": [
+            {
+              "id": "digital_purchase",
+              "type": "single",
+              "question": "Does the app allow users to purchase digital goods?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            },
+            {
+              "id": "random_items",
+              "type": "single",
+              "question": "Can these purchases include random items where the purchaser doesn't know what specific items or features they will receive (e.g., loot boxes), the purchase of items that will be used to create or unlock an unknown item or feature (e.g., a key to unlock a loot box, material used to craft a random item), items that can improve the rate of earning random items (e.g., random drop boosts), or any other chance-based purchases?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [
+            {
+              "source": "digital_purchase",
+              "target": "random_items",
+              "label": "Does the app allow users to purchase digital goods? == Yes"
+            }
+          ],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::graphic_violence",
+          "block_name": "social_app.graphic_violence",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Does the app permit the public sharing of real-world, graphic violence outside of a newsworthy context?",
+          "question_ids": [
+            "graphic_violence"
+          ],
+          "questions": [
+            {
+              "id": "graphic_violence",
+              "type": "single",
+              "question": "Does the app permit the public sharing of real-world, graphic violence outside of a newsworthy context?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::share_location",
+          "block_name": "social_app.share_location",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Does the app share the user's current and precise physical location with other users?",
+          "question_ids": [
+            "share_location"
+          ],
+          "questions": [
+            {
+              "id": "share_location",
+              "type": "single",
+              "question": "Does the app share the user's current and precise physical location with other users?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::block_users",
+          "block_name": "social_app.block_users",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Does the app include the ability to block users or user-generated content?",
+          "question_ids": [
+            "block_users"
+          ],
+          "questions": [
+            {
+              "id": "block_users",
+              "type": "single",
+              "question": "Does the app include the ability to block users or user-generated content?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::report_users",
+          "block_name": "social_app.report_users",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Does the app include the ability to report users or user-generated content?",
+          "question_ids": [
+            "report_users"
+          ],
+          "questions": [
+            {
+              "id": "report_users",
+              "type": "single",
+              "question": "Does the app include the ability to report users or user-generated content?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::chat_moderation",
+          "block_name": "social_app.chat_moderation",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Does the app include chat moderation?",
+          "question_ids": [
+            "chat_moderation"
+          ],
+          "questions": [
+            {
+              "id": "chat_moderation",
+              "type": "single",
+              "question": "Does the app include chat moderation?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        },
+        {
+          "subtree_id": "social_app::invited_friends",
+          "block_name": "social_app.invited_friends",
+          "namespace": "social_app",
+          "source_file": "social_app.json",
+          "topic_id": "social_app::always",
+          "topic_title": "always",
+          "entry_kind": "always",
+          "entry_label": "Can interactions in the app be limited to invited friends only?",
+          "question_ids": [
+            "invited_friends"
+          ],
+          "questions": [
+            {
+              "id": "invited_friends",
+              "type": "single",
+              "question": "Can interactions in the app be limited to invited friends only?",
+              "options": [
+                {
+                  "id": "yes",
+                  "value": "Yes"
+                },
+                {
+                  "id": "no",
+                  "value": "No"
+                }
+              ]
+            }
+          ],
+          "edges": [],
+          "parent_split_node": null,
+          "split_trigger": null,
+          "router_path": []
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "routers": {
+    "routers": []
+  },
+  "blocks": {
+    "blocks": [
+      {
+        "id": "social_app.app_type",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "app_type": {
+            "category": "mutual",
+            "question": "Which of the following would best describe the app? (Communication: one-on-one or small group conversations with known people, e.g. Skype, SMS, Gmail; Social: communicate/post/share with large groups or meet new people, e.g. Facebook, Twitter, Instagram, Tinder.)",
+            "type": "single",
+            "options": [
+              {
+                "id": "communication_used_to_communicate_with_people_al",
+                "value": "Communication - used to communicate with people already known to the user in one-on-one or small group conversations. Skype, SMS, and Gmail are examples of these types of products."
+              },
+              {
+                "id": "social_used_to_communicate_post_and_share_conten",
+                "value": "Social - used to communicate, post, and share content with large groups of people or for meeting new people. Facebook, Twitter, Instagram, Tinder are examples of these types of products."
+              }
+            ],
+            "show_if": null
+          },
+          "dating_or_sex": {
+            "category": "severity",
+            "question": "Is a significant portion of the app used to connect people for the purposes of dating or sexual relationships or endeavors?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": {
+              "id": "app_type",
+              "option_id": "social_used_to_communicate_post_and_share_conten"
+            }
+          },
+          "nudity": {
+            "category": "severity",
+            "question": "In this screenshot, is there any visible public sharing or depiction of nudity?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": {
+              "id": "app_type",
+              "option_id": "social_used_to_communicate_post_and_share_conten"
+            }
+          },
+          "primary_focus": {
+            "category": "severity",
+            "question": "Is public sharing or depiction of nudity the primary focus of the app?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": {
+              "id": "nudity",
+              "option_id": "yes"
+            }
+          }
+        }
+      },
+      {
+        "id": "social_app.digital_purchase",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "digital_purchase": {
+            "category": "severity",
+            "question": "Does the app allow users to purchase digital goods? (Real-money purchases of virtual items, currency, or enhancements.)",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          },
+          "random_items": {
+            "category": "severity",
+            "question": "Can the app's digital goods purchases include random items where the purchaser doesn't know what specific items or features they will receive (e.g., loot boxes), the purchase of items used to create or unlock an unknown item/feature (e.g., key to loot box, material for random crafting), items that improve rate of earning random items (e.g., random drop boosts), or any other chance-based purchases?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": {
+              "id": "digital_purchase",
+              "option_id": "yes"
+            }
+          }
+        }
+      },
+      {
+        "id": "social_app.graphic_violence",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "graphic_violence": {
+            "category": "severity",
+            "question": "Does the app permit the public sharing of real-world, graphic violence outside of a newsworthy context?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      },
+      {
+        "id": "social_app.share_location",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "share_location": {
+            "category": "severity",
+            "question": "Does the app share the user's current and precise physical location with other users? (Precise = exact/current GPS coordinates, not approximate or city-level.)",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      },
+      {
+        "id": "social_app.block_users",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "block_users": {
+            "category": "severity",
+            "question": "Does the app include the ability to block users or user-generated content?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      },
+      {
+        "id": "social_app.report_users",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "report_users": {
+            "category": "severity",
+            "question": "Does the app include the ability to report users or user-generated content?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      },
+      {
+        "id": "social_app.chat_moderation",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "chat_moderation": {
+            "category": "severity",
+            "question": "Does the app include chat moderation?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      },
+      {
+        "id": "social_app.invited_friends",
+        "module": "social_app",
+        "topic": "",
+        "block_show_if": [],
+        "questions": {
+          "invited_friends": {
+            "category": "severity",
+            "question": "Can interactions in the app be limited to invited friends only?",
+            "type": "single",
+            "options": [
+              {
+                "id": "yes",
+                "value": "Yes",
+                "weight": 1
+              },
+              {
+                "id": "no",
+                "value": "No",
+                "weight": 0
+              }
+            ],
+            "show_if": null
+          }
+        }
+      }
+    ]
+  }
+}

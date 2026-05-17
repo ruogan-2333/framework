@@ -1,0 +1,180 @@
+{
+  "routers": [
+    {
+      "id": "exec_social_app_type_visible",
+      "full_id": "exec_social.exec_social_app_type_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.app_type"
+      ],
+      "question": "In this screenshot, is there visible evidence about the app's primary type, dating or sexual relationship purpose, public nudity sharing, or whether nudity sharing is a primary focus?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_digital_purchase_visible",
+      "full_id": "exec_social.exec_social_digital_purchase_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.digital_purchase"
+      ],
+      "question": "In this screenshot, is there visible evidence of purchasing digital goods, virtual items, currency, enhancements, random items, loot boxes, or other chance-based digital purchases?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_graphic_violence_visible",
+      "full_id": "exec_social.exec_social_graphic_violence_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.graphic_violence"
+      ],
+      "question": "In this screenshot, is there visible evidence that the app permits public sharing of real-world graphic violence outside a newsworthy context?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_precise_location_visible",
+      "full_id": "exec_social.exec_social_precise_location_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.share_location"
+      ],
+      "question": "In this screenshot, is there visible evidence that the app shares the user's current precise physical location with other users?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_block_users_visible",
+      "full_id": "exec_social.exec_social_block_users_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.block_users"
+      ],
+      "question": "In this screenshot, is there visible evidence that users or user-generated content can be blocked?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_report_users_visible",
+      "full_id": "exec_social.exec_social_report_users_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.report_users"
+      ],
+      "question": "In this screenshot, is there visible evidence that users or user-generated content can be reported?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_chat_moderation_visible",
+      "full_id": "exec_social.exec_social_chat_moderation_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.chat_moderation"
+      ],
+      "question": "In this screenshot, is there visible evidence that the app includes chat moderation, moderation rules, filtered messages, safety review, or moderation controls?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_social_invited_friends_visible",
+      "full_id": "exec_social.exec_social_invited_friends_visible",
+      "module": "exec_social",
+      "export_answer": false,
+      "target_block_ids": [
+        "social_app.invited_friends"
+      ],
+      "question": "In this screenshot, is there visible evidence that interactions in the app can be limited to invited friends only?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    }
+  ]
+}

@@ -411,12 +411,17 @@ ACTION STEP RULES:
 OVERLAY RULES:
 - overlay_kind must be one of: none | dismiss | workflow | loading.
 - If overlay_kind=dismiss, you MUST provide overlay_dismiss_actions.
-- If overlay_kind=dismiss, put safe close/deny/not-now/OK actions in overlay_dismiss_actions.
-- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty .
+- If overlay_kind=dismiss, put ALL safe close/deny/not-now/OK/skip/continue-past-popup actions in overlay_dismiss_actions, ordered safest first.
+- If overlay_kind=dismiss, candidate_actions MUST be empty because the screen is blocked until the overlay is gone.
+- Do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
+- Prefer explicit X, Close, Cancel, No thanks, Not now, Later, Skip, Continue, Agree, OK, or Got it controls.
+- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty.
 
 CANDIDATE ACTION RULES:
 - candidate_actions are exploration actions only.
+- If overlay_kind=dismiss, candidate_actions MUST be [].
 - Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+- Do not include login/sign-in/social-login actions unless the task explicitly requires account login or no other useful non-auth exploration exists.
 - Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
 - Prefer visible primary actions, menus, tabs, settings, shop/purchase, profile/account, help/about, game start/level, rewards, or other evidence-bearing surfaces.
 - Each candidate should have 1..3 actions and score in [-1, 1].
@@ -543,8 +548,11 @@ OUTPUT (strict JSON matching NavigationRouterResult):
 - router: strict JSON matching RouterResult.
 
 NAVIGATION RULES:
+- If navigation.overlay_kind=dismiss, put all close/deny/not-now/OK/skip/continue-past-popup actions in navigation.overlay_dismiss_actions and set navigation.candidate_actions=[].
+- If navigation.overlay_kind=dismiss, do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
 - navigation.candidate_actions are exploration actions only.
 - Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+- Do not include login/sign-in/social-login actions unless the task explicitly requires account login or no other useful non-auth exploration exists.
 - Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
 - navigation.page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
 - Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.

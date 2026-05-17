@@ -1,0 +1,180 @@
+{
+  "routers": [
+    {
+      "id": "exec_addition_age_verification_visible",
+      "full_id": "addition.exec_addition_age_verification_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.age_verification"
+      ],
+      "question": "In this screenshot, is there visible evidence of an age verification, age gate, birthday input, adult-only warning, or parental consent flow?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_unsafe_ad_visible",
+      "full_id": "addition.exec_addition_unsafe_ad_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.unsafe_ad_content"
+      ],
+      "question": "In this screenshot, is there visible advertising content that may be unsuitable for children, such as sexual, violent, gambling, adult, horror, alcohol, tobacco, or drug-related content?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_anti_addiction_notice_visible",
+      "full_id": "addition.exec_addition_anti_addiction_notice_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.anti_addiction_notice"
+      ],
+      "question": "In this screenshot, is there visible anti-addiction, healthy use, play-time limit, rest reminder, minor protection, or game health warning text?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_parental_controls_visible",
+      "full_id": "addition.exec_addition_parental_controls_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.parental_controls"
+      ],
+      "question": "In this screenshot, is there visible evidence of parental controls, family settings, guardian approval, child account controls, or parent-managed restrictions?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_child_health_risk_visible",
+      "full_id": "addition.exec_addition_child_health_risk_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.child_health_risk"
+      ],
+      "question": "In this screenshot, is there visible content that may pose psychological or physical health risks to children, such as self-harm, suicide, extreme dieting, body anxiety, dangerous challenges, or harmful behavior encouragement?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_child_contact_risk_visible",
+      "full_id": "addition.exec_addition_child_contact_risk_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.child_contact_risk"
+      ],
+      "question": "In this screenshot, is there visible evidence of child online contact or exploitation risk, such as stranger chat, private messaging, matching, live interaction, gifting, nearby users, or offline meeting prompts?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_lgbt_content_visible",
+      "full_id": "addition.exec_addition_lgbt_content_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.lgbt_content"
+      ],
+      "question": "In this screenshot, is there visible LGBT+ related content, such as LGBT+ identity, sexual orientation, gender identity, same-sex relationships or LGBT+ community references?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    },
+    {
+      "id": "exec_addition_ai_features_visible",
+      "full_id": "addition.exec_addition_ai_features_visible",
+      "module": "addition",
+      "export_answer": false,
+      "target_block_ids": [
+        "addition.ai_features"
+      ],
+      "question": "In this screenshot, is there visible evidence that the app provides AI features, such as AI chat, AI assistant, AI companion, AI-generated text, AI-generated images, or automated AI content generation?",
+      "type": "single",
+      "options": [
+        {
+          "id": "yes",
+          "value": "Yes"
+        },
+        {
+          "id": "no",
+          "value": "No"
+        }
+      ],
+      "show_if": null
+    }
+  ]
+}

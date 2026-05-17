@@ -1,0 +1,352 @@
+{
+  "blocks": [
+    {
+      "id": "addition.age_verification",
+      "module": "addition",
+      "topic": "Age verification",
+      "block_show_if": [
+        {
+          "id": "exec_addition_age_verification_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_age_verification_present": {
+          "category": "addition",
+          "question": "In this screenshot, is the UI asking the user to verify or confirm their age?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        },
+        "addition_age_verification_method": {
+          "category": "addition",
+          "question": "In this screenshot, which age verification or age gate method is visible? (Select all that apply)",
+          "type": "multiple",
+          "options": [
+            {
+              "id": "birthday_or_birth_year_input",
+              "value": "Birthday or birth year input"
+            },
+            {
+              "id": "age_confirmation_button",
+              "value": "Age confirmation button"
+            },
+            {
+              "id": "adult_only_or_18_plus_warning",
+              "value": "Adult-only or 18+ warning"
+            },
+            {
+              "id": "parental_consent_or_guardian_approval",
+              "value": "Parental consent or guardian approval"
+            },
+            {
+              "id": "identity_document_or_real_name_verification",
+              "value": "Identity document or real-name verification"
+            },
+            {
+              "id": "other_age_gate",
+              "value": "Other age gate"
+            }
+          ],
+          "show_if": {
+            "id": "addition_age_verification_present",
+            "option_id": "yes"
+          }
+        },
+        "addition_age_restricted_access": {
+          "category": "addition",
+          "question": "In this screenshot, does the UI indicate that access may be blocked, restricted, or changed based on the user's age?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            },
+            {
+              "id": "unclear",
+              "value": "Unclear"
+            }
+          ],
+          "show_if": {
+            "id": "addition_age_verification_present",
+            "option_id": "yes"
+          }
+        }
+      }
+    },
+    {
+      "id": "addition.unsafe_ad_content",
+      "module": "addition",
+      "topic": "Child-unsuitable advertising",
+      "block_show_if": [
+        {
+          "id": "exec_addition_unsafe_ad_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_ad_visible": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible advertising content ?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        },
+        "addition_unsafe_ad_content_present": {
+          "category": "addition",
+          "question": "In this screenshot, does the visible advertising content include material that may be unsuitable for children?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": {
+            "id": "addition_ad_visible",
+            "option_id": "yes"
+          }
+        },
+        "addition_unsafe_ad_content_types": {
+          "category": "addition",
+          "question": "In this screenshot, which unsuitable ad content types are visible? (Select all that apply)",
+          "type": "multiple",
+          "options": [
+            {
+              "id": "sexual_or_adult_content",
+              "value": "Sexual or adult content"
+            },
+            {
+              "id": "violence_or_gore",
+              "value": "Violence or gore"
+            },
+            {
+              "id": "gambling_or_betting",
+              "value": "Gambling or betting"
+            },
+            {
+              "id": "horror_or_scary_content",
+              "value": "Horror or scary content"
+            },
+            {
+              "id": "alcohol_or_tobacco",
+              "value": "Alcohol or tobacco"
+            },
+            {
+              "id": "drug_related_content",
+              "value": "Drug-related content"
+            },
+            {
+              "id": "other_unsafe_ad_content",
+              "value": "Other unsafe ad content"
+            }
+          ],
+          "show_if": {
+            "id": "addition_unsafe_ad_content_present",
+            "option_id": "yes"
+          }
+        }
+      }
+    },
+    {
+      "id": "addition.anti_addiction_notice",
+      "module": "addition",
+      "topic": "Anti-addiction and healthy use notices",
+      "block_show_if": [
+        {
+          "id": "exec_addition_anti_addiction_notice_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_anti_addiction_notice_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible anti-addiction, healthy use, play-time limit, rest reminder, minor protection, or game health warning text?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    },
+    {
+      "id": "addition.parental_controls",
+      "module": "addition",
+      "topic": "Parental controls",
+      "block_show_if": [
+        {
+          "id": "exec_addition_parental_controls_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_parental_controls_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible evidence of parental controls, family settings, guardian approval, child account controls, or parent-managed restrictions?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    },
+    {
+      "id": "addition.child_health_risk",
+      "module": "addition",
+      "topic": "Child psychological and physical health risks",
+      "block_show_if": [
+        {
+          "id": "exec_addition_child_health_risk_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_child_health_risk_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible content that may pose psychological or physical health risks to children?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    },
+    {
+      "id": "addition.child_contact_risk",
+      "module": "addition",
+      "topic": "Child stranger contact and exploitation risks",
+      "block_show_if": [
+        {
+          "id": "exec_addition_child_contact_risk_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_child_contact_risk_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible evidence of online contact features or interaction patterns that may expose children to strangers or exploitation risks?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    },
+    {
+      "id": "addition.lgbt_content",
+      "module": "addition",
+      "topic": "LGBT+ content",
+      "block_show_if": [
+        {
+          "id": "exec_addition_lgbt_content_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_lgbt_content_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible LGBT+ related content or references?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    },
+    {
+      "id": "addition.ai_features",
+      "module": "addition",
+      "topic": "AI features",
+      "block_show_if": [
+        {
+          "id": "exec_addition_ai_features_visible",
+          "option_id": "yes"
+        }
+      ],
+      "questions": {
+        "addition_ai_feature_present": {
+          "category": "addition",
+          "question": "In this screenshot, is there visible evidence that the app provides AI features?",
+          "type": "single",
+          "options": [
+            {
+              "id": "yes",
+              "value": "Yes"
+            },
+            {
+              "id": "no",
+              "value": "No"
+            }
+          ],
+          "show_if": null
+        }
+      }
+    }
+  ]
+}

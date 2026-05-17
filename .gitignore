@@ -451,3 +451,12 @@ test_debug/fetch_snap/20260517_134652/0006/snap.json
 test_debug/fetch_snap/20260517_134652/0006/ui_digest.json
 test_debug/fetch_snap/20260517_134652/0006/vid_map_overlay.png
 test_debug/fetch_snap/20260517_134652/0006/xml_raw.xml
+test_debug/batch_runs/20260518_052754_sample10_seed42/sampled_apps.csv
+test_debug/batch_runs/20260518_052839_sample10_seed42/batch_summary.json
+test_debug/batch_runs/20260518_052839_sample10_seed42/batch_summary.md
+test_debug/batch_runs/20260518_052839_sample10_seed42/sampled_apps.csv
+test_debug/batch_runs/20260518_053120_sample10_seed42/batch_summary.json
+test_debug/batch_runs/20260518_053120_sample10_seed42/batch_summary.md
+test_debug/batch_runs/20260518_053120_sample10_seed42/sampled_apps.csv
+test_debug/fetch_snap/test/001/screenshot.png
+test_debug/fetch_snap/test/001/xml.xml

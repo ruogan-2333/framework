@@ -140,6 +140,7 @@ class BudgetConfig:
     # Recovery / replay / backtrace
     recovery_attempts: int = 2
     recovery_back_steps: int = 2
+    overlay_recovery_limit_per_family: int = 3  # Max unresolved overlay recovery attempts before stopping this run.
     replay_max_depth: int = 18
     backtrace_max_steps: int = 6
 
@@ -644,6 +645,14 @@ class WorkflowRunner:
     state_return_results: Dict[str, Dict[str, Dict[str, Any]]] = field(default_factory=dict, init=False)
     # State families whose visible return actions, UTG parent path, and fallback BACK are known unusable.
     state_return_exhausted: Set[str] = field(default_factory=set, init=False)
+    # Terminal guard for cases where a return-exhausted state still has a theoretical frontier,
+    # but recovery cannot reach it anymore, for example because restart/replay budget is exhausted.
+    recovery_route_exhausted: bool = field(default=False, init=False)
+    recovery_route_exhausted_reason: str = field(default="", init=False)
+    # Terminal guard for repeatedly unresolved blocking overlays, keyed by visual/state family.
+    overlay_recovery_counts: Dict[str, int] = field(default_factory=dict, init=False)
+    overlay_recovery_exhausted: bool = field(default=False, init=False)
+    overlay_recovery_exhausted_reason: str = field(default="", init=False)
 
     # Trace step counter
     _step_seq: int = field(default=0, init=False)
@@ -1242,6 +1251,56 @@ class WorkflowRunner:
         if nav:
             return self._overlay_kind_value(nav)
         return fallback if fallback is not None else OverlayKind.NONE.value
+
+    def _allow_overlay_recovery_attempt(self, sig: str, nav: Optional[NavigationProposal], reason: str) -> bool:
+        """
+        Input: current overlay state signature, optional NavigationProposal, and the recovery reason.
+        Output: True when recovery is still allowed; False when the per-family overlay recovery budget is exhausted.
+        Function: prevents bad or impossible dismiss actions from cycling through recovery/restart forever.
+        """
+        family = self._family_id(sig)
+        limit = int(getattr(self.budget, "overlay_recovery_limit_per_family", 3) or 0)
+        if limit <= 0:
+            self._log_event("overlay_recovery_budget_disabled", sig=sig, family=family, reason=reason)
+            return True
+
+        next_count = int(self.overlay_recovery_counts.get(family, 0) or 0) + 1
+        self.overlay_recovery_counts[family] = next_count
+        overlay_kind = self._overlay_kind_value(nav)
+        self._log_event(
+            "overlay_recovery_attempt",
+            sig=sig,
+            family=family,
+            count=next_count,
+            limit=limit,
+            overlay_kind=overlay_kind,
+            reason=reason,
+        )
+        if next_count <= limit:
+            return True
+
+        self.overlay_recovery_exhausted = True
+        self.overlay_recovery_exhausted_reason = f"{family}:{reason}:attempts>{limit}"
+        self._emit_decision(
+            sig,
+            "overlay_recovery_exhausted",
+            {
+                "family": family,
+                "count": next_count,
+                "limit": limit,
+                "overlay_kind": overlay_kind,
+                "reason": reason,
+            },
+        )
+        logger.error(
+            "Overlay recovery exhausted at sig=%s family=%s count=%d limit=%d reason=%s",
+            sig[:8],
+            family[:12],
+            next_count,
+            limit,
+            reason,
+        )
+        return False
 
     # ---------------------------
     # Foreground package gate
@@ -2225,6 +2284,9 @@ class WorkflowRunner:
                 resolved = self._dismiss_overlay_with_nav(cur_sig, snap, nav, task)
                 # 如果 LLM1 没能关掉弹窗，则进入更通用的恢复流程。
                 if not resolved:
+                    # 同一类 overlay 多次处理失败时直接终止本次运行，避免错误 dismiss/recovery 长循环。
+                    if not self._allow_overlay_recovery_attempt(cur_sig, nav, reason="overlay_unresolved"):
+                        continue
                     # 记录告警，说明 overlay 处理失败，准备 recovery。
                     logger.warning("Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.")
                     # 调用 recovery 尝试把页面带回稳定非阻塞状态。
@@ -4524,7 +4586,8 @@ class WorkflowRunner:
             logger.info("Overlay action at sig=%s: %s (%s)", sig[:8], self._action_key(step), (step.reasoning or "")[:70])
             self._log_event("overlay_dismiss_attempt", sig=sig, action=self._action_signature(step))
             if not self._execute_action(step, snap["vid_map"], sig):
-                break
+                self._log_event("overlay_dismiss_action_failed", sig=sig, action_key=self._action_key(step))
+                continue
             self.action_count += 1
             self.history.append(self._action_key(step))
             time.sleep(self.budget.post_action_settle_s)
@@ -4869,7 +4932,19 @@ class WorkflowRunner:
         frontier = self._pick_global_frontier()
         if frontier and frontier != cur_sig:
             self._log_event("return_exhausted_frontier_replay", sig=cur_sig, frontier_sig=frontier, reason=reason)
-            self._restart_and_replay(best_target=frontier, task=task, reason=f"return_exhausted_{reason}")
+            replay_ok = self._restart_and_replay(best_target=frontier, task=task, reason=f"return_exhausted_{reason}")
+            if not replay_ok:
+                # Do not capture again after a failed restart/replay. If the failure was caused by
+                # budget exhaustion, another capture would land on the same state and repeat forever.
+                self.recovery_route_exhausted = True
+                self.recovery_route_exhausted_reason = f"frontier_unreachable:{reason}"
+                self._log_event(
+                    "return_exhausted_frontier_unreachable",
+                    sig=cur_sig,
+                    frontier_sig=frontier,
+                    reason=reason,
+                )
+                return cur_sig, snap
             ns = self._capture_and_process(timeout=8.0)
             if ns:
                 next_sig = str(ns.get("state_sig") or cur_sig)
@@ -6539,6 +6614,8 @@ class WorkflowRunner:
                 logger.info("Overlay during backtrace at sig=%s -> resolve.", cur_sig[:8])
                 resolved = self._dismiss_overlay_with_nav(cur_sig, snap2, nav, task)
                 if not resolved:
+                    if not self._allow_overlay_recovery_attempt(cur_sig, nav, reason="overlay_during_backtrace"):
+                        return False
                     ok2 = self._recover(cur_sig, snap2, reason=RecoveryReason.OVERLAY_DURING_BACKTRACE, task=task, target_sig=target_sig)
                     if not ok2:
                         return False
@@ -7256,11 +7333,11 @@ class WorkflowRunner:
 
         return ((cur_sig == target_sig) or (self._family_id(str(cur_sig)) == self._family_id(str(target_sig)))), snap
 
-    def _restart_and_replay(self, best_target: Optional[str], task: str, *, reason: str = "") -> None:
+    def _restart_and_replay(self, best_target: Optional[str], task: str, *, reason: str = "") -> bool:
         """
         IPO:
           in : best_target (desired state_sig to return to), task
-          out: restarts app; attempts best-effort replay; then resumes navigation wherever we land
+          out: True if restart/replay produced a usable landing state or reached target; False otherwise
 
         WHEN called:
           - after recovery fails
@@ -7272,7 +7349,7 @@ class WorkflowRunner:
         """
         if not self.target_package:
             logger.error("Restart requested but target_package not configured.")
-            return
+            return False
 
         now = time.time()
         if self._restart_budget_exceeded(now):
@@ -7284,16 +7361,7 @@ class WorkflowRunner:
                 window_s=float(self.budget.restart_budget_window_s),
                 limit=int(self.budget.restart_budget_max),
             )
-            # If we have a concrete target, try in-graph navigation before spending a restart.
-            if best_target:
-                snap0 = self._capture_and_process(timeout=8.0)
-                if snap0:
-                    start_sig = str(snap0.get("state_sig") or "")
-                    reached, _snap1 = self._navigate_via_graph(start_sig=start_sig, start_snap=snap0, target_sig=best_target, task=task)
-                    if reached:
-                        self._log_event("restart_budget_avoided", sig=start_sig, target_sig=best_target)
-                        return
-            return
+            return False
 
         self._prune_restart_recent(now)
         try:
@@ -7320,11 +7388,11 @@ class WorkflowRunner:
             time.sleep(0.8)
         except Exception:
             logger.debug("Restart failed", exc_info=True)
-            return
+            return False
 
         snap = self._capture_and_process()
         if not snap:
-            return
+            return False
 
         cur = snap["state_sig"]
         self.restart_entry_sig = cur
@@ -7332,14 +7400,14 @@ class WorkflowRunner:
 
         if not best_target:
             self._schedule_state(cur, snap, task)
-            return
+            return True
 
         state_path, actions = self.graph.shortest_action_path(cur, best_target, max_depth=self.budget.replay_max_depth)
         if not actions:
             logger.warning("Replay path not found from post-restart sig=%s to target=%s. Resume here.", cur[:8], best_target[:8])
             self._log_event("replay_path_missing", sig=cur, target_sig=best_target)
             self._schedule_state(cur, snap, task)
-            return
+            return False
         self._log_event("replay_path", sig=cur, target_sig=best_target, steps=len(actions))
 
         reached = False
@@ -7401,6 +7469,8 @@ class WorkflowRunner:
             logger.info("Replay did not reach target. Resume navigation at current sig=%s", cur[:8])
             self._log_event("replay_incomplete", sig=cur, target_sig=best_target)
             self._schedule_state(cur, snap, task)
+            return False
+        return True
 
     # ---------------------------
     # Action execution (Flutter-robust)
@@ -8084,6 +8154,10 @@ class WorkflowRunner:
     def _stop_condition_reason(self, start: float) -> str:
         if (time.time() - start) >= self.budget.time_budget_s:
             return "time_budget_reached"
+        if self.overlay_recovery_exhausted:
+            return "overlay_recovery_exhausted"
+        if self.recovery_route_exhausted:
+            return "recovery_route_exhausted"
         # Hard stop if we haven't made strong progress for too long (prevents infinite recover loops).
         if float(self.budget.strong_stall_stop_s or 0.0) > 0.0:
             if (time.time() - float(self.last_strong_progress_ts or 0.0)) >= float(self.budget.strong_stall_stop_s):
