@@ -46,15 +46,53 @@ def _guess_target_package(graph: Dict[str, Any]) -> str:
     return counter.most_common(1)[0][0] if counter else ""
 
 
-def _load_trace_data(trace_path: Path) -> Tuple[Dict[str, Dict[str, Any]], Dict[Tuple[str, str, str], List[Dict[str, Any]]]]:
-    """Collect first-seen snapshot info per state and transition occurrence timeline."""
+def _load_trace_data(
+    trace_path: Path,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[Tuple[str, str, str], List[Dict[str, Any]]], List[Dict[str, Any]]]:
+    """Collect state snapshots, edge occurrences, and a human-readable action timeline.
+
+    Input:
+      trace_path: one run's trace.jsonl file.
+
+    Output:
+      per_state: first-seen snapshot metadata keyed by state signature.
+      per_edge_occurs: transition occurrences keyed by graph edge identity.
+      flow_rows: compact chronological rows for the right-side HTML timeline and Markdown export.
+
+    Function:
+      Converts low-level trace events into a UI-centric flow: discovered state, action, result, and recovery events.
+    """
     per_state: Dict[str, Dict[str, Any]] = {}
     per_edge_occurs: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+    flow_rows: List[Dict[str, Any]] = []
     if not trace_path.exists():
-        return per_state, per_edge_occurs
+        return per_state, per_edge_occurs, flow_rows
 
     snapshot_seq = 0
     transition_seq = 0
+    flow_seq = 0
+    seen_snapshot_sigs: set[str] = set()
+
+    def _first_step(action_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the first action step from a transition payload."""
+        steps = list((action_payload or {}).get("actions") or [])
+        return steps[0] if steps else {}
+
+    def _step_label(step: Dict[str, Any]) -> str:
+        """Return a short human label for a trace action step."""
+        for key in ("anchor_label", "text", "reasoning", "anchor_class"):
+            val = str((step or {}).get(key) or "").strip()
+            if val:
+                return " ".join(val.split())[:80]
+        return ""
+
+    def _append_flow(row: Dict[str, Any]) -> None:
+        """Append one compact timeline row with a stable sequence number."""
+        nonlocal flow_seq
+        flow_seq += 1
+        row["flow_seq"] = flow_seq
+        flow_rows.append(row)
+
     with trace_path.open("r", encoding="utf-8") as f:
         for raw in f:
             raw = raw.strip()
@@ -72,6 +110,27 @@ def _load_trace_data(trace_path: Path) -> Tuple[Dict[str, Dict[str, Any]], Dict[
                 if not sig:
                     continue
                 snapshot_seq += 1
+                if sig not in seen_snapshot_sigs:
+                    seen_snapshot_sigs.add(sig)
+                    _append_flow(
+                        {
+                            "kind": "state_seen",
+                            "ts": float(row.get("ts") or 0.0),
+                            "src": "",
+                            "dst": sig,
+                            "action": "observe",
+                            "element_id": None,
+                            "label": str(data.get("page") or ""),
+                            "changed": None,
+                            "change_type": "snapshot",
+                            "confidence": None,
+                            "result": "first_seen",
+                            "page": str(data.get("page") or ""),
+                            "known": bool(data.get("known")),
+                            "xml_reliable": data.get("xml_reliable"),
+                            "action_key": "",
+                        }
+                    )
                 if sig not in per_state:
                     meta = data.get("meta") or {}
                     per_state[sig] = {
@@ -100,21 +159,80 @@ def _load_trace_data(trace_path: Path) -> Tuple[Dict[str, Dict[str, Any]], Dict[
                     continue
                 transition_seq += 1
                 key = (src, dst, _canon_action_key(action_payload))
-                steps = list(action_payload.get("actions") or [])
-                step0 = steps[0] if steps else {}
+                step0 = _first_step(action_payload)
                 outcome = action_payload.get("outcome") or {}
+                action_name = str(step0.get("action") or "")
+                element_id = step0.get("element_id")
+                label = _step_label(step0)
+                action_key = f"{action_name}:{element_id}:{label}".strip(":")
                 per_edge_occurs[key].append(
                     {
                         "seq": transition_seq,
                         "ts": float(row.get("ts") or 0.0),
-                        "action": str(step0.get("action") or ""),
-                        "element_id": step0.get("element_id"),
+                        "src": src,
+                        "dst": dst,
+                        "action": action_name,
+                        "element_id": element_id,
                         "text": step0.get("text"),
+                        "label": label,
+                        "action_key": action_key,
+                        "changed": outcome.get("changed"),
                         "change_type": str(outcome.get("change_type") or ""),
                         "confidence": float(outcome.get("confidence") or 0.0),
                     }
                 )
-    return per_state, per_edge_occurs
+                _append_flow(
+                    {
+                        "kind": "transition",
+                        "ts": float(row.get("ts") or 0.0),
+                        "src": src,
+                        "dst": dst,
+                        "action": action_name,
+                        "element_id": element_id,
+                        "label": label,
+                        "changed": outcome.get("changed"),
+                        "change_type": str(outcome.get("change_type") or ""),
+                        "confidence": outcome.get("confidence"),
+                        "result": "changed" if bool(outcome.get("changed")) else "same_state",
+                        "page": "",
+                        "known": None,
+                        "xml_reliable": None,
+                        "action_key": action_key,
+                    }
+                )
+
+            if event in {
+                "external_foreground_after_action",
+                "app_restart_triggered",
+                "state_return_exhausted",
+                "return_exhausted_frontier_replay",
+                "replay_path_missing",
+                "utg_restore_failed",
+                "utg_restore_success",
+                "run_stop_condition",
+                "loop_detected",
+                "action_blacklisted",
+            }:
+                _append_flow(
+                    {
+                        "kind": event,
+                        "ts": float(row.get("ts") or 0.0),
+                        "src": str(data.get("from_sig") or data.get("src") or ctx.get("cur_sig") or ""),
+                        "dst": str(data.get("target_sig") or data.get("dst") or data.get("actual_sig") or data.get("frontier_sig") or ""),
+                        "action": str(data.get("action_key") or data.get("reason") or event),
+                        "element_id": None,
+                        "label": str(data.get("reason") or data.get("kind") or ""),
+                        "changed": None,
+                        "change_type": event,
+                        "confidence": None,
+                        "result": str(data.get("reason") or data.get("kind") or event),
+                        "page": "",
+                        "known": None,
+                        "xml_reliable": None,
+                        "action_key": str(data.get("action_key") or ""),
+                    }
+                )
+    return per_state, per_edge_occurs, flow_rows
 
 
 def _load_latest_observations(obs_dir: Path) -> Dict[str, Dict[str, Any]]:
@@ -285,6 +403,80 @@ def _match_action_candidate(
     return out
 
 
+def _enrich_flow_rows(flow_rows: List[Dict[str, Any]], alias: Dict[str, str]) -> List[Dict[str, Any]]:
+    """Attach UI aliases and compact display text to timeline rows.
+
+    Input:
+      flow_rows: raw chronological rows from trace.jsonl.
+      alias: state signature to UI alias map, for example phash:* -> UI2.
+
+    Output:
+      rows with src_alias, dst_alias, action_display, and result_display.
+
+    Function:
+      Keeps HTML and Markdown timelines readable without losing the underlying signatures.
+    """
+    out: List[Dict[str, Any]] = []
+    for row in list(flow_rows or []):
+        item = dict(row)
+        src = str(item.get("src") or "")
+        dst = str(item.get("dst") or "")
+        action = str(item.get("action") or "")
+        element_id = item.get("element_id")
+        label = str(item.get("label") or "").strip()
+        action_bits = [action]
+        if element_id is not None:
+            action_bits.append(f"element={element_id}")
+        if label:
+            action_bits.append(label)
+        item["src_alias"] = alias.get(src, _short_sig(src) if src else "")
+        item["dst_alias"] = alias.get(dst, _short_sig(dst) if dst else "")
+        item["action_display"] = " ".join(x for x in action_bits if x).strip() or str(item.get("kind") or "")
+        change_type = str(item.get("change_type") or "")
+        result = str(item.get("result") or "")
+        if item.get("kind") == "state_seen":
+            item["result_display"] = f"发现 {item['dst_alias']} ({'known' if item.get('known') else 'new'})"
+        elif src or dst:
+            arrow = f"{item['src_alias'] or '-'} -> {item['dst_alias'] or '-'}"
+            item["result_display"] = f"{arrow} / {change_type or result}"
+        else:
+            item["result_display"] = result or change_type
+        out.append(item)
+    return out
+
+
+def _write_action_timeline_md(out_path: Path, payload: Dict[str, Any]) -> None:
+    """Write the simplified UI/action timeline beside the interactive HTML.
+
+    Input:
+      out_path: Markdown destination path.
+      payload: page payload containing run_id, stop_reason, and enriched timeline rows.
+
+    Output:
+      Creates or replaces action_timeline.md.
+
+    Function:
+      Provides a compact text version of the same right-side HTML timeline for quick debugging.
+    """
+    rows = list(payload.get("timeline") or [])
+    lines = [
+        "# Action Timeline",
+        "",
+        f"- run_id: `{payload.get('run_id') or ''}`",
+        f"- stop_reason: `{payload.get('stop_reason') or ''}`",
+        "",
+        "| # | source | action | result |",
+        "|---:|---|---|---|",
+    ]
+    for row in rows:
+        seq = row.get("flow_seq")
+        src = row.get("src_alias") or "-"
+        action = str(row.get("action_display") or "").replace("|", "\\|")
+        result = str(row.get("result_display") or "").replace("|", "\\|")
+        lines.append(f"| {seq} | `{src}` | {action} | {result} |")
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def build_interactive_html(run_dir: Path) -> Path:
     analysis_dir = run_dir / "analysis"
     graph_path = analysis_dir / "state_graph_snapshot.json"
@@ -296,7 +488,7 @@ def build_interactive_html(run_dir: Path) -> Path:
     graph = _read_json(graph_path)
     actions = _read_json(actions_path) if actions_path.exists() else {"per_state": {}, "unfinished_states": []}
 
-    per_state_trace, edge_occurs = _load_trace_data(trace_path)
+    per_state_trace, edge_occurs, flow_rows = _load_trace_data(trace_path)
     nav_obs = _load_latest_observations(run_dir / "observations" / "nav")
     router_obs = _load_latest_observations(run_dir / "observations" / "router")
     blocks_obs = _load_latest_observations(run_dir / "observations" / "blocks_fill")
@@ -441,10 +633,8 @@ def build_interactive_html(run_dir: Path) -> Path:
             "nav_candidate_match": edge_match.get("nav_candidate_match") or {},
         }
 
-    timeline: List[Dict[str, Any]] = []
-    for _, occs in edge_occurs.items():
-        timeline.extend(occs)
-    timeline.sort(key=lambda x: int(x.get("seq") or 0))
+    timeline = _enrich_flow_rows(flow_rows, alias)
+    timeline.sort(key=lambda x: int(x.get("flow_seq") or 0))
 
     page_payload = {
         "run_id": str(graph.get("run_id") or run_dir.name),
@@ -461,6 +651,8 @@ def build_interactive_html(run_dir: Path) -> Path:
         "timeline": timeline,
         "alias_map": alias,
     }
+
+    _write_action_timeline_md(interactive_dir / "action_timeline.md", page_payload)
 
     html = f"""<!doctype html>
 <html lang="zh-CN">
@@ -517,7 +709,7 @@ def build_interactive_html(run_dir: Path) -> Path:
 <body>
   <noscript>
     <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
-      当前环境禁用了 JavaScript，交互图无法渲染。请用浏览器打开并启用脚本，或使用 `python -m http.server` 方式访问。
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
     </div>
   </noscript>
   <div id="root">
@@ -527,13 +719,13 @@ def build_interactive_html(run_dir: Path) -> Path:
         <div><span class="k">stop_reason</span>: <span class="mono">{page_payload['stop_reason']}</span></div>
         <div><span class="k">nodes</span>: <span class="mono">{page_payload['node_count']}</span></div>
         <div><span class="k">edges</span>: <span class="mono">{page_payload['edge_count']}</span></div>
-        <label><input id="hideNoop" type="checkbox" /> 隐藏 noop 边</label>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
       </div>
       <div id="network"></div>
     </div>
     <div id="right">
-      <h3 style="margin:4px 0 6px 0;">交互详情</h3>
-      <div class="meta">点击左侧节点或边查看详细信息</div>
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
       <div id="detail"></div>
     </div>
   </div>
@@ -690,12 +882,20 @@ def build_interactive_html(run_dir: Path) -> Path:
       return html;
     }}
 
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
     function renderTimeline() {{
-      let html = '<div class="card"><div class="k">全局动作时间线（transition）</div>';
-      if (!timeline.length) return html + '<div class="meta">无时间线数据</div></div>';
-      html += '<table><thead><tr><th>#</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>';
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
       for (const x of timeline) {{
-        html += `<tr><td>${{esc(x.seq)}}</td><td class="mono">${{esc(x.action)}}</td><td>${{esc(x.element_id)}}</td><td>${{esc(x.change_type)}}</td><td>${{esc(x.confidence)}}</td></tr>`;
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${{esc(x.flow_seq)}}</td>
+          <td class="mono">${{esc(x.src_alias || '-')}}</td>
+          <td><span class="mono">${{esc(x.action_display || x.action || '')}}</span></td>
+          <td>${{esc(x.result_display || x.result || x.change_type || '')}}</td>
+          <td>${{esc(conf)}}</td>
+        </tr>`;
       }}
       html += '</tbody></table></div>';
       return html;
@@ -734,6 +934,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       }});
 
       network.on('click', function (params) {{
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
         if (params.nodes && params.nodes.length > 0) {{
           setDetail(renderNode(params.nodes[0]) + renderTimeline());
           return;

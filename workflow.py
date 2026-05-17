@@ -1,4 +1,4 @@
-# workflow.py (patched; full; uses StateGraph record_* helpers; custom return supported)
+﻿# workflow.py (patched; full; uses StateGraph record_* helpers; custom return supported)
 
 """
 workflow.py
@@ -109,6 +109,7 @@ class BudgetConfig:
     topic_fill_cooldown_s: float = 60.0
     topic_pack_limit: int = 18
     screenshot_phash_similarity_threshold: float = 0.75# phash相似度判断阈值
+    state_identity_phash_similarity_threshold: float = 0.80  # stricter threshold for merging full captures into existing visual states
     meaningful_xml_nodes_threshold: int = 2  #计算xml中有意义节点数阈值,用于判断xml是否可信
     visual_probe_max_taps: int = 6
     visual_probe_settle_s: float = 0.25
@@ -153,6 +154,46 @@ class BudgetConfig:
     blacklist_ttl_s: float = 90.0
     loop_blacklist_ttl_s: float = 120.0
     repeat_penalty_alpha: float = 1.0
+
+
+@dataclass
+class DriftCheckResult:
+    """
+    Input: result fields produced by lightweight UI drift detection.
+    Output: a compact object consumed by candidate/return routing.
+    Function: separates cheap page-change detection from full capture_and_process.
+    """
+    kind: str
+    expected_sig: str = ""
+    matched_sig: str = ""
+    matched_similarity: float = 0.0
+    raw: Optional[Dict[str, Any]] = None
+    foreground_package: str = ""
+    foreground_activity: str = ""
+    reason: str = ""
+
+
+@dataclass
+class OverlayDismissOutcome:
+    """
+    Input: result fields produced after trying one overlay dismiss sequence.
+    Output: truthy object only when the overlay was resolved and a concrete landing state is known.
+    Function: lets the main loop reuse the lightweight drift result instead of forcing a full recapture.
+    """
+    resolved: bool = False
+    next_sig: str = ""
+    next_snap: Optional[Dict[str, Any]] = None
+    drift_kind: str = ""
+    action_key: str = ""
+    reason: str = ""
+
+    def __bool__(self) -> bool:
+        """
+        Input: no arguments.
+        Output: True when overlay resolution succeeded.
+        Function: preserves compatibility with older boolean checks such as `if not outcome`.
+        """
+        return bool(self.resolved)
 
 
 class RecoveryReason(str, Enum):
@@ -596,6 +637,13 @@ class WorkflowRunner:
     snapshot_cache_max: int = 64
     snapshot_cache_hits: int = 0
     snapshot_cache_misses: int = 0
+    # Authoritative processed snapshots keyed by state_sig for known-state reuse after lightweight drift checks.
+    state_snap_cache: "OrderedDict[str, Dict[str, Any]]" = field(default_factory=OrderedDict, init=False)
+    state_snap_cache_max: int = 64
+    # Return-action semantic results keyed by state family and return action key.
+    state_return_results: Dict[str, Dict[str, Dict[str, Any]]] = field(default_factory=dict, init=False)
+    # State families whose visible return actions, UTG parent path, and fallback BACK are known unusable.
+    state_return_exhausted: Set[str] = field(default_factory=set, init=False)
 
     # Trace step counter
     _step_seq: int = field(default=0, init=False)
@@ -780,6 +828,22 @@ class WorkflowRunner:
             return Path(cb_root)
         run_token = self.run_id or time.strftime("%Y%m%d_%H%M%S")
         return Path("mytest2") / "questionnaire_handler" / "chain_debug" / "workflow_observations" / run_token
+
+    def _debug_page_artifact_path(self, sig: str, filename: str) -> Path:
+        """
+        Input: state signature and artifact filename.
+        Output: preferred debug_pages/<step_sig>/<filename> path for this state.
+        Function: lets workflow-owned debug artifacts land beside callback-owned snapshot/LLM files.
+        """
+        root = self._run_output_root() / "debug_pages"
+        safe = self._safe_filename_token(sig)[:48]
+        try:
+            matches = sorted(root.glob(f"*_{safe}"))
+            if matches:
+                return matches[0] / filename
+        except Exception:
+            pass
+        return root / f"{int(self._step_seq):06d}_{safe}" / filename
 
     def _save_app_metadata_context(self) -> Optional[Path]:
         """
@@ -971,6 +1035,7 @@ class WorkflowRunner:
             per_state[sig] = {
                 "state_sig": sig,
                 "family_id": fam,
+                "overlay_kind": self._overlay_kind_value(self.nav_cache.get(sig)),
                 "candidate_count": len(candidate_keys),
                 "explored_count": len([k for k in candidate_keys if k in explored]),
                 "attempted_count": len([k for k in candidate_keys if k in attempted]),
@@ -985,7 +1050,14 @@ class WorkflowRunner:
 
         return {
             "per_state": per_state,
-            "unfinished_states": sorted([sig for sig, row in per_state.items() if int(row.get("remaining_count", 0) or 0) > 0]),
+            "unfinished_states": sorted(
+                [
+                    sig
+                    for sig, row in per_state.items()
+                    if int(row.get("remaining_count", 0) or 0) > 0
+                    and str(row.get("overlay_kind") or "") != OverlayKind.DISMISS.value
+                ]
+            ),
         }
 
     def _export_analysis_snapshot(self, *, cur_sig: str, stop_reason: str) -> Optional[Path]:
@@ -1534,16 +1606,17 @@ class WorkflowRunner:
         #                 # 重启应用，并尽可能回到可继续探索的位置。
         #                 self._restart_and_replay(best_target=None, task=task, reason="overlay_unresolved_recovery_failed")
 
-        #         # After overlay/recovery/restart: re-capture and replan at the true current state.
-        #         # 不管 overlay 是怎么被解除的，最后都重新抓一次真实页面，重新建立当前基准。
-        #         snap = self._capture_and_process() or snap
-        #         # 同步更新当前状态签名。
-        #         cur_sig = snap["state_sig"]
-        #         # overlay 关闭后的状态通常不适合直接沿用旧栈，需要做一次外部移动式修正。
-        #         self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-        #         # 对新页面重新安排分析。
-        #         self._schedule_state(cur_sig, snap, task)
-        #         # 本轮结束，开始下一轮。
+        # Successful overlay dismiss already runs lightweight drift and returns the landing state.
+        # Do not force another full capture here, because visual-id extraction can reshuffle anchors.
+        #         if resolved:
+        #             cur_sig = str(resolved.next_sig or cur_sig)
+        #             snap = resolved.next_snap or snap
+        #         else:
+        # Recovery/restart can relocate the app without a clean edge, so use a full snap only there.
+        #             snap = self._capture_and_process() or snap
+        #             cur_sig = snap["state_sig"]
+        #             self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
+        #             self._schedule_state(cur_sig, snap, task)
         #         continue
 
         #     # 如果是 loading overlay，则先等它过去，而不是盲目点页面。
@@ -2163,16 +2236,17 @@ class WorkflowRunner:
                         # 重启应用，并尽可能回到可继续探索的位置。
                         self._restart_and_replay(best_target=None, task=task, reason="overlay_unresolved_recovery_failed")
 
-                # After overlay/recovery/restart: re-capture and replan at the true current state.
-                # 不管 overlay 是怎么被解除的，最后都重新抓一次真实页面，重新建立当前基准。
-                snap = self._capture_and_process() or snap
-                # 同步更新当前状态签名。
-                cur_sig = snap["state_sig"]
-                # overlay 关闭后的状态通常不适合直接沿用旧栈，需要做一次外部移动式修正。
-                self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                # 对新页面重新安排分析。
-                self._schedule_state(cur_sig, snap, task)
-                # 本轮结束，开始下一轮。
+                # Successful overlay dismiss already runs lightweight drift and returns the landing state.
+                # Do not force another full capture here, because visual-id extraction can reshuffle anchors.
+                if resolved:
+                    cur_sig = str(resolved.next_sig or cur_sig)
+                    snap = resolved.next_snap or snap
+                else:
+                    # Recovery/restart can relocate the app without a clean edge, so use a full snap only there.
+                    snap = self._capture_and_process() or snap
+                    cur_sig = snap["state_sig"]
+                    self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
+                    self._schedule_state(cur_sig, snap, task)
                 continue
 
             # 如果是 loading overlay，则先等它过去，而不是盲目点页面。
@@ -2663,8 +2737,8 @@ class WorkflowRunner:
 
         WHEN called:
           - At entry
-          - Once per main-loop (drift check)
-          - After every action sequence (probe/overlay/recovery/forward/backtrace/replay)
+          - When lightweight drift says a new/unknown UI needs authoritative processing
+          - After recovery paths that cannot be trusted from lightweight signals alone
 
         WHY:
           - Defines the single source of truth for current state_sig.
@@ -2803,9 +2877,12 @@ class WorkflowRunner:
                 foreground_activity=foreground_activity,
             )
             sig = str(identity.get("state_sig") or sig or "")
+            family_sig = str(identity.get("family_sig") or struct_sig or sig or "")
             try:
-                if sig and struct_sig:
-                    self.sig_to_family[sig] = struct_sig
+                if sig and family_sig:
+                    # identity.family_sig is the canonical bookkeeping family:
+                    # XML-reliable pages keep a structural family, while phash pages keep state_sig as family.
+                    self.sig_to_family[sig] = family_sig
             except Exception:
                 pass
             snap = {
@@ -2832,6 +2909,7 @@ class WorkflowRunner:
                     "coarse_sig": coarse_sig,  # 粗粒度签名：宽松比较页面
                     "struct_sig": struct_sig,  # 结构签名：probe-return 回页时常用
                     "fine_sig": fine_sig,  # 细粒度签名：更严格地区分页面
+                    "family_sig": family_sig,  # canonical action-bookkeeping family for this state
                     "identity_source": str(identity.get("identity_source") or ""),  # 当前 state_sig 来自 xml 还是 phash
                     "identity_hash": str(identity.get("identity_hash") or ""),  # 本次状态身份判定依赖的核心 hash
                     "matched_existing": bool(identity.get("matched_existing")),  # phash 模式下是否复用了历史视觉状态
@@ -2855,6 +2933,7 @@ class WorkflowRunner:
                     "screenshot_phash": screenshot_phash,
                     "xml_hash_raw": xml_hash_raw,
                     "screenshot_hash_raw": screenshot_hash_raw,
+                    "family_sig": family_sig,  # canonical action-bookkeeping family for this state
                     "identity_source": str(identity.get("identity_source") or ""),
                     "identity_hash": str(identity.get("identity_hash") or ""),
                     "matched_existing": bool(identity.get("matched_existing")),
@@ -2865,6 +2944,7 @@ class WorkflowRunner:
                     **(crop_meta or {}),
                 },
             )
+            self._remember_state_snap(snap)
             self._emit_snapshot(snap)
             return snap
         except Exception:
@@ -2963,7 +3043,7 @@ class WorkflowRunner:
                 if sim > best_similarity:
                     best_similarity = sim
                     best_sig = known_sig
-            if best_sig and best_similarity >= float(self.budget.screenshot_phash_similarity_threshold):
+            if best_sig and best_similarity >= float(self.budget.state_identity_phash_similarity_threshold):
                 self.visual_state_registry[best_sig] = {
                     "identity_source": "phash",
                     "screenshot_phash": screenshot_phash,
@@ -3015,21 +3095,94 @@ class WorkflowRunner:
             "matched_similarity": 0.0,
         }
 
-    def _preflight_refresh_if_changed(self, snap: Dict[str, Any], *, timeout_s: float = 0.5) -> Optional[Dict[str, Any]]:
+    def _lightweight_raw_snapshot(self, expected_snap: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Cheap change detector to avoid full capture+postprocess when UI is stable.
-
-        POLICY:
-          - Prefer XML hash when the hierarchy is reliable (most apps).
-          - Fall back to screenshot hash when XML is empty/sparse (Unity/canvas UIs).
-          - If the chosen signal changed, do ONE authoritative refresh via _capture_and_process().
-
-        NOTE:
-          - This function is NOT authoritative; it only decides whether to refresh.
-          - The authoritative barrier remains _capture_and_process() (paired xml+screenshot).
+        Input: expected processed snapshot, used only for cheap device-info defaults.
+        Output: raw XML/screenshot/package/activity without OCR/UIED/template post-processing.
+        Function: provides the cheap observation layer for drift checks.
         """
-        meta = snap.get("meta") or {}
-        # Preflight compares against the *processed* representation used by the workflow (status bar masked/removed).
+        try:
+            xml_now = self.appium.page_source_once()
+            png_now = self.appium.screenshot_png_once()
+            if not xml_now or not png_now:
+                return None
+            pkg = self.appium.foreground_package()
+            act = self.appium.foreground_activity()
+            info = dict((expected_snap or {}).get("device_info") or {})
+            screenshot_b64 = base64.b64encode(png_now).decode("utf-8")
+            return {
+                "xml": xml_now,
+                "xml_hash": hashlib.md5((xml_now or "").encode("utf-8")).hexdigest(),
+                "screenshot": screenshot_b64,
+                "screenshot_hash": hashlib.md5(png_now).hexdigest(),
+                "device_info": info,
+                "foreground_package": pkg,
+                "foreground_activity": act,
+            }
+        except Exception:
+            logger.debug("lightweight raw snapshot failed", exc_info=True)
+            return None
+
+    def _known_snap_by_xml_hash(self, xml_hash: str, foreground_package: str = "") -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        Input: processed XML hash and optional current foreground package.
+        Output: (state_sig, snapshot) for a known page, or ("", None).
+        Function: lets XML-reliable pages be recognized without full post-processing.
+        """
+        for sig, known in reversed(list((self.state_snap_cache or {}).items())):
+            meta = (known or {}).get("meta") or {}
+            if str(meta.get("xml_hash") or "") != str(xml_hash or ""):
+                continue
+            if foreground_package and str(meta.get("foreground_package") or "") not in ("", foreground_package):
+                continue
+            return str(sig), known
+        return "", None
+
+    def _known_snap_by_phash(self, screenshot_phash: str) -> Tuple[str, Optional[Dict[str, Any]], float]:
+        """
+        Input: perceptual hash of the current lightweight screenshot.
+        Output: best matching known state, snapshot, and similarity.
+        Function: supports canvas/game pages where XML is unreliable.
+        """
+        best_sig = ""
+        best_snap: Optional[Dict[str, Any]] = None
+        best_similarity = 0.0
+        for sig, known in reversed(list((self.state_snap_cache or {}).items())):
+            known_phash = str(((known or {}).get("meta") or {}).get("screenshot_phash") or "")
+            if not known_phash:
+                continue
+            sim = compare_phash_similarity(screenshot_phash, known_phash)
+            if sim > best_similarity:
+                best_similarity = sim
+                best_sig = str(sig)
+                best_snap = known
+        return best_sig, best_snap, best_similarity
+
+    def _check_drift_lightweight(self, expected_snap: Dict[str, Any], *, timeout_s: float = 0.5) -> DriftCheckResult:
+        """
+        Input: expected authoritative snapshot.
+        Output: DriftCheckResult describing same_state, changed_known, changed_unknown, external, or capture_failed.
+        Function: detects page movement cheaply without running OCR/UIED/template processing.
+        """
+        expected_sig = str((expected_snap or {}).get("state_sig") or "")
+        meta = (expected_snap or {}).get("meta") or {}
+        raw = self._lightweight_raw_snapshot(expected_snap)
+        if not raw:
+            return DriftCheckResult(kind="capture_failed", expected_sig=expected_sig, reason="lightweight_snapshot_failed")
+
+        pkg = str(raw.get("foreground_package") or "")
+        act = str(raw.get("foreground_activity") or "")
+        allowed = set(self.allowed_packages or set())
+        if allowed and pkg and pkg not in allowed:
+            return DriftCheckResult(
+                kind="external",
+                expected_sig=expected_sig,
+                raw=raw,
+                foreground_package=pkg,
+                foreground_activity=act,
+                reason="foreground_package_mismatch",
+            )
+
         exp_xml_hash = str(meta.get("xml_hash") or "")
         exp_shot_hash = str(meta.get("screenshot_hash") or "")
         exp_shot_phash = str(meta.get("screenshot_phash") or "")
@@ -3037,10 +3190,8 @@ class WorkflowRunner:
         crop_top_xml = int(meta.get("status_bar_crop_xml") or 0)
         crop_top_px = int(meta.get("status_bar_crop_px") or 0)
 
-        # If NAV classified this as a screenshot-driven surface, prefer screenshot for change detection.
         try:
-            sig = str(snap.get("state_sig") or "")
-            nav = self.nav_cache.get(sig)
+            nav = self.nav_cache.get(expected_sig)
             ui_type = str(getattr(nav, "ui_type", "") or "").strip().lower() if nav else ""
             if ui_type in ("webview", "game_canvas", "video_player"):
                 xml_reliable = False
@@ -3048,39 +3199,120 @@ class WorkflowRunner:
             pass
 
         try:
-            if xml_reliable and exp_xml_hash:# xml 可信且有历史 hash，优先用 XML 判断变化（大多数 app 都是这个情况）
-                xml_now = self.appium.page_source_once()
-                if not xml_now:
-                    return self._capture_and_process(timeout=timeout_s)
+            if xml_reliable and exp_xml_hash:
+                xml_now = str(raw.get("xml") or "")
                 if crop_top_xml > 0:
                     xml_now = self._preprocess_hierarchy_xml(xml_now, crop_top_xml=crop_top_xml)
-                cur = hashlib.md5((xml_now or "").encode("utf-8")).hexdigest()
-                if cur == exp_xml_hash:
-                    return None
-            elif exp_shot_hash:# XML 不可信但有历史截图 hash，先判断截图hash是否相同(完全相同界面),在判断Phash是否相似(处理动态界面).
-                png_now = self.appium.screenshot_png_once()
-                if not png_now:
-                    return self._capture_and_process(timeout=timeout_s)
-                if crop_top_px > 0:
-                    png_now = self._crop_png_top(png_now, crop_top_px)
-                cur = hashlib.md5(png_now).hexdigest()
-                if cur == exp_shot_hash:
-                    return None
-                if exp_shot_phash:
-                    shot_now_b64 = base64.b64encode(png_now).decode("utf-8")
-                    cur_phash = compute_screenshot_phash(shot_now_b64)
-                    sim = compare_phash_similarity(exp_shot_phash, cur_phash)
-                    if sim >= float(self.budget.screenshot_phash_similarity_threshold):
-                        return None
-            else:
-                # Missing expected hashes: force refresh once.
-                return self._capture_and_process(timeout=timeout_s)
-        except Exception:
-            # If preflight fails, fall back to authoritative refresh (bounded).
-            return self._capture_and_process(timeout=timeout_s)
+                cur_xml_hash = hashlib.md5((xml_now or "").encode("utf-8")).hexdigest()
+                if cur_xml_hash == exp_xml_hash:
+                    return DriftCheckResult(
+                        kind="same_state",
+                        expected_sig=expected_sig,
+                        matched_sig=expected_sig,
+                        raw=raw,
+                        foreground_package=pkg,
+                        foreground_activity=act,
+                        reason="xml_hash_same",
+                    )
+                matched_sig, _matched_snap = self._known_snap_by_xml_hash(cur_xml_hash, foreground_package=pkg)
+                if matched_sig:
+                    return DriftCheckResult(
+                        kind="changed_known",
+                        expected_sig=expected_sig,
+                        matched_sig=matched_sig,
+                        matched_similarity=1.0,
+                        raw=raw,
+                        foreground_package=pkg,
+                        foreground_activity=act,
+                        reason="xml_hash_known",
+                    )
+                return DriftCheckResult(
+                    kind="changed_unknown",
+                    expected_sig=expected_sig,
+                    raw=raw,
+                    foreground_package=pkg,
+                    foreground_activity=act,
+                    reason="xml_hash_changed_unknown",
+                )
 
-        # Signal changed -> authoritative refresh.
-        return self._capture_and_process(timeout=timeout_s)
+            png_now = base64.b64decode(str(raw.get("screenshot") or "") + "==", validate=False)
+            if crop_top_px > 0:
+                png_now = self._crop_png_top(png_now, crop_top_px)
+            cur_shot_hash = hashlib.md5(png_now).hexdigest() if png_now else ""
+            if exp_shot_hash and cur_shot_hash == exp_shot_hash:
+                return DriftCheckResult(
+                    kind="same_state",
+                    expected_sig=expected_sig,
+                    matched_sig=expected_sig,
+                    raw=raw,
+                    foreground_package=pkg,
+                    foreground_activity=act,
+                    reason="screenshot_hash_same",
+                )
+            cur_b64 = base64.b64encode(png_now).decode("utf-8") if png_now else str(raw.get("screenshot") or "")
+            cur_phash = compute_screenshot_phash(cur_b64)
+            if exp_shot_phash:
+                sim = compare_phash_similarity(exp_shot_phash, cur_phash)
+                if sim >= float(self.budget.screenshot_phash_similarity_threshold):
+                    return DriftCheckResult(
+                        kind="same_state",
+                        expected_sig=expected_sig,
+                        matched_sig=expected_sig,
+                        matched_similarity=sim,
+                        raw=raw,
+                        foreground_package=pkg,
+                        foreground_activity=act,
+                        reason="phash_same",
+                    )
+            matched_sig, _matched_snap, best_similarity = self._known_snap_by_phash(cur_phash)
+            if matched_sig and best_similarity >= float(self.budget.screenshot_phash_similarity_threshold):
+                return DriftCheckResult(
+                    kind="changed_known",
+                    expected_sig=expected_sig,
+                    matched_sig=matched_sig,
+                    matched_similarity=best_similarity,
+                    raw=raw,
+                    foreground_package=pkg,
+                    foreground_activity=act,
+                    reason="phash_known",
+                )
+            return DriftCheckResult(
+                kind="changed_unknown",
+                expected_sig=expected_sig,
+                matched_similarity=best_similarity,
+                raw=raw,
+                foreground_package=pkg,
+                foreground_activity=act,
+                reason="phash_changed_unknown",
+            )
+        except Exception:
+            logger.debug("lightweight drift check failed", exc_info=True)
+            return DriftCheckResult(kind="capture_failed", expected_sig=expected_sig, raw=raw, reason="drift_check_exception")
+
+    def _snap_from_drift_result(self, drift: DriftCheckResult, *, timeout_s: float = 0.5) -> Optional[Dict[str, Any]]:
+        """
+        Input: DriftCheckResult from lightweight detection.
+        Output: known cached snap, newly processed snap, or None for same/external states.
+        Function: preserves the old preflight behavior while avoiding full processing for known states.
+        """
+        if drift.kind == "same_state":
+            return None
+        if drift.kind == "changed_known" and drift.matched_sig:
+            return self.state_snap_cache.get(drift.matched_sig)
+        if drift.kind == "changed_unknown" and drift.raw:
+            return self._capture_and_process_debug(timeout=timeout_s, debug=True, raw=drift.raw)
+        if drift.kind == "capture_failed":
+            return self._capture_and_process(timeout=timeout_s)
+        return None
+
+    def _preflight_refresh_if_changed(self, snap: Dict[str, Any], *, timeout_s: float = 0.5) -> Optional[Dict[str, Any]]:
+        """
+        Input: expected authoritative snapshot.
+        Output: None when unchanged, cached known snap when matched, or full processed snap when unknown.
+        Function: compatibility wrapper around the split lightweight drift detector.
+        """
+        drift = self._check_drift_lightweight(snap, timeout_s=timeout_s)
+        return self._snap_from_drift_result(drift, timeout_s=timeout_s)
 
     # ---------------------------
     # Graph recording (delegates semantics to StateGraph)
@@ -3183,7 +3415,9 @@ class WorkflowRunner:
             return "None:None:"
         parts: List[str] = []
         for a in (action.get("actions") or [])[:6]:
-            parts.append(f"{a.get('action')}:{a.get('element_id')}:{a.get('text') or ''}")
+            anchor = a.get("anchor_frame") or ""
+            label = str(a.get("anchor_label") or "")[:32]
+            parts.append(f"{a.get('action')}:{a.get('element_id')}:{a.get('text') or ''}:anchor={anchor}:label={label}")
         return "||".join(parts) or "None:None:"
 
     def _is_action_blacklisted(self, sig: str, action_key: str) -> bool:
@@ -3490,6 +3724,24 @@ class WorkflowRunner:
         except Exception:
             pass
 
+    def _remember_state_snap(self, snap: Dict[str, Any]) -> None:
+        """
+        Input: authoritative processed snapshot from capture_and_process.
+        Output: updates the state_sig -> snapshot LRU cache.
+        Function: lets lightweight drift checks reuse known pages without re-running three-tools.
+        """
+        try:
+            sig = str((snap or {}).get("state_sig") or "")
+            if not sig:
+                return
+            if sig not in self.state_snap_cache:
+                self.state_snap_cache[sig] = snap
+            self.state_snap_cache.move_to_end(sig)
+            if len(self.state_snap_cache) > int(self.state_snap_cache_max):
+                self.state_snap_cache.popitem(last=False)
+        except Exception:
+            logger.debug("remember state snapshot failed", exc_info=True)
+
     def _page_signals(self, sig: str, snap: Dict[str, Any], nav: Optional[NavigationProposal] = None) -> Dict[str, Any]:
         """
         Small, stable page signals for topic routing/filling.
@@ -3591,6 +3843,7 @@ class WorkflowRunner:
                 logger.debug("Schedule NAV for sig=%s blocks=%d", sig[:8], len(block_status))
                 self._nav_enqueue_ts[sig] = time.time()
                 self._log_event("nav_scheduled", sig=sig, blocks=len(block_status), enqueue_ts=self._nav_enqueue_ts[sig])
+                nav_payload_path = str(self._debug_page_artifact_path(sig, "llm_nav_payload.json"))
                 self._emit_llm_enqueued(
                     "nav",
                     sig,
@@ -3601,6 +3854,8 @@ class WorkflowRunner:
                         "focus_hints": self.focus_hints,
                         "task": task,
                         "history": list(self.history),
+                        "xml_reliable": snap.get("xml_reliable"),
+                        "debug_payload_path": nav_payload_path,
                         "enqueue_ts": self._nav_enqueue_ts[sig],
                     },
                 )
@@ -3614,6 +3869,8 @@ class WorkflowRunner:
                     focus_hints=self.focus_hints,
                     history=list(self.history),
                     state_sig=sig,
+                    xml_reliable=snap.get("xml_reliable"),
+                    debug_payload_path=nav_payload_path,
                 )
         else:
             logger.debug("NAV cooldown active for sig=%s", sig[:8])
@@ -4201,11 +4458,46 @@ class WorkflowRunner:
     # Overlay handling
     # ---------------------------
 
-    def _dismiss_overlay_with_nav(self, sig: str, snap: Dict[str, Any], nav: NavigationProposal, task: str) -> bool:
+    def _fallback_overlay_dismiss_actions(self, nav: NavigationProposal) -> List[ActionStep]:
+        """
+        Input: one NavigationProposal whose overlay_kind is dismiss but overlay_dismiss_actions may be empty.
+        Output: candidate ActionStep values that look like safe overlay dismissal controls.
+        Function: tolerates LLM schema mistakes where NO/Close/Cancel is placed in candidate_actions instead of overlay_dismiss_actions.
+        """
+        dismiss_patterns = (
+            r"\bno\b",
+            r"\bcancel\b",
+            r"\bclose\b",
+            r"\bdismiss\b",
+            r"\bdecline\b",
+            r"\bnot\s+now\b",
+            r"\blater\b",
+            r"\bskip\b",
+        )
+        out: List[ActionStep] = []
+        for cand in list(getattr(nav, "candidate_actions", []) or []):
+            for step in list(getattr(cand, "actions", []) or []):
+                label = " ".join(
+                    str(x or "").strip()
+                    for x in (
+                        getattr(step, "anchor_label", ""),
+                        getattr(step, "text", ""),
+                        getattr(step, "reasoning", ""),
+                    )
+                    if str(x or "").strip()
+                ).lower()
+                if not label:
+                    continue
+                if any(re.search(pattern, label) for pattern in dismiss_patterns):
+                    out.append(step)
+                    break
+        return out[:3]
+
+    def _dismiss_overlay_with_nav(self, sig: str, snap: Dict[str, Any], nav: NavigationProposal, task: str) -> OverlayDismissOutcome:
         """
         IPO:
           in : sig+snap (overlay state), nav (LLM1 overlay plan)
-          out: True if overlay cleared
+          out: OverlayDismissOutcome with landing state when overlay cleared
 
         WHEN called:
           - main loop when nav.overlay_kind==dismiss
@@ -4216,9 +4508,15 @@ class WorkflowRunner:
         """
         actions = getattr(nav, "overlay_dismiss_actions", []) or []
         if not actions:
-            logger.debug("LLM1 says overlay at sig=%s but gave no overlay_dismiss_actions.", sig[:8])
-            self._log_event("overlay_dismiss_missing_actions", sig=sig)
-            return False
+            actions = self._fallback_overlay_dismiss_actions(nav)
+            if actions:
+                logger.info("Overlay at sig=%s has no dismiss_actions; using %d candidate fallback action(s).", sig[:8], len(actions))
+                self._log_event("overlay_dismiss_candidate_fallback", sig=sig, count=len(actions))
+            else:
+                logger.debug("LLM1 says overlay at sig=%s but gave no overlay_dismiss_actions.", sig[:8])
+                self._log_event("overlay_dismiss_missing_actions", sig=sig)
+                return OverlayDismissOutcome(resolved=False, next_sig=sig, next_snap=snap, reason="missing_actions")
+        self._attach_action_anchors(actions, snap.get("vid_map") or {})
 
         for step in actions[:5]:
             prev_sig = sig
@@ -4231,8 +4529,15 @@ class WorkflowRunner:
             self.history.append(self._action_key(step))
             time.sleep(self.budget.post_action_settle_s)
 
-            ns = self._capture_and_process()
+            drift = self._check_drift_lightweight(prev_snap, timeout_s=0.8)
+            if drift.kind == "same_state":
+                self._log_event("overlay_dismiss_no_effect", sig=prev_sig, action_key=self._action_key(step), reason=drift.reason)
+                continue
+            if drift.kind == "external":
+                drift = self._handle_external_after_action(prev_sig, self._action_key(step))
+            ns = self._snap_from_drift_result(drift, timeout_s=0.8)
             if not ns:
+                self._log_event("overlay_dismiss_refresh_failed", sig=prev_sig, action_key=self._action_key(step), drift_kind=drift.kind)
                 continue
 
             new_sig = ns["state_sig"]
@@ -4255,10 +4560,17 @@ class WorkflowRunner:
                 logger.info("Overlay resolved; now at sig=%s", sig[:8])
                 self._emit_decision(sig, "overlay_resolved", {"via_action": self._action_signature(step)})
                 self._mark_progress("overlay_resolved", {"sig": sig})
-                return True
+                return OverlayDismissOutcome(
+                    resolved=True,
+                    next_sig=sig,
+                    next_snap=snap,
+                    drift_kind=drift.kind,
+                    action_key=self._action_key(step),
+                    reason="resolved_non_dismiss",
+                )
 
         self._emit_decision(sig, "overlay_unresolved", {"actions_tried": len(actions)})
-        return False
+        return OverlayDismissOutcome(resolved=False, next_sig=sig, next_snap=snap, reason="unresolved")
 
     def _handle_loading_overlay(self, sig: str, snap: Dict[str, Any], task: str) -> None:
         """
@@ -4341,7 +4653,8 @@ class WorkflowRunner:
         """
         if nav and getattr(nav, "candidate_actions", None):
             sig = str(snap.get("state_sig") or "")
-            return self._filter_nav_candidates(sig, list(getattr(nav, "candidate_actions") or []))
+            candidates = self._attach_candidate_anchors(list(getattr(nav, "candidate_actions") or []), snap)
+            return self._filter_nav_candidates(sig, candidates)
 
         if not allow_heuristics:
             return []
@@ -4412,6 +4725,7 @@ class WorkflowRunner:
         self.state_candidates[fam] = list(candidates or [])
         if nav is not None:
             return_actions = list(getattr(nav, "page_return_actions", []) or [])
+            self._attach_action_anchors(return_actions, self.state_snap_cache.get(sig, {}).get("vid_map") or {})
             self.state_return_actions[fam] = return_actions
 
     def _append_state_return_actions(self, sig: str, steps: List[ActionStep]) -> None:
@@ -4431,6 +4745,139 @@ class WorkflowRunner:
                 continue
             bucket.append(step)
             existing.add(key)
+
+    def _node_anchor_label(self, node: Dict[str, Any]) -> str:
+        """
+        Input: one UI node from vid_map.
+        Output: the shortest available semantic label for action anchoring.
+        Function: gives frozen actions a stable human/UI hint in addition to coordinates.
+        """
+        for key in ("label", "text", "content_desc", "ocr_text", "icon_label", "resource_id"):
+            value = str((node or {}).get(key) or "").strip()
+            if value:
+                return value[:80]
+        return ""
+
+    def _attach_action_anchors(self, steps: List[ActionStep], vid_map: Dict[int, Any]) -> List[ActionStep]:
+        """
+        Input: action steps and the vid_map from the snapshot where the plan was produced.
+        Output: the same steps, enriched in-place with frozen frame/center/label/class anchors.
+        Function: prevents later snapshot-local element_id changes from changing where a frozen action points.
+        """
+        for step in list(steps or []):
+            try:
+                if getattr(step, "element_id", None) is None:
+                    continue
+                if getattr(step, "anchor_frame", None) or getattr(step, "anchor_center", None):
+                    # Existing anchors are frozen at planning time. Do not rebind them to a later vid_map.
+                    continue
+                node = (vid_map or {}).get(int(step.element_id))
+                if not node:
+                    continue
+                frame = BaseUI.get_frame(node)
+                x = int(round(float(frame.get("x", 0) or 0)))
+                y = int(round(float(frame.get("y", 0) or 0)))
+                w = int(round(float(frame.get("width", 0) or 0)))
+                h = int(round(float(frame.get("height", 0) or 0)))
+                center = BaseUI.get_center(node)
+                step.anchor_frame = [x, y, w, h]
+                step.anchor_center = [float(center.get("x", x + w / 2.0)), float(center.get("y", y + h / 2.0))]
+                step.anchor_label = self._node_anchor_label(node)
+                step.anchor_class = str(node.get("class") or "")[:80]
+            except Exception:
+                logger.debug("attach action anchor failed", exc_info=True)
+        return steps
+
+    def _attach_candidate_anchors(self, candidates: List[ActionCandidate], snap: Dict[str, Any]) -> List[ActionCandidate]:
+        """
+        Input: navigation candidates and the authoritative planning snapshot.
+        Output: candidates with every step anchored to the planning snapshot's coordinates.
+        Function: freezes LLM action targets before any later capture can reshuffle element_id values.
+        """
+        vid_map = (snap or {}).get("vid_map") or {}
+        for cand in list(candidates or []):
+            self._attach_action_anchors(list(getattr(cand, "actions", []) or []), vid_map)
+        return candidates
+
+    def _return_action_result(self, sig: str, step: ActionStep) -> Optional[Dict[str, Any]]:
+        """
+        Input: state signature and one page-return action.
+        Output: prior semantic result for that return action, or None.
+        Function: prevents retrying return actions that are already known to be non-returning.
+        """
+        fam = self._family_id(sig)
+        return self.state_return_results.get(fam, {}).get(self._action_key(step))
+
+    def _mark_return_action_result(self, sig: str, step: ActionStep, result: Dict[str, Any]) -> None:
+        """
+        Input: state signature, page-return action, and semantic result metadata.
+        Output: updates per-state return-action result memory.
+        Function: records whether a return action reached an ancestor, did nothing, opened a new state, or failed.
+        """
+        fam = self._family_id(sig)
+        key = self._action_key(step)
+        payload = dict(result or {})
+        payload.setdefault("action_key", key)
+        payload.setdefault("timestamp_ms", int(time.time() * 1000))
+        self.state_return_results.setdefault(fam, {})[key] = payload
+
+    def _should_skip_return_action(self, sig: str, step: ActionStep) -> bool:
+        """
+        Input: current state signature and one LLM page-return action.
+        Output: True when previous evidence says this action should not be retried.
+        Function: avoids loops caused by return actions that do nothing or navigate away from ancestors.
+        """
+        prev = self._return_action_result(sig, step)
+        if not prev:
+            return False
+        return str(prev.get("kind") or "") in {
+            "failed",
+            "same_state",
+            "new_state",
+            "known_non_ancestor",
+            "external",
+            "capture_failed",
+        }
+
+    def _mark_return_exhausted(self, sig: str, reason: str) -> None:
+        """
+        Input: state signature and reason string.
+        Output: marks this state's family as having no usable return route.
+        Function: prevents the main loop from repeatedly trying page_return, UTG parent, and BACK on an unreachable page.
+        """
+        fam = self._family_id(sig)
+        if not fam:
+            return
+        self.state_return_exhausted.add(fam)
+        self._log_event("state_return_exhausted", sig=sig, family=fam, reason=reason)
+
+    def _is_return_exhausted(self, sig: str) -> bool:
+        """
+        Input: state signature.
+        Output: True when return attempts for this state's family are already exhausted.
+        Function: lets DFS skip known-dead return routes instead of looping.
+        """
+        return self._family_id(sig) in self.state_return_exhausted
+
+    def _handle_return_exhausted_state(self, cur_sig: str, snap: Dict[str, Any], task: str, reason: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Input: current exhausted state, its snap, task text, and exhaustion reason.
+        Output: a new reachable frontier snap after restart/replay when available, otherwise the original snap.
+        Function: exits dead return loops by marking the state exhausted and moving to global unfinished work.
+        """
+        self._mark_return_exhausted(cur_sig, reason)
+        frontier = self._pick_global_frontier()
+        if frontier and frontier != cur_sig:
+            self._log_event("return_exhausted_frontier_replay", sig=cur_sig, frontier_sig=frontier, reason=reason)
+            self._restart_and_replay(best_target=frontier, task=task, reason=f"return_exhausted_{reason}")
+            ns = self._capture_and_process(timeout=8.0)
+            if ns:
+                next_sig = str(ns.get("state_sig") or cur_sig)
+                self._reconcile_stack_on_external_move(next_sig, snap=ns, record_observation=False)
+                self._schedule_state(next_sig, ns, task)
+                return next_sig, ns
+        self._log_event("return_exhausted_no_frontier", sig=cur_sig, reason=reason)
+        return cur_sig, snap
 
     def _next_unexplored_candidate(self, sig: str, candidates: List[ActionCandidate]) -> Optional[ActionCandidate]:
         """
@@ -4557,17 +5004,193 @@ class WorkflowRunner:
             return {"kind": "ancestor_state", "src_sig": src_sig, "dst_sig": dst_sig}
         return {"kind": "new_state", "src_sig": src_sig, "dst_sig": dst_sig}
 
+    def _record_drift_transition(
+        self,
+        src_sig: str,
+        dst_sig: str,
+        action_payload: Dict[str, Any],
+        src_snap: Dict[str, Any],
+        dst_snap: Dict[str, Any],
+    ) -> None:
+        """
+        Input: source/destination state signatures, action payload, and both authoritative snapshots.
+        Output: records a graph edge and emits the normal transition trace.
+        Function: keeps candidate, return, and graph-replay transition recording consistent.
+        """
+        self._graph_record_transition(src_sig, dst_sig, action_payload, src_snap=src_snap, dst_snap=dst_snap)
+
+    def _handle_external_after_action(self, src_sig: str, action_label: str) -> DriftCheckResult:
+        """
+        Input: source state signature and debug action label after an external foreground is detected.
+        Output: a new lightweight drift result after attempting to restore the target app foreground.
+        Function: centralizes external jump recovery before candidate/return routing continues.
+        """
+        self._log_event("external_foreground_after_action", sig=src_sig, action_key=action_label)
+        try:
+            if self.target_package:
+                self.appium.ensure_foreground(self.target_package, self.target_activity)
+                self.foreground_recoveries += 1
+        except Exception:
+            logger.debug("ensure_foreground failed after external foreground", exc_info=True)
+        expected = self.state_snap_cache.get(src_sig) or {}
+        return self._check_drift_lightweight(expected, timeout_s=0.8) if expected else DriftCheckResult(kind="capture_failed", expected_sig=src_sig)
+
+    def _route_candidate_drift(
+        self,
+        src_sig: str,
+        src_snap: Dict[str, Any],
+        action_payload: Dict[str, Any],
+        action_key: str,
+        drift: DriftCheckResult,
+        task: str,
+    ) -> Tuple[str, Dict[str, Any]]:
+        """
+        Input: source page, consumed candidate action, lightweight drift result, and task text.
+        Output: next state signature and authoritative snapshot.
+        Function: applies the DFS policy after a candidate: same page continues locally; known target tries UTG restore to source; unknown target gets full processing.
+        """
+        if drift.kind == "same_state":
+            self._record_drift_transition(src_sig, src_sig, action_payload, src_snap, src_snap)
+            self._log_event("dfs_candidate_same_state", sig=src_sig, action_key=action_key, reason=drift.reason)
+            return src_sig, src_snap
+
+        if drift.kind == "external":
+            drift = self._handle_external_after_action(src_sig, action_key)
+            if drift.kind == "external":
+                self._recover(src_sig, src_snap, reason=RecoveryReason.FOREGROUND_MISMATCH, task=task, target_sig=src_sig)
+                return src_sig, src_snap
+
+        if drift.kind == "changed_known" and drift.matched_sig:
+            dst_sig = str(drift.matched_sig)
+            dst_snap = self.state_snap_cache.get(dst_sig) or self._snap_from_drift_result(drift)
+            if not dst_snap:
+                self._recover(src_sig, src_snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=src_sig)
+                return src_sig, src_snap
+            self._record_drift_transition(src_sig, dst_sig, action_payload, src_snap, dst_snap)
+            self._schedule_state(dst_sig, dst_snap, task)
+            if dst_sig == src_sig:
+                return src_sig, src_snap
+
+            self._log_event("utg_restore_start", sig=src_sig, from_sig=dst_sig, target_sig=src_sig, action_key=action_key)
+            reached, restored = self._navigate_via_graph(start_sig=dst_sig, start_snap=dst_snap, target_sig=src_sig, task=task)
+            if reached:
+                self._log_event("utg_restore_success", sig=src_sig, from_sig=dst_sig, target_sig=src_sig, action_key=action_key)
+                return str(restored.get("state_sig") or src_sig), restored
+
+            actual_sig = str((restored or {}).get("state_sig") or dst_sig)
+            self._log_event("utg_restore_failed", sig=src_sig, from_sig=dst_sig, actual_sig=actual_sig, action_key=action_key)
+            self._reconcile_stack_on_external_move(actual_sig, snap=restored or dst_snap, record_observation=False)
+            self._schedule_state(actual_sig, restored or dst_snap, task)
+            return actual_sig, restored or dst_snap
+
+        if drift.kind == "changed_unknown":
+            dst_snap = self._snap_from_drift_result(drift, timeout_s=0.8)
+            if not dst_snap:
+                self._recover(src_sig, src_snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=None)
+                return src_sig, src_snap
+            dst_sig = str(dst_snap.get("state_sig") or "")
+            self._record_drift_transition(src_sig, dst_sig, action_payload, src_snap, dst_snap)
+            self._enter_state(from_sig=src_sig, to_sig=dst_sig, via_action=action_key)
+            self._schedule_state(dst_sig, dst_snap, task)
+            return dst_sig, dst_snap
+
+        if drift.kind == "capture_failed":
+            self._recover(src_sig, src_snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=None)
+            refreshed = self._refresh_after_possible_change(src_snap)
+            return str(refreshed.get("state_sig") or src_sig), refreshed
+
+        return src_sig, src_snap
+
+    def _route_return_drift(
+        self,
+        cur_sig: str,
+        snap: Dict[str, Any],
+        step: ActionStep,
+        action_payload: Dict[str, Any],
+        drift: DriftCheckResult,
+        task: str,
+    ) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Input: exhausted page, one return action, its action payload, and lightweight drift result.
+        Output: (handled, next_sig, next_snap); handled=False means try the next return action.
+        Function: classifies return-action results and updates DFS stack only when a real page move happens.
+        """
+        step_key = self._action_key(step)
+        if drift.kind == "external":
+            drift = self._handle_external_after_action(cur_sig, step_key)
+            if drift.kind == "external":
+                self._mark_return_action_result(cur_sig, step, {"kind": "external", "foreground_package": drift.foreground_package})
+                return False, cur_sig, snap
+
+        if drift.kind == "same_state":
+            self._record_drift_transition(cur_sig, cur_sig, action_payload, snap, snap)
+            self._mark_return_action_result(cur_sig, step, {"kind": "same_state", "reason": drift.reason})
+            return False, cur_sig, snap
+
+        if drift.kind == "changed_known" and drift.matched_sig:
+            dst_sig = str(drift.matched_sig)
+            dst_snap = self.state_snap_cache.get(dst_sig) or self._snap_from_drift_result(drift)
+            if not dst_snap:
+                self._mark_return_action_result(cur_sig, step, {"kind": "capture_failed", "reason": "known_snap_missing"})
+                return False, cur_sig, snap
+            self._record_drift_transition(cur_sig, dst_sig, action_payload, snap, dst_snap)
+            if dst_sig in self.dfs_stack:
+                self._mark_return_action_result(cur_sig, step, {"kind": "returned_to_ancestor", "dst_sig": dst_sig})
+                self._pop_stack_to(dst_sig, mark_explored=True)
+                self._schedule_state(dst_sig, dst_snap, task)
+                return True, dst_sig, dst_snap
+
+            self._mark_return_action_result(cur_sig, step, {"kind": "known_non_ancestor", "dst_sig": dst_sig})
+            self._reconcile_stack_on_external_move(dst_sig, snap=dst_snap, record_observation=False)
+            self._schedule_state(dst_sig, dst_snap, task)
+            return True, dst_sig, dst_snap
+
+        if drift.kind == "changed_unknown":
+            dst_snap = self._snap_from_drift_result(drift, timeout_s=0.8)
+            if not dst_snap:
+                self._mark_return_action_result(cur_sig, step, {"kind": "capture_failed", "reason": "unknown_capture_failed"})
+                return False, cur_sig, snap
+            dst_sig = str(dst_snap.get("state_sig") or "")
+            self._record_drift_transition(cur_sig, dst_sig, action_payload, snap, dst_snap)
+            self._mark_return_action_result(cur_sig, step, {"kind": "new_state", "dst_sig": dst_sig})
+            self._enter_state(from_sig=cur_sig, to_sig=dst_sig, via_action=step_key)
+            self._schedule_state(dst_sig, dst_snap, task)
+            return True, dst_sig, dst_snap
+
+        if drift.kind == "capture_failed":
+            self._mark_return_action_result(cur_sig, step, {"kind": "capture_failed", "reason": drift.reason})
+            return False, cur_sig, snap
+
+        return False, cur_sig, snap
+
+    def _candidate_noop_retry_exhausted(self, src_sig: str, action_payload: Dict[str, Any], action_key: str) -> bool:
+        """
+        Input: source state, executed candidate payload, and the candidate key used by DFS bookkeeping.
+        Output: True when this candidate has already received its allowed noop retry budget.
+        Function: gives same-page/noop candidate clicks one extra chance without retrying other outcomes.
+        """
+        fam = self._family_id(src_sig)
+        payload_key = self._action_payload_key(action_payload)
+        count = int(self.action_nochange_counts.get((fam, payload_key), 0) or 0)
+        limit = max(1, int(getattr(self.budget, "blacklist_nochange_threshold", 2) or 2))
+        if count >= limit:
+            self._log_event("dfs_candidate_noop_exhausted", sig=src_sig, action_key=action_key, noop_count=count, limit=limit)
+            return True
+        self._log_event("dfs_candidate_noop_retry", sig=src_sig, action_key=action_key, noop_count=count, limit=limit)
+        return False
+
     def _execute_candidate_branch(self, src_sig: str, snap: Dict[str, Any], cand: ActionCandidate, task: str) -> Tuple[str, Dict[str, Any]]:
         """
         Input: current state snapshot and one LLM candidate.
         Output: (next_sig, next_snap) after executing/classifying the candidate branch.
-        Function: replaces probe-return with direct DFS execution of one candidate in LLM order.
+        Function: consumes changed candidates immediately, but gives same-page/noop candidates one retry before closing them.
         """
         action_key = self._candidate_key(cand)
+        action_payload = self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {})
         self._emit_decision(
             src_sig,
             "next_step",
-            {"plan": "dfs_candidate_commit", "candidate_key": action_key, "actions": self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {})},
+            {"plan": "dfs_candidate_commit", "candidate_key": action_key, "actions": action_payload},
         )
         ok = self._execute_action_sequence(cand.actions, snap)
         self._mark_attempted(src_sig, cand)
@@ -4577,93 +5200,85 @@ class WorkflowRunner:
             refreshed = self._refresh_after_possible_change(snap)
             return str(refreshed.get("state_sig") or src_sig), refreshed
 
-        ok_pkg, pkg = self._foreground_is_allowed()
-        if not ok_pkg:
+        drift = self._check_drift_lightweight(snap, timeout_s=0.8)
+        if drift.kind == "external":
             try:
                 self._save_external_capture_after_candidate(src_sig, cand, action_key)
             except Exception:
                 logger.warning("external capture artifact failed; continuing foreground recovery", exc_info=True)
+        next_sig, next_snap = self._route_candidate_drift(src_sig, snap, action_payload, action_key, drift, task)
+
+        # Candidate success normally consumes the source action immediately. The only exception is a same-state/noop:
+        # retry once because games/emulators may swallow a click or settle slowly, then close it on the second noop.
+        if drift.kind == "same_state":
+            if self._candidate_noop_retry_exhausted(src_sig, action_payload, action_key):
+                self._mark_explored(src_sig, cand)
+        else:
             self._mark_explored(src_sig, cand)
-            self._log_event("dfs_candidate_external", sig=src_sig, action_key=action_key, foreground_package=pkg)
-            try:
-                if self.target_package:
-                    self.appium.ensure_foreground(self.target_package, self.target_activity)
-                    self.foreground_recoveries += 1
-            except Exception:
-                logger.debug("ensure_foreground failed after external candidate", exc_info=True)
-            refreshed = self._refresh_after_possible_change(snap)
-            return str(refreshed.get("state_sig") or src_sig), refreshed
-
-        dst_snap = self._capture_and_process()
-        if not dst_snap:
-            self._mark_explored(src_sig, cand)
-            self._recover(src_sig, snap, reason=RecoveryReason.CAPTURE_FAILED_AFTER_FORWARD, task=task, target_sig=None)
-            refreshed = self._refresh_after_possible_change(snap)
-            return str(refreshed.get("state_sig") or src_sig), refreshed
-
-        dst_sig = str(dst_snap.get("state_sig") or "")
-        self._graph_record_transition(
-            src_sig,
-            dst_sig,
-            self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {}),
-            src_snap=snap,
-            dst_snap=dst_snap,
-        )
-        result = self._classify_after_candidate(src_sig, dst_snap)
-        kind = str(result.get("kind") or "")
-
-        if kind == "same_state":
-            self._mark_explored(src_sig, cand)
-            return src_sig, dst_snap
-
-        if kind == "ancestor_state":
-            self._mark_explored(src_sig, cand)
-            self._append_state_return_actions(src_sig, list(cand.actions or []))
-            reached, restored = self._navigate_via_graph(start_sig=dst_sig, start_snap=dst_snap, target_sig=src_sig, task=task)
-            if reached:
-                self._log_event("dfs_ancestor_restored", sig=src_sig, ancestor_sig=dst_sig, action_key=action_key)
-                return str(restored.get("state_sig") or src_sig), restored
-            self._log_event("dfs_ancestor_restore_failed", sig=src_sig, ancestor_sig=dst_sig, action_key=action_key)
-            self._reconcile_stack_on_external_move(dst_sig, snap=dst_snap, record_observation=False)
-            return dst_sig, dst_snap
-
-        if kind == "new_state":
-            self._enter_state(from_sig=src_sig, to_sig=dst_sig, via_action=action_key)
-            self._schedule_state(dst_sig, dst_snap, task)
-            return dst_sig, dst_snap
-
-        self._mark_explored(src_sig, cand)
-        return src_sig, snap
+        return next_sig, next_snap
 
     def _return_from_current_state(self, cur_sig: str, snap: Dict[str, Any], task: str) -> Tuple[str, Dict[str, Any]]:
         """
         Input: exhausted current state and its snapshot.
-        Output: (next_sig, next_snap) after page_return_actions/BACK and lightweight drift refresh.
-        Function: performs DFS branch closure, preferring LLM page_return_actions before system BACK.
+        Output: (next_sig, next_snap) after one usable return action, UTG parent restore, or system BACK.
+        Function: closes an exhausted DFS page while recording return-action semantics to avoid loops.
         """
         self._mark_current_branch_explored(cur_sig)
+        if self._is_return_exhausted(cur_sig):
+            return self._handle_return_exhausted_state(cur_sig, snap, task, "already_exhausted")
+
         return_actions = list(self.state_return_actions.get(self._family_id(cur_sig), []) or [])
-        ok = False
         if return_actions:
             self._emit_decision(cur_sig, "next_step", {"plan": "page_return_actions", "count": len(return_actions)})
-            ok = self._execute_action_sequence(return_actions, snap)
-        if not ok:
-            self._emit_decision(cur_sig, "next_step", {"plan": "fallback_back_after_page_return"})
-            back = ActionStep(action=ActionType.BACK, element_id=None, priority=1, reasoning="dfs_page_return_fallback_back")
-            ok = self._execute_action(back, snap.get("vid_map") or {}, cur_sig)
-            if ok:
-                self.action_count += 1
-                self.history.append(self._action_key(back))
-                time.sleep(self.budget.post_action_settle_s)
+        for step in return_actions:
+            if self._should_skip_return_action(cur_sig, step):
+                self._log_event("page_return_skip_known_bad", sig=cur_sig, action_key=self._action_key(step), result=self._return_action_result(cur_sig, step) or {})
+                continue
+            action_payload = self._actions_signature([step], vid_map=snap.get("vid_map") or {})
+            self._emit_decision(cur_sig, "next_step", {"plan": "page_return_action", "action": action_payload})
+            ok = self._execute_action_sequence([step], snap)
+            if not ok:
+                self._mark_return_action_result(cur_sig, step, {"kind": "failed", "failure": self.last_action_failure or {}})
+                continue
+            drift = self._check_drift_lightweight(snap, timeout_s=0.8)
+            handled, next_sig, next_snap = self._route_return_drift(cur_sig, snap, step, action_payload, drift, task)
+            if handled:
+                return next_sig, next_snap
 
-        refreshed = self._refresh_after_possible_change(snap)
-        next_sig = str(refreshed.get("state_sig") or cur_sig)
-        if next_sig in self.dfs_stack:
-            self._pop_stack_to(next_sig, mark_explored=True)
-        else:
-            self._reconcile_stack_on_external_move(next_sig, snap=refreshed, record_observation=True)
-        self._schedule_state(next_sig, refreshed, task)
-        return next_sig, refreshed
+        parent_sig = ""
+        if self.dfs_stack and self.dfs_stack[-1] == cur_sig and len(self.dfs_stack) >= 2:
+            parent_sig = str(self.dfs_stack[-2] or "")
+        if parent_sig:
+            self._emit_decision(cur_sig, "next_step", {"plan": "utg_parent_after_return_actions", "target_sig": parent_sig})
+            reached, restored = self._navigate_via_graph(start_sig=cur_sig, start_snap=snap, target_sig=parent_sig, task=task)
+            if reached:
+                restored_sig = str(restored.get("state_sig") or parent_sig)
+                self._pop_stack_to(restored_sig, mark_explored=True)
+                self._schedule_state(restored_sig, restored, task)
+                return restored_sig, restored
+            actual_sig = str((restored or {}).get("state_sig") or cur_sig)
+            if actual_sig != cur_sig:
+                self._reconcile_stack_on_external_move(actual_sig, snap=restored, record_observation=False)
+                self._schedule_state(actual_sig, restored, task)
+                return actual_sig, restored
+
+        self._emit_decision(cur_sig, "next_step", {"plan": "fallback_back_after_page_return"})
+        back = ActionStep(action=ActionType.BACK, element_id=None, priority=1, reasoning="dfs_page_return_fallback_back")
+        if self._should_skip_return_action(cur_sig, back) or self._is_action_blacklisted(cur_sig, self._action_key(back)):
+            return self._handle_return_exhausted_state(cur_sig, snap, task, "fallback_back_unusable")
+        action_payload = self._actions_signature([back], vid_map=snap.get("vid_map") or {})
+        ok = self._execute_action(back, snap.get("vid_map") or {}, cur_sig)
+        if ok:
+            self.action_count += 1
+            self.history.append(self._action_key(back))
+            time.sleep(self.budget.post_action_settle_s)
+            drift = self._check_drift_lightweight(snap, timeout_s=0.8)
+            handled, next_sig, next_snap = self._route_return_drift(cur_sig, snap, back, action_payload, drift, task)
+            if handled:
+                return next_sig, next_snap
+            return self._handle_return_exhausted_state(cur_sig, snap, task, "fallback_back_no_effect")
+        self._mark_return_action_result(cur_sig, back, {"kind": "failed", "failure": self.last_action_failure or {}})
+        return self._handle_return_exhausted_state(cur_sig, snap, task, "fallback_back_failed")
 
     # ---------------------------
     # Probing with back-like detection + custom return support
@@ -5927,8 +6542,7 @@ class WorkflowRunner:
                     ok2 = self._recover(cur_sig, snap2, reason=RecoveryReason.OVERLAY_DURING_BACKTRACE, task=task, target_sig=target_sig)
                     if not ok2:
                         return False
-
-                snap3 = self._capture_and_process()
+                snap3 = resolved.next_snap if resolved else self._capture_and_process()
                 if snap3 and str(snap3.get("state_sig") or "") == target_sig:
                     return True
 
@@ -6452,6 +7066,10 @@ class WorkflowRunner:
                         action=self._safe_action_type(a.get("action", "click")),
                         element_id=a.get("element_id"),
                         text=a.get("text"),
+                        anchor_frame=a.get("anchor_frame"),
+                        anchor_center=a.get("anchor_center"),
+                        anchor_label=str(a.get("anchor_label") or ""),
+                        anchor_class=str(a.get("anchor_class") or ""),
                         priority=1,
                         reasoning="replay",
                     )
@@ -6521,7 +7139,17 @@ class WorkflowRunner:
                     else:
                         return False, act
 
-            step = ActionStep(action=step_type, element_id=used_id, text=text, priority=1, reasoning="graph_replay")
+            step = ActionStep(
+                action=step_type,
+                element_id=used_id,
+                text=text,
+                anchor_frame=raw.get("anchor_frame"),
+                anchor_center=raw.get("anchor_center"),
+                anchor_label=str(raw.get("anchor_label") or ""),
+                anchor_class=str(raw.get("anchor_class") or ""),
+                priority=1,
+                reasoning="graph_replay",
+            )
             if not self._execute_action(step, vid_map, str(snap.get("state_sig") or "")):
                 return False, act
             self.action_count += 1
@@ -6547,8 +7175,9 @@ class WorkflowRunner:
         task: str,
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Best-effort in-app navigation using only known graph edges (no restart).
-        Returns (reached, final_snapshot).
+        Input: start state/snapshot, target state, and task text.
+        Output: (reached, final_snapshot) after replaying known graph edges.
+        Function: restores a known page through UTG edges, using lightweight drift checks after each replay step.
         """
         if not start_sig or not target_sig or not start_snap:
             return False, start_snap
@@ -6568,9 +7197,19 @@ class WorkflowRunner:
                 self._log_event("graph_nav_failed", sig=cur_sig, step_index=i + 1, reason="action_exec_failed")
                 return False, snap
 
-            snap2 = self._capture_and_process()
+            drift = self._check_drift_lightweight(snap, timeout_s=0.8)
+            if drift.kind == "external":
+                drift = self._handle_external_after_action(cur_sig, self._action_payload_key(used_act))
+            if drift.kind == "same_state":
+                snap2 = snap
+            elif drift.kind == "changed_known" and drift.matched_sig:
+                snap2 = self.state_snap_cache.get(drift.matched_sig) or self._snap_from_drift_result(drift, timeout_s=0.8)
+            elif drift.kind == "changed_unknown":
+                snap2 = self._snap_from_drift_result(drift, timeout_s=0.8)
+            else:
+                snap2 = None
             if not snap2:
-                self._log_event("graph_nav_failed", sig=cur_sig, step_index=i + 1, reason="capture_failed")
+                self._log_event("graph_nav_failed", sig=cur_sig, step_index=i + 1, reason=drift.kind or "capture_failed")
                 return False, snap
 
             new_sig = snap2["state_sig"]
@@ -6747,9 +7386,12 @@ class WorkflowRunner:
             # Overlay during replay: attempt resolve; if fails, stop replay
             nav = self.nav_cache.get(cur)
             if nav and self._overlay_kind_value(nav) == OverlayKind.DISMISS.value:
-                if not self._dismiss_overlay_with_nav(cur, snap, nav, task):
+                resolved_overlay = self._dismiss_overlay_with_nav(cur, snap, nav, task)
+                if not resolved_overlay:
                     self._log_event("replay_diverged", sig=cur, step_index=i + 1, reason="overlay_unresolved")
                     break
+                cur = str(resolved_overlay.next_sig or cur)
+                snap = resolved_overlay.next_snap or snap
 
             if not ok:
                 self._log_event("replay_diverged", sig=cur, step_index=i + 1, reason="action_failed")
@@ -7076,6 +7718,31 @@ class WorkflowRunner:
             self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "visual_probe_exception"})
             return False
 
+    def _tap_frozen_action_anchor(self, step: ActionStep, sig_for_trace: str, action_sig: Dict[str, Any], common_extra: Dict[str, Any]) -> bool:
+        """
+        Input: an action step that may contain anchor_center/anchor_frame from its planning snapshot.
+        Output: True when a coordinate tap was sent through Appium, otherwise False.
+        Function: executes frozen candidate targets without trusting snapshot-local element_id values from later captures.
+        """
+        center = getattr(step, "anchor_center", None) or None
+        if isinstance(center, (list, tuple)) and len(center) >= 2:
+            try:
+                self.appium.tap(float(center[0]), float(center[1]))
+                self._emit_action(sig_for_trace, action_sig, "after", {"success": True, "via": "anchor_center", **common_extra})
+                return True
+            except Exception:
+                logger.debug("anchor center tap failed", exc_info=True)
+        frame = getattr(step, "anchor_frame", None) or None
+        if isinstance(frame, (list, tuple)) and len(frame) >= 4:
+            try:
+                x, y, w, h = [float(v) for v in frame[:4]]
+                self.appium.tap(x + w / 2.0, y + h / 2.0)
+                self._emit_action(sig_for_trace, action_sig, "after", {"success": True, "via": "anchor_frame", **common_extra})
+                return True
+            except Exception:
+                logger.debug("anchor frame tap failed", exc_info=True)
+        return False
+
     def _execute_action(self, step: ActionStep, vid_map: Dict[int, Any], cur_sig: Optional[str] = None) -> bool:
         """
         IPO:
@@ -7129,6 +7796,8 @@ class WorkflowRunner:
                     return False
 
             if step.action == ActionType.CLICK:
+                if self._tap_frozen_action_anchor(step, sig_for_trace, action_sig, common_extra):
+                    return True
                 node = vid_map.get(step.element_id or -1)
                 if not node:
                     if step.element_id is None and (getattr(step, "bbox", None) or (getattr(step, "x", None) is not None and getattr(step, "y", None) is not None)):
@@ -7302,8 +7971,11 @@ class WorkflowRunner:
     # ---------------------------
 
     def _visual_action_suffix(self, step: ActionStep) -> str:
-        if getattr(step, "element_id", None) is not None:
-            return ""
+        anchor = getattr(step, "anchor_frame", None) or None
+        if isinstance(anchor, (list, tuple)) and len(anchor) >= 4:
+            label = re.sub(r"\s+", " ", str(getattr(step, "anchor_label", "") or "")).strip()[:32]
+            cls = str(getattr(step, "anchor_class", "") or "").strip()[:32]
+            return f":anchor={list(anchor[:4])}:label={label}:class={cls}"
         bbox = getattr(step, "bbox", None) or None
         x = getattr(step, "x", None)
         y = getattr(step, "y", None)
@@ -7336,6 +8008,14 @@ class WorkflowRunner:
 
     def _action_signature(self, step: ActionStep, *, vid_map: Optional[Dict[int, Any]] = None) -> Dict[str, Any]:
         out: Dict[str, Any] = {"action": step.action.value, "element_id": step.element_id, "text": step.text}
+        if getattr(step, "anchor_frame", None):
+            out["anchor_frame"] = getattr(step, "anchor_frame", None)
+        if getattr(step, "anchor_center", None):
+            out["anchor_center"] = getattr(step, "anchor_center", None)
+        if getattr(step, "anchor_label", ""):
+            out["anchor_label"] = getattr(step, "anchor_label", "")
+        if getattr(step, "anchor_class", ""):
+            out["anchor_class"] = getattr(step, "anchor_class", "")
         try:
             if step.element_id is None:
                 if getattr(step, "x", None) is not None:
@@ -7412,4 +8092,10 @@ class WorkflowRunner:
             return "max_actions_reached"
         if self.no_new_state_count >= self.budget.saturation_limit:
             return "state_saturation_reached"
+        try:
+            cur_sig = self.recent_states[-1] if self.recent_states else ""
+            if cur_sig and self._is_return_exhausted(cur_sig) and self._is_state_exhausted(cur_sig) and not self._pick_global_frontier():
+                return "return_exhausted"
+        except Exception:
+            pass
         return ""

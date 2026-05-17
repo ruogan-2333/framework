@@ -59,7 +59,10 @@ def _with_retry(fn: Callable[[], R], attempts: int = 3, delay: float = 0.25) -> 
         except Exception as exc:  # pragma: no cover - depends on real driver
             last_err = exc
             remaining = int(attempts) - i - 1
-            logger.debug("Retryable failure: %s, remaining=%s", exc, max(0, remaining))
+            if "NoSuchElement" in exc.__class__.__name__:
+                logger.debug("Retryable NoSuchElement failure, remaining=%s", max(0, remaining))
+            else:
+                logger.debug("Retryable failure: %s, remaining=%s", exc, max(0, remaining))
             if remaining > 0:
                 time.sleep(delay)
     if last_err:

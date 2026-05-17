@@ -13,10 +13,11 @@ Performance notes:
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from typing import List, Tuple
 
 import cv2 as cv
@@ -61,11 +62,26 @@ def keep_root_logging():
         root.disabled = disabled
 
 
+@contextmanager
+def quiet_stdio():
+    """
+    Input: no arguments.
+    Output: temporarily redirects stdout/stderr to in-memory buffers.
+    Function: suppresses PaddleOCR initialization banners such as ppocr DEBUG Namespace output.
+    """
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        yield
+
+
 _OCR = None
 
 
 def _get_ocr():
-    """Create (or reuse) PaddleOCR predictor. Heavy init => cache singleton."""
+    """
+    Input: no arguments.
+    Output: cached PaddleOCR predictor instance.
+    Function: creates the heavy OCR singleton while suppressing noisy third-party initialization logs.
+    """
     global _OCR
     if _OCR is None:
         os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "1")
@@ -73,7 +89,9 @@ def _get_ocr():
         os.environ.setdefault("DISABLE_AUTO_LOGGING_CONFIG", "1")
 
         original_level = logging.getLogger().getEffectiveLevel()
-        with keep_root_logging():
+        logging.getLogger("ppocr").setLevel(logging.ERROR)
+        logging.getLogger("paddlex").setLevel(logging.ERROR)
+        with keep_root_logging(), quiet_stdio():
             from paddleocr import PaddleOCR
 
             _OCR = PaddleOCR(
@@ -118,7 +136,11 @@ class PaddleOCRClient:
             img = cv.cvtColor(img, cv.COLOR_BGRA2BGR)
 
         vis = img.copy() if debug_output else None
-        result = ocr.ocr(img, cls=False)
+        if debug_output:
+            result = ocr.ocr(img, cls=False)
+        else:
+            with quiet_stdio():
+                result = ocr.ocr(img, cls=False)
 
         elements: List[Tuple[int, int, int, int, str, float]] = []
         lines = result[0] if isinstance(result, list) and len(result) == 1 and isinstance(result[0], list) else result

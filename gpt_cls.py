@@ -27,6 +27,7 @@ import os
 import re
 import time
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, Field
@@ -118,6 +119,10 @@ class ActionStep(BaseModel):
     action: ActionType = Field(..., description="Concrete action type")
     element_id: Optional[int] = Field(None, description="UI element id for click/input/back-like visible controls")
     text: Optional[str] = Field(None, description="Text to input when action==input")
+    anchor_frame: Optional[List[int]] = Field(None, description="Frozen [x,y,width,height] frame from the snapshot where this action was planned")
+    anchor_center: Optional[List[float]] = Field(None, description="Frozen [x,y] center from the snapshot where this action was planned")
+    anchor_label: str = Field("", description="Frozen short label/text/icon hint for the planned element")
+    anchor_class: str = Field("", description="Frozen UI class/source hint for the planned element")
     priority: int = Field(0, description="Higher executes earlier when same group")
     reasoning: str = Field("", description="Short reason, preferably <=6 words. No chain-of-thought.")
 
@@ -405,8 +410,9 @@ ACTION STEP RULES:
 
 OVERLAY RULES:
 - overlay_kind must be one of: none | dismiss | workflow | loading.
+- If overlay_kind=dismiss, you MUST provide overlay_dismiss_actions.
 - If overlay_kind=dismiss, put safe close/deny/not-now/OK actions in overlay_dismiss_actions.
-- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty unless clearly justified.
+- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty .
 
 CANDIDATE ACTION RULES:
 - candidate_actions are exploration actions only.
@@ -833,6 +839,7 @@ class GPTClient:
         history: Optional[List[str]] = None,
         state_sig: str = "",
         xml_reliable: Optional[bool] = None,
+        debug_payload_path: Optional[str] = None,
     ) -> NavigationProposal:
         """
         Ask LLM1 to interpret the current UI and propose navigation actions.
@@ -843,10 +850,13 @@ class GPTClient:
         - block_status: questionnaire block runtime status; this is the
           navigation hint for questionnaire coverage.
         - task/history/state_sig: exploration goal and recent context.
+        - xml_reliable: whether XML-derived UI structure should be trusted.
+        - debug_payload_path: optional JSON file receiving the exact payload sent as user text.
 
         Processing:
         - Build a small UI digest.
         - Send block_status as questionnaire state context.
+        - Persist the exact payload when debug_payload_path is provided.
 
         Output:
         - NavigationProposal with overlay handling and candidate actions.
@@ -863,6 +873,13 @@ class GPTClient:
             "xml_reliable": xml_reliable
 
         }
+        if debug_payload_path:
+            try:
+                path = Path(debug_payload_path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.debug("failed to write navigation debug payload: %s", debug_payload_path, exc_info=True)
 
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": _NAV_SYSTEM},
