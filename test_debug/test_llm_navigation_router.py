@@ -40,7 +40,7 @@ from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 # ====================== Config ======================
 INTERMEDIATE_ROOT = PROJECT_ROOT / "test_debug" / "intermediate"
 OUTPUT_ROOT = PROJECT_ROOT / "test_debug" / "llm_navigation_router_output"
-QUESTIONNAIRE_DIR = PROJECT_ROOT / "questionnaire-v2" / "games"
+QUESTIONNAIRE_DIR = PROJECT_ROOT / "questionnaire-UI" / "games"
 
 # Empty string means using the latest run directory under INTERMEDIATE_ROOT.
 SOURCE_RUN_ID = r"F:\workplace\framework\test_debug\intermediate\20260516_033838"

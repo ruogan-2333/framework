@@ -32,7 +32,7 @@ from typing import Dict, Iterable, List, Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CSV_PATH = PROJECT_ROOT / "metadata_downloaded_apps.csv"
-DEFAULT_QUESTIONNAIRE_ROOT = PROJECT_ROOT / "questionnaire-v2"
+DEFAULT_QUESTIONNAIRE_ROOT = PROJECT_ROOT / "questionnaire-UI"
 DEFAULT_TRACE_ROOT = PROJECT_ROOT / "traces"
 DEFAULT_BATCH_ROOT = PROJECT_ROOT / "test_debug" / "batch_runs"
 
@@ -80,7 +80,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--per-app-time-budget", type=float, default=300.0, help="Seconds per app workflow run.")
     parser.add_argument("--appium-url", default="http://127.0.0.1:4723", help="Appium server URL.")
     parser.add_argument("--device-name", default="emulator-5554", help="Appium deviceName capability.")
-    parser.add_argument("--questionnaire-root", default=str(DEFAULT_QUESTIONNAIRE_ROOT), help="questionnaire-v2 root.")
+    parser.add_argument("--questionnaire-root", default=str(DEFAULT_QUESTIONNAIRE_ROOT), help="Questionnaire root containing games/social_apps/others and optional addition.")
     parser.add_argument("--trace-root", default=str(DEFAULT_TRACE_ROOT), help="Workflow trace root.")
     parser.add_argument("--batch-root", default=str(DEFAULT_BATCH_ROOT), help="Batch summary output root.")
     parser.add_argument("--main-path", default=str(PROJECT_ROOT / "main.py"), help="Path to main.py.")

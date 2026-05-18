@@ -36,6 +36,19 @@ _META_SELECTED_FIELDS = [
 ]
 
 
+def _row_first_value(row: Dict[str, Any], keys: list[str]) -> Any:
+    """
+    Input: one CSV row and an ordered list of possible column names.
+    Output: first non-empty column value, or an empty string when none exists.
+    Function: lets metadata loading tolerate CSVs with different field names.
+    """
+    for key in keys:
+        value = row.get(key, "")
+        if str(value or "").strip():
+            return value
+    return ""
+
+
 class MainlineConsoleFilter(logging.Filter):
     """
     Input: logging records from all project and dependency loggers.
@@ -101,17 +114,43 @@ def _read_csv_rows(csv_path: Path) -> list[Dict[str, Any]]:
 
 
 def _find_metadata_row_by_app_id(rows: list[Dict[str, Any]], app_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Input: CSV rows and the Android package id requested from CLI.
+    Output: matching metadata row, or None when the app is absent.
+    Function: supports both old metadata exports (`appId`) and downloaded-app CSVs (`APID`).
+    """
     target = str(app_id or "").strip()
+    package_keys = ["appId", "APID", "package", "package_name", "packageName", "app_id"]
     for row in rows:
-        if str(row.get("appId", "")).strip() == target:
+        package_id = str(_row_first_value(row, package_keys) or "").strip()
+        if package_id == target:
             return row
     return None
 
 
 def _pick_metadata_fields(row: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+    """
+    Input: one metadata CSV row in either old app-store format or downloaded-app format.
+    Output: normalized metadata payload consumed by GPTClient.analyze_app_metadata.
+    Function: fills missing fields with empty strings while preserving useful description/category signals.
+    """
+    out: Dict[str, Any] = {key: "" for key in _META_SELECTED_FIELDS}
     for key in _META_SELECTED_FIELDS:
         out[key] = row.get(key, "")
+
+    # New downloaded-app CSVs expose `description` and `category`, while old metadata
+    # exports may expose `summary`, `genre`, `genreId`, or serialized `categories`.
+    out["description"] = _row_first_value(row, ["description", "Description", "desc"])
+    out["descriptionHTML"] = _row_first_value(row, ["descriptionHTML", "description_html"])
+    out["summary"] = _row_first_value(row, ["summary", "app_summary", "short_description"])
+    out["contentRating"] = _row_first_value(row, ["contentRating", "content_rating"])
+    out["contentRatingDescription"] = _row_first_value(row, ["contentRatingDescription", "content_rating_description"])
+    out["offersIAP"] = _row_first_value(row, ["offersIAP", "offers_iap", "iap"])
+    out["inAppProductPrice"] = _row_first_value(row, ["inAppProductPrice", "in_app_product_price"])
+    category = _row_first_value(row, ["genre", "category", "Category"])
+    out["genre"] = category
+    out["genreId"] = _row_first_value(row, ["genreId", "genre_id", "category_id"])
+    out["categories"] = _row_first_value(row, ["categories", "category", "Category"])
     return out
 
 
@@ -478,4 +517,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-

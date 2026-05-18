@@ -13,8 +13,9 @@ This file intentionally keeps only three public runtime structures:
 3. `block_status`
    Runtime counters keyed by block id.
 
-The main workflow is not wired to this file yet. The purpose of this layer is
-to make router-answer -> matched-block debugging simple and inspectable first.
+The loader reads the questionnaire directory passed by the caller directly. If
+the selected main questionnaire has a sibling `addition` directory, the loader
+also merges that supplemental UI questionnaire for the same run.
 """
 
 from __future__ import annotations
@@ -69,32 +70,43 @@ class QuestionnaireState:
         self.routers: List[Dict[str, Any]] = []
         self.blocks: List[Dict[str, Any]] = []
         self.block_status: Dict[str, Dict[str, Any]] = {}
+        self.loaded_dirs: List[str] = []
 
     @staticmethod
     def load_from_questionnaire_dir(questionnaire_dir: str) -> "QuestionnaireState":
         """
-        Load generated split files by passing the original questionnaire dir.
+        Load router/block files from the exact questionnaire directory passed in.
 
         Input:
         - questionnaire_dir:
-          Original questionnaire collection path, e.g. `questionnaire-v2/games`.
+          Directory containing questionnaire_routers.json/questionnaire_blocks.json.
+          If a sibling `addition` directory exists, it is merged automatically
+          unless `questionnaire_dir` itself is `addition`.
 
         Processing:
-        - Infer the generated split folder from the collection name:
-          `mytest2/questionnaire_handler/chain_debug/<collection>_split`.
-        - Delegate to `load_routers_and_blocks(...)`.
+        - Read the provided directory directly.
+        - Optionally read sibling `addition`.
+        - Check duplicate router/block ids before initializing runtime status.
 
         Output:
         - QuestionnaireState
           A loaded instance with `routers`, `blocks`, and `block_status`.
         """
         qdir = Path(questionnaire_dir).resolve()
-        collection_name = qdir.name
-        project_root = Path(__file__).resolve().parent
-        split_dir = project_root / "mytest2" / "questionnaire_handler" / "chain_debug" / f"{collection_name}_split"
-
         inst = QuestionnaireState()
-        inst.load_routers_and_blocks(str(split_dir))
+        # Old behavior kept for reference only. It guessed a separate generated
+        # split path from the collection name, which made `--questionnaire-dir`
+        # not behave like an actual directory input:
+        # collection_name = qdir.name
+        # project_root = Path(__file__).resolve().parent
+        # split_dir = project_root / "mytest2" / "questionnaire_handler" / "chain_debug" / f"{collection_name}_split"
+        # inst.load_routers_and_blocks(str(split_dir))
+
+        dirs = [qdir]
+        addition_dir = qdir.parent / "addition"
+        if qdir.name != "addition" and inst._has_questionnaire_files(addition_dir):
+            dirs.append(addition_dir)
+        inst.load_routers_and_blocks_from_dirs([str(path) for path in dirs])
         return inst
 
     def load_routers_and_blocks(self, split_dir: str) -> None:
@@ -123,6 +135,57 @@ class QuestionnaireState:
         self.blocks = self._read_blocks_json(blocks_path) if blocks_path.exists() else []
         self._init_block_status()
 
+    def load_routers_and_blocks_from_dirs(self, questionnaire_dirs: List[str]) -> None:
+        """
+        Read and merge router/block JSON files from one or more questionnaire directories.
+
+        Input:
+        - questionnaire_dirs:
+          Ordered directories. The first is the selected main questionnaire;
+          later directories such as `addition` are supplemental.
+
+        Processing:
+        - Read questionnaire_routers.json/questionnaire_blocks.json directly
+          from each directory.
+        - Attach `source_collection` and `source_dir` metadata to every loaded
+          router/block for later debugging.
+        - Reject duplicate router ids/full_ids and duplicate block ids.
+        - Initialize block_status from the merged block list.
+
+        Output:
+        - None. The instance fields are replaced in-place.
+        """
+        self.routers = []
+        self.blocks = []
+        self.loaded_dirs = []
+
+        for raw_dir in questionnaire_dirs:
+            root = Path(raw_dir).resolve()
+            if not root.exists() or not root.is_dir():
+                raise FileNotFoundError(f"questionnaire directory not found: {root}")
+            routers_path = root / "questionnaire_routers.json"
+            blocks_path = root / "questionnaire_blocks.json"
+            if not routers_path.exists() and not blocks_path.exists():
+                raise FileNotFoundError(f"questionnaire directory has no router/block JSON files: {root}")
+
+            source_collection = root.name
+            self.loaded_dirs.append(str(root))
+
+            for router in (self._read_routers_json(routers_path) if routers_path.exists() else []):
+                item = dict(router)
+                item.setdefault("source_collection", source_collection)
+                item.setdefault("source_dir", str(root))
+                self.routers.append(item)
+
+            for block in (self._read_blocks_json(blocks_path) if blocks_path.exists() else []):
+                item = dict(block)
+                item.setdefault("source_collection", source_collection)
+                item.setdefault("source_dir", str(root))
+                self.blocks.append(item)
+
+        self._validate_unique_ids()
+        self._init_block_status()
+
     def match_blocks_from_router_answers(self, router_answers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Return all blocks whose `block_show_if` conditions are satisfied.
@@ -138,7 +201,8 @@ class QuestionnaireState:
 
         Processing:
         - Build an answer lookup using both full ids and local ids.
-        - A block with empty `block_show_if` is always matched.
+        - A block with empty `block_show_if` is not matched. All blocks must be
+          selected by explicit router evidence.
         - A block with conditions is matched only when every condition's
           option_id appears in the corresponding router answer.
 
@@ -152,7 +216,6 @@ class QuestionnaireState:
         for block in self.blocks:
             conditions = list(block.get("block_show_if") or [])
             if not conditions:
-                matched.append(block)
                 continue
             if all(self._condition_is_satisfied(cond, answer_lookup) for cond in conditions):
                 matched.append(block)
@@ -321,9 +384,60 @@ class QuestionnaireState:
                 "id": block_id,
                 "module": str(block.get("module") or ""),
                 "topic": str(block.get("topic") or ""),
+                "source_collection": str(block.get("source_collection") or ""),
+                "source_dir": str(block.get("source_dir") or ""),
                 "visit_count": 0,
                 "hit_count": 0,
             }
+
+    def _has_questionnaire_files(self, questionnaire_dir: Path) -> bool:
+        """
+        Check whether a directory looks like a router/block questionnaire folder.
+
+        Input:
+        - questionnaire_dir: candidate directory path.
+
+        Output:
+        - True when the directory exists and contains at least one expected JSON file.
+        """
+        root = Path(questionnaire_dir)
+        if not root.exists() or not root.is_dir():
+            return False
+        return (root / "questionnaire_routers.json").exists() or (root / "questionnaire_blocks.json").exists()
+
+    def _validate_unique_ids(self) -> None:
+        """
+        Validate merged router/block identifiers.
+
+        Input:
+        - self.routers and self.blocks after loading one or more directories.
+
+        Output:
+        - None on success.
+        - Raises ValueError when duplicate router id/full_id or block id exists.
+        """
+        seen_router_ids: Dict[str, str] = {}
+        for router in self.routers:
+            source = str(router.get("source_collection") or "")
+            for key in ("id", "full_id"):
+                rid = str(router.get(key) or "").strip()
+                if not rid:
+                    continue
+                prev = seen_router_ids.get(rid)
+                if prev is not None:
+                    raise ValueError(f"duplicate router {key}={rid!r}: {prev} vs {source}")
+                seen_router_ids[rid] = source
+
+        seen_block_ids: Dict[str, str] = {}
+        for block in self.blocks:
+            block_id = str(block.get("id") or "").strip()
+            if not block_id:
+                continue
+            source = str(block.get("source_collection") or "")
+            prev = seen_block_ids.get(block_id)
+            if prev is not None:
+                raise ValueError(f"duplicate block id={block_id!r}: {prev} vs {source}")
+            seen_block_ids[block_id] = source
 
     def _normalize_router_answers(self, router_answers: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

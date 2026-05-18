@@ -51,7 +51,7 @@ from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 
 # ====================== Config ======================
 FETCH_ROOT = PROJECT_ROOT / "test_debug" / "fetch_snap"
-QUESTIONNAIRE_DIR = PROJECT_ROOT / "questionnaire-v2" / "games"
+QUESTIONNAIRE_DIR = PROJECT_ROOT / "questionnaire-UI" / "games"
 
 # Empty string means using the latest session directory under FETCH_ROOT.
 # Absolute paths are also supported, for example:

@@ -4226,6 +4226,13 @@ class WorkflowRunner:
                         snap = self.llm_snap_cache.get(sig)
                         if snap and matched_blocks:
                             self._schedule_blocks_fill(sig, snap, matched_blocks)
+                        elif snap and not matched_blocks:
+                            self._log_event(
+                                "blocks_fill_skipped_no_matched_blocks",
+                                sig=sig,
+                                router_update_count=len(router_answers),
+                                observation_path=str(obs_path or ""),
+                            )
 
                     start = self._block_router_enqueue_ts.pop(sig, None)
                     result_payload = route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {})
