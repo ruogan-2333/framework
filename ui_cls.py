@@ -45,7 +45,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -246,6 +246,116 @@ class BaseUI:
             subs = n.get("subviews", []) or []
             for ch in reversed(subs):
                 stack.append((n, ch))
+
+    @staticmethod
+    def _node_type_for_state_compare(node: Dict[str, Any]) -> str:
+        """
+        Input: one processed UI node.
+        Output: normalized node type string.
+        Function: adapts the senior project's type-based state comparison to this project's class/type fields.
+        """
+
+        return str(node.get("class") or node.get("type") or "")
+
+    @staticmethod
+    def _state_compare_roots(uist: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Input: processed UI tree.
+        Output: root node list.
+        Function: accepts both list-shaped and single-root uist["elements"] values for state comparison.
+        """
+
+        elements = (uist or {}).get("elements")
+        if isinstance(elements, dict):
+            return [elements]
+        if isinstance(elements, list):
+            return [node for node in elements if isinstance(node, dict)]
+        return []
+
+    @staticmethod
+    def _state_compare_text_list(uist: Dict[str, Any]) -> List[str]:
+        """
+        Input: processed UI tree.
+        Output: unique text entries with node type and field-name prefixes.
+        Function: reproduces the senior project's text-set comparison with this project's text fields.
+        """
+
+        text_set: Set[str] = set()
+        fields = ("text", "name", "value", "label", "content_desc", "semantic_label", "semantic_desc", "ocr_text", "icon_label")
+        for node in BaseUI.iter_nodes(uist or {}):
+            node_type = BaseUI._node_type_for_state_compare(node)
+            for key in fields:
+                value = node.get(key)
+                if value is None or not str(value).strip():
+                    continue
+                if isinstance(value, (list, tuple)):
+                    value_text = "/".join(str(item) for item in value)
+                else:
+                    value_text = str(value)
+                text_set.add(f'{node_type}: {key}="{value_text}"')
+        return list(text_set)
+
+    @staticmethod
+    def compare_processed_ui_by_senior_rule(left_uist: Dict[str, Any], right_uist: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Input: two processed UI trees.
+        Output: detailed same-page comparison result using the senior project's rule.
+        Function: compares id/type structure first, then falls back to text-set Jaccard tolerance.
+        """
+
+        import copy
+
+        def check_view(left_node: Dict[str, Any], right_node: Dict[str, Any]) -> bool:
+            left_type = BaseUI._node_type_for_state_compare(left_node)
+            right_type = BaseUI._node_type_for_state_compare(right_node)
+            if "id" not in left_node or "id" not in right_node:
+                return False
+            if left_node.get("id") != right_node.get("id") or left_type != right_type:
+                return False
+            left_children = left_node.get("subviews", []) or []
+            right_children = right_node.get("subviews", []) or []
+            if len(left_children) != len(right_children):
+                return False
+            left_children.sort(key=lambda node: node.get("id", 0) if isinstance(node, dict) else 0)
+            right_children.sort(key=lambda node: node.get("id", 0) if isinstance(node, dict) else 0)
+            for left_child, right_child in zip(left_children, right_children):
+                if not isinstance(left_child, dict) or not isinstance(right_child, dict):
+                    return False
+                if not check_view(left_child, right_child):
+                    return False
+            return True
+
+        left_roots = copy.deepcopy(BaseUI._state_compare_roots(left_uist or {}))
+        right_roots = copy.deepcopy(BaseUI._state_compare_roots(right_uist or {}))
+        structure_equal = len(left_roots) == len(right_roots)
+        if structure_equal:
+            left_roots.sort(key=lambda node: node.get("id", 0))
+            right_roots.sort(key=lambda node: node.get("id", 0))
+            structure_equal = all(check_view(left_node, right_node) for left_node, right_node in zip(left_roots, right_roots))
+
+        left_text = set(BaseUI._state_compare_text_list(left_uist or {}))
+        right_text = set(BaseUI._state_compare_text_list(right_uist or {}))
+        union = left_text | right_text
+        text_jaccard = 1.0 if not union else float(len(left_text & right_text) / len(union))
+        left_unique = sorted(left_text - right_text)
+        right_unique = sorted(right_text - left_text)
+        text_rule_passed = len(left_unique) <= 4 and text_jaccard >= 0.8
+        is_same = bool(structure_equal or text_rule_passed)
+        if structure_equal:
+            reason = "structure_equal"
+        elif text_rule_passed:
+            reason = "text_jaccard_rule"
+        else:
+            reason = "structure_and_text_rule_failed"
+        return {
+            "is_same": is_same,
+            "structure_equal": bool(structure_equal),
+            "text_jaccard": text_jaccard,
+            "left_unique_text_count": len(left_unique),
+            "right_unique_text_count": len(right_unique),
+            "text_rule_passed": bool(text_rule_passed),
+            "reason": reason,
+        }
 
     # ---------------------------
     # OCR + icon hooks

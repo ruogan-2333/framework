@@ -783,7 +783,7 @@ class GPTClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gpt-4o",
+        model: str = "gemini-2.5-flash",
         temperature: float = 0.2,
         timeout_s: int = 60,
     ):

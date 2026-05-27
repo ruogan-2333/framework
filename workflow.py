@@ -2937,6 +2937,7 @@ class WorkflowRunner:
                 screenshot_phash=screenshot_phash,
                 foreground_package=foreground_package,
                 foreground_activity=foreground_activity,
+                uist=uist2,
             )
             sig = str(identity.get("state_sig") or sig or "")
             family_sig = str(identity.get("family_sig") or struct_sig or sig or "")
@@ -3061,12 +3062,13 @@ class WorkflowRunner:
         screenshot_phash: str,
         foreground_package: str = "",
         foreground_activity: str = "",
+        uist: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Select the canonical state key used everywhere else in the workflow.
 
         POLICY:
-          - Reliable XML: keep using XML-derived state signature.
+          - Reliable XML: first reuse an equivalent processed UI under the senior project rule, then fall back to XML signature.
           - Unreliable XML: switch to a screenshot-phash-backed signature and
             reuse an existing visual state when similarity is high enough.
         """
@@ -3077,6 +3079,29 @@ class WorkflowRunner:
         foreground_activity = str(foreground_activity or "")
 
         if xml_reliable and xml_state_sig:
+            if uist:
+                matched_sig, _matched_snap, match_detail = self._known_xml_reliable_snap_by_processed_ui(
+                    uist,
+                    foreground_package=foreground_package,
+                    foreground_activity=foreground_activity,
+                )
+                if matched_sig:
+                    matched_meta = ((_matched_snap or {}).get("meta") or {}) if _matched_snap else {}
+                    family_sig = str(matched_meta.get("family_sig") or "") or self._family_sig_from_struct(struct_sig) or matched_sig
+                    matched_similarity = (
+                        1.0
+                        if bool(match_detail.get("structure_equal"))
+                        else float(match_detail.get("text_jaccard") or 0.0)
+                    )
+                    return {
+                        "state_sig": matched_sig,
+                        "family_sig": family_sig,
+                        "identity_source": "xml_ui_senior_rule",
+                        "identity_hash": xml_state_sig,
+                        "matched_existing": True,
+                        "matched_similarity": matched_similarity,
+                        "match_detail": match_detail,
+                    }
             state_sig = self._state_sig_from_xml(xml_state_sig)
             family_sig = self._family_sig_from_struct(struct_sig) or state_sig
             return {
@@ -3219,6 +3244,45 @@ class WorkflowRunner:
                 best_sig = str(sig)
                 best_snap = known
         return best_sig, best_snap, best_similarity
+
+    def _known_xml_reliable_snap_by_processed_ui(
+        self,
+        current_uist: Dict[str, Any],
+        *,
+        foreground_package: str = "",
+        foreground_activity: str = "",
+    ) -> Tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Input: current processed UI tree and foreground identity.
+        Output: best known XML-reliable state, snapshot, and senior-rule comparison detail.
+        Function: reuses known states whose processed UI is equivalent under the senior project's rule.
+        """
+
+        best_sig = ""
+        best_snap: Optional[Dict[str, Any]] = None
+        best_detail: Dict[str, Any] = {}
+        best_score = -1.0
+        for sig, known in reversed(list((self.state_snap_cache or {}).items())):
+            meta = (known or {}).get("meta") or {}
+            if not bool(meta.get("xml_reliable", False)):
+                continue
+            known_pkg = str(meta.get("foreground_package") or "")
+            known_act = str(meta.get("foreground_activity") or "")
+            if foreground_package and known_pkg and known_pkg != str(foreground_package or ""):
+                continue
+            if foreground_activity and known_act and known_act != str(foreground_activity or ""):
+                continue
+            known_uist = (known or {}).get("uist") or {}
+            detail = BaseUI.compare_processed_ui_by_senior_rule(current_uist or {}, known_uist)
+            if not bool(detail.get("is_same")):
+                continue
+            score = 1.0 if bool(detail.get("structure_equal")) else float(detail.get("text_jaccard") or 0.0)
+            if score > best_score:
+                best_score = score
+                best_sig = str(sig)
+                best_snap = known
+                best_detail = detail
+        return best_sig, best_snap, best_detail
 
     def _check_drift_lightweight(self, expected_snap: Dict[str, Any], *, timeout_s: float = 0.5) -> DriftCheckResult:
         """

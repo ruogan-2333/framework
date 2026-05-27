@@ -236,7 +236,7 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument("--workers", type=int, default=4, help="Thread pool workers (LLM overlap)")
 
     # Model
-    run.add_argument("--model", type=str, default="gpt-4o", help="OpenAI model name")
+    run.add_argument("--model", type=str, default="gemini-2.5-flash", help="OpenAI-compatible model name")
     run.add_argument("--temperature", type=float, default=0.2, help="LLM temperature")
     run.add_argument("--timeout", type=int, default=60, help="LLM request timeout seconds")
     run.add_argument("--api-key", type=str, default=None, help="OpenAI API key (or use OPENAI_API_KEY env)")
