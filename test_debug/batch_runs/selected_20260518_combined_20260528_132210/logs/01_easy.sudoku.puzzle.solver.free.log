@@ -1,0 +1,77 @@
+F:\workplace\framework\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.0.post1)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+[SNAP] 000001_xml_fa84b5d8b085ce6a73f0d0578f66f1b6 known=false xml_reliable=True vid=6
+[STATE] xml_fa84b5d8b085 -> xml_fa84b5d8b085 kind=observation new=None
+[LLM] enqueue navigation_router sig=xml_fa84b5d8b085 input=llm_navigation_router_input.json
+[SNAP] 000004_xml_d3d0537778b314f6ab0c806e46c9f77b known=false xml_reliable=True vid=9
+DRIFT: old=xml:fa84 new=xml:d3d0. Replanning.
+[DRIFT] xml_fa84b5d8b085 -> xml_d3d0537778b3
+[STATE] xml_fa84b5d8b085 -> xml_d3d0537778b3 kind=transition new=False
+[LLM] enqueue navigation_router sig=xml_d3d0537778b3 input=llm_navigation_router_input.json
+[LLM] result nav sig=xml_fa84b5d8b085 overlay=none candidates=0 return=0 elapsed=18.6081223487854
+[LLM] result block_router sig=xml_fa84b5d8b085 overlay=- candidates=0 return=0 elapsed=18.6081223487854
+[LLM] result nav sig=xml_d3d0537778b3 overlay=none candidates=5 return=0 elapsed=28.315974712371826
+[LLM] result block_router sig=xml_d3d0537778b3 overlay=- candidates=0 return=0 elapsed=28.315974712371826
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:1::anchor=[0, 0, 1080, 1920]:label=Click the cell:class=android.view.ViewGroup", "actions": {"actions": [{"action": "click"
+[ACT] start sig=xml_d3d0537778b3 click element=1 label=Advance the tutorial by clicking the indicated cell.
+[ACT] done sig=xml_d3d0537778b3 click element=1 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:1::anchor=[0, 0, 1080, 1920]:label=Click the cell:class=android.view.ViewGroup", "actions": {"actions": [{"action": "click"
+[ACT] start sig=xml_d3d0537778b3 click element=1 label=Advance the tutorial by clicking the indicated cell.
+[ACT] done sig=xml_d3d0537778b3 click element=1 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:5::anchor=[929, 48, 120, 120]:label=Settings icon:class=android.view.View", "actions": {"actions": [{"action": "click", "el
+[ACT] start sig=xml_d3d0537778b3 click element=5 label=Explore app settings as per task.
+[ACT] done sig=xml_d3d0537778b3 click element=5 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:5::anchor=[929, 48, 120, 120]:label=Settings icon:class=android.view.View", "actions": {"actions": [{"action": "click", "el
+[ACT] start sig=xml_d3d0537778b3 click element=5 label=Explore app settings as per task.
+[ACT] done sig=xml_d3d0537778b3 click element=5 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:4::anchor=[797, 48, 120, 120]:label=Theme icon:class=android.view.View", "actions": {"actions": [{"action": "click", "eleme
+[ACT] start sig=xml_d3d0537778b3 click element=4 label=Explore theme options, potentially related to purchases.
+[ACT] done sig=xml_d3d0537778b3 click element=4 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:4::anchor=[797, 48, 120, 120]:label=Theme icon:class=android.view.View", "actions": {"actions": [{"action": "click", "eleme
+[ACT] start sig=xml_d3d0537778b3 click element=4 label=Explore theme options, potentially related to purchases.
+[ACT] done sig=xml_d3d0537778b3 click element=4 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:2::anchor=[30, 48, 120, 120]:label=New game icon:class=android.view.View", "actions": {"actions": [{"action": "click", "ele
+[ACT] start sig=xml_d3d0537778b3 click element=2 label=Start a new game to explore core gameplay.
+[ACT] done sig=xml_d3d0537778b3 click element=2 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:2::anchor=[30, 48, 120, 120]:label=New game icon:class=android.view.View", "actions": {"actions": [{"action": "click", "ele
+[ACT] start sig=xml_d3d0537778b3 click element=2 label=Start a new game to explore core gameplay.
+[ACT] done sig=xml_d3d0537778b3 click element=2 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:3::anchor=[665, 48, 120, 120]:label=Pause icon:class=android.view.View", "actions": {"actions": [{"action": "click", "eleme
+[ACT] start sig=xml_d3d0537778b3 click element=3 label=Check pause menu for additional options.
+[ACT] done sig=xml_d3d0537778b3 click element=3 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:3::anchor=[665, 48, 120, 120]:label=Pause icon:class=android.view.View", "actions": {"actions": [{"action": "click", "eleme
+[ACT] start sig=xml_d3d0537778b3 click element=3 label=Check pause menu for additional options.
+[ACT] done sig=xml_d3d0537778b3 click element=3 success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+[DFS] sig=xml_d3d0537778b3 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 5, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=dfs_return_from_exhausted_state detail={"plan": "dfs_return_from_exhausted_state", "stack_depth": 2}
+[DFS] sig=xml_d3d0537778b3 plan=fallback_back_after_page_return detail={"plan": "fallback_back_after_page_return"}
+[ACT] start sig=xml_d3d0537778b3 back element=None label=dfs_page_return_fallback_back
+[ACT] done sig=xml_d3d0537778b3 back element=None success=true reason=-
+[STATE] xml_d3d0537778b3 -> xml_d3d0537778b3 kind=transition new=False
+Stop condition reached: return_exhausted
+[TRACE] timeline saved json=F:\workplace\framework\traces\20260528_132210_rerun_easy.sudoku.puzzle.solver.free\timeline.json md=F:\workplace\framework\traces\20260528_132210_rerun_easy.sudoku.puzzle.solver.free\timeline.md
+[STOP] return_exhausted
+[RUN] elapsed_seconds=81.750
+[TOKENS] calls=2 prompt=32908 completion=3898 total=36806
+[TOKENS][propose_navigation_and_router] calls=2 prompt=32908 completion=3898 total=36806
+[VIS] interactive_html=F:\workplace\framework\traces\20260528_132210_rerun_easy.sudoku.puzzle.solver.free\analysis\interactive\ui_transition_interactive.html

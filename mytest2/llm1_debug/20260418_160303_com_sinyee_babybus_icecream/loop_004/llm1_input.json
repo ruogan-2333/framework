@@ -1,9 +1,0 @@
-{
-  "state_sig": "phash:84dcc70d95afb127d36227dd42446e34",
-  "task": "Explore the app to fill the questionnaire.",
-  "xml_reliable": false,
-  "identity_source": "phash",
-  "foreground_package": "com.sinyee.babybus.icecream",
-  "foreground_activity": "com.sinyee.babybus.Main",
-  "vid_count": 1
-}

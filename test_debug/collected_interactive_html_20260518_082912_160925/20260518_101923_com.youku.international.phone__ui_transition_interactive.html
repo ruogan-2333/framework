@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Transition Interactive - 20260518_101923_com.youku.international.phone</title>
+  <script src="vendor/vis-network.min.js"></script>
+  <script>
+    if (!window.vis) {
+      document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\/script>');
+    }
+    if (!window.vis) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.0/standalone/umd/vis-network.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+    }
+    #root { display: flex; width: 100%; height: 100%; }
+    #left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #toolbar {
+      background: #fff; border-bottom: 1px solid #d9e1ef; padding: 10px 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #network { flex: 1; background: #f8fbff; }
+    #network { min-height: 520px; }
+    #right {
+      width: 460px; max-width: 46vw; min-width: 340px;
+      border-left: 1px solid #d9e1ef; background: #fff; overflow: auto;
+      padding: 12px 14px;
+    }
+    .meta { font-size: 12px; color: #5f6b7a; }
+    .k { font-weight: 600; color: #23303f; }
+    .card { border: 1px solid #e4e9f2; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .mono { font-family: Consolas, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    .ok { background: #e7f6ec; color: #17653a; }
+    .warn { background: #fff2e3; color: #8a5315; }
+    .bad { background: #fde8ea; color: #9a2230; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #f6f9ff; }
+    img.preview { width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }
+    details > summary { cursor: pointer; color: #2d5fa8; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }
+    a { color: #2a66b0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
+    </div>
+  </noscript>
+  <div id="root">
+    <div id="left">
+      <div id="toolbar">
+        <div><span class="k">run_id</span>: <span class="mono">20260518_101923_com.youku.international.phone</span></div>
+        <div><span class="k">stop_reason</span>: <span class="mono">overlay_recovery_exhausted</span></div>
+        <div><span class="k">nodes</span>: <span class="mono">3</span></div>
+        <div><span class="k">edges</span>: <span class="mono">7</span></div>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
+      </div>
+      <div id="network"></div>
+    </div>
+    <div id="right">
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const payload = {"run_id": "20260518_101923_com.youku.international.phone", "entry_sig": "xml:60f8459a1485308aedd5b9638456c53d", "cur_sig": "xml:60f8459a1485308aedd5b9638456c53d", "stop_reason": "overlay_recovery_exhausted", "target_package": "com.youku.international.phone", "node_count": 3, "edge_count": 7, "nodes_vis": [{"id": "xml:60f8459a1485308aedd5b9638456c53d", "label": "UI1\nvisit=24 rem=0\ndismiss", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:4bae0f1288db43a84c1749b849bea602", "label": "UI2\nvisit=15 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "label": "UI3\nvisit=4 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}], "edges_vis": [{"id": "e1", "from": "xml:60f8459a1485308aedd5b9638456c53d", "to": "xml:4bae0f1288db43a84c1749b849bea602", "label": "click:4 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e2", "from": "xml:4bae0f1288db43a84c1749b849bea602", "to": "xml:60f8459a1485308aedd5b9638456c53d", "label": "click:5 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e3", "from": "xml:60f8459a1485308aedd5b9638456c53d", "to": "xml:60f8459a1485308aedd5b9638456c53d", "label": "click:2 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e4", "from": "xml:4bae0f1288db43a84c1749b849bea602", "to": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "label": "click:3 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e5", "from": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "to": "xml:60f8459a1485308aedd5b9638456c53d", "label": "click:4 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e6", "from": "xml:4bae0f1288db43a84c1749b849bea602", "to": "xml:60f8459a1485308aedd5b9638456c53d", "label": "click:4 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e7", "from": "xml:60f8459a1485308aedd5b9638456c53d", "to": "xml:4bae0f1288db43a84c1749b849bea602", "label": "click:3 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}], "node_details": {"xml:60f8459a1485308aedd5b9638456c53d": {"alias": "UI1", "state_sig": "xml:60f8459a1485308aedd5b9638456c53d", "visit_count": 24, "unfinished": false, "target_package": "com.youku.international.phone", "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "overlay_kind": "dismiss", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000001_xml_60f8459a1485308aedd5b9638456c53d/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [434, 676, 212, 85], "text": "Notice", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "2": {"bounds": [90, 761, 900, 871], "text": "Welcome to Youku.\n1.We will collect the necessary user information according to your specific functional needs of using the services to provide you with related services such as watching film and television programs.\n2.You need to authorize us to read the local identification code to ensure your account and usage security; and you need to authorize us to read the storage permissions to cache and access pictures or videos, and reduce traffic consumption. You have the right to refuse or cancel the authorization.\n3.We will not share or provide your information to third parties without your authorization.\n4. You can access your personal information, or you can contact us to delete your personal information.", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "3": {"bounds": [90, 1632, 900, 106], "text": "Please read the full version of YoukuUser Service AgreementandPrivacy Policy", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "4": {"bounds": [0, 1800, 539, 120], "text": "Decline", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}, "5": {"bounds": [541, 1800, 539, 120], "text": "Accept", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "765f7aac6d1c5affc18cc9123273d73e:3901fa5d4526a68558c25a742fd574d1:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.youku.international.phone:com.youku.phone.ActivityWelcome:xml_only", "cache_hit": false, "cache_size": 1, "xml_hash": "765f7aac6d1c5affc18cc9123273d73e", "screenshot_hash": "3901fa5d4526a68558c25a742fd574d1", "screenshot_phash": "c03f2fd0b6c82d1e", "xml_hash_raw": "765f7aac6d1c5affc18cc9123273d73e", "screenshot_hash_raw": "3901fa5d4526a68558c25a742fd574d1", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "fe0145c85ec8d02bdbd8f01b30059619", "struct_sig": "97cea9de82f85bc5878ff04762e27dd1", "fine_sig": "de22b97d1ee665d4f6bd2c2840d94abb", "family_sig": "struct:97cea9de82f85bc5878ff04762e27dd1", "identity_source": "xml", "identity_hash": "60f8459a1485308aedd5b9638456c53d", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "content_top_y", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 16, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:60f8459a1485308aedd5b9638456c53d", "page_summary": "Notice dialog displayed.", "overlay_kind": "dismiss", "overlay_reason": "A notice dialog is blocking the screen.", "overlay_dismiss_actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "Decline", "anchor_class": "android.widget.TextView", "priority": 1, "reasoning": "Declines the displayed notice"}, {"action": "click", "element_id": 5, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "Accept", "anchor_class": "android.widget.TextView", "priority": 2, "reasoning": "Accepts the displayed notice"}], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "xml:60f8459a1485308aedd5b9638456c53d", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "fe0145c85ec8d02bdbd8f01b30059619", "struct_sig": "97cea9de82f85bc5878ff04762e27dd1", "fine_sig": "de22b97d1ee665d4f6bd2c2840d94abb", "xml_reliable": true, "xml_hash": "887ac56d7cdb6bff602caec049b57ccc", "screenshot_hash": "9ea1557fe6164b06c8c883761f3befd5", "screenshot_phash": "c03f2fd0b6c82d1e", "xml_hash_raw": "887ac56d7cdb6bff602caec049b57ccc", "screenshot_hash_raw": "9ea1557fe6164b06c8c883761f3befd5", "family_sig": "struct:97cea9de82f85bc5878ff04762e27dd1", "identity_source": "xml", "identity_hash": "60f8459a1485308aedd5b9638456c53d", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "content_top_y", "entry": true, "post_restart": true}, "state_action": {"state_sig": "xml:60f8459a1485308aedd5b9638456c53d", "family_id": "struct:97cea9de82f85bc5878ff04762e27dd1", "overlay_kind": "dismiss", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}, "xml:4bae0f1288db43a84c1749b849bea602": {"alias": "UI2", "state_sig": "xml:4bae0f1288db43a84c1749b849bea602", "visit_count": 15, "unfinished": false, "target_package": "com.youku.international.phone", "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000009_xml_4bae0f1288db43a84c1749b849bea602/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [434, 1293, 212, 85], "text": "Notice", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "2": {"bounds": [90, 1408, 900, 294], "text": "1. You need to agree to this Privacy Policy before you can continue to use Youku \n \n 2. If you do not agree with this Privacy Policy, we regret that we will not be able to provide services for you", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "3": {"bounds": [0, 1764, 539, 156], "text": "Decline", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}, "4": {"bounds": [541, 1764, 539, 156], "text": "View Agreement", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "33e928d180ca17001d354019ed749d56:b227e454ecd90e8029ad1451e559d9ac:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.youku.international.phone:com.youku.phone.ActivityWelcome:xml_only", "cache_hit": false, "cache_size": 2, "xml_hash": "33e928d180ca17001d354019ed749d56", "screenshot_hash": "b227e454ecd90e8029ad1451e559d9ac", "screenshot_phash": "d03fe16c27d09d52", "xml_hash_raw": "33e928d180ca17001d354019ed749d56", "screenshot_hash_raw": "b227e454ecd90e8029ad1451e559d9ac", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "d9903b1a494819723e2880206c2a8fec", "struct_sig": "63f4c8eabd62dcf66baf3baa8e9c175a", "fine_sig": "ed4899bf0f327dffc2532eddd1fb8560", "family_sig": "struct:63f4c8eabd62dcf66baf3baa8e9c175a", "identity_source": "xml", "identity_hash": "4bae0f1288db43a84c1749b849bea602", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 12, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:4bae0f1288db43a84c1749b849bea602", "page_summary": "Privacy Policy agreement screen", "overlay_kind": "dismiss", "overlay_reason": "Privacy Policy agreement required", "overlay_dismiss_actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [0, 1764, 539, 156], "anchor_center": null, "anchor_label": "Decline", "anchor_class": "android.widget.TextView", "priority": 1, "reasoning": "Decline agreement"}, {"action": "click", "element_id": 4, "text": null, "anchor_frame": [541, 1764, 539, 156], "anchor_center": null, "anchor_label": "View Agreement", "anchor_class": "android.widget.TextView", "priority": 2, "reasoning": "View agreement details"}], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "xml:4bae0f1288db43a84c1749b849bea602", "screenshot_path": "", "router_answers": [{"question_id": "addition.exec_addition_age_verification_visible", "new_answer": "yes", "confidence": 0.9, "rationale": "The screen displays a privacy policy agreement notice, which is a form of age verification or consent flow."}], "matched_block_ids": ["addition.age_verification"], "block_fill_results": []}, "blocks_observation": {"state_sig": "xml:4bae0f1288db43a84c1749b849bea602", "screenshot_path": "", "router_answers": [{"question_id": "addition.exec_addition_age_verification_visible", "new_answer": "yes", "confidence": 0.9, "rationale": "The screen displays a privacy policy agreement notice, which is a form of age verification or consent flow."}], "matched_block_ids": ["addition.age_verification"], "block_fill_results": [{"block_id": "addition.age_verification", "detected_signals": ["The UI displays a privacy policy agreement notice."], "proposed_updates": [{"question_id": "addition_age_verification_present", "new_answer": "no", "confidence": 0.9, "evidence_refs": ["The UI displays a privacy policy agreement notice."], "note": "The UI does not explicitly ask for age verification."}], "conflicts": []}]}, "graph_meta": {"coarse_sig": "d9903b1a494819723e2880206c2a8fec", "struct_sig": "63f4c8eabd62dcf66baf3baa8e9c175a", "fine_sig": "ed4899bf0f327dffc2532eddd1fb8560", "xml_reliable": true, "xml_hash": "4a26e4c21ccec9c9988f2a1e5d43e17b", "screenshot_hash": "b227e454ecd90e8029ad1451e559d9ac", "screenshot_phash": "d03fe16c27d09d52", "xml_hash_raw": "4a26e4c21ccec9c9988f2a1e5d43e17b", "screenshot_hash_raw": "b227e454ecd90e8029ad1451e559d9ac", "family_sig": "struct:63f4c8eabd62dcf66baf3baa8e9c175a", "identity_source": "xml", "identity_hash": "4bae0f1288db43a84c1749b849bea602", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none"}, "state_action": {"state_sig": "xml:4bae0f1288db43a84c1749b849bea602", "family_id": "struct:63f4c8eabd62dcf66baf3baa8e9c175a", "overlay_kind": "dismiss", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}, "xml:8e2c376c91b9903f5e8a7c7c1b6c064e": {"alias": "UI3", "state_sig": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "visit_count": 4, "unfinished": false, "target_package": "com.youku.international.phone", "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_101923_com.youku.international.phone/debug_pages/000039_xml_8e2c376c91b9903f5e8a7c7c1b6c064e/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [434, 1538, 212, 85], "text": "Notice", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "2": {"bounds": [329, 1653, 421, 49], "text": "Would you reconsider?", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "3": {"bounds": [0, 1764, 539, 156], "text": "Exit Application", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}, "4": {"bounds": [541, 1764, 539, 156], "text": "View Agreement", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "85590409c2e22a37f32bdbee8189ed63:21cb92fee65d598fa0507af961f7973d:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.youku.international.phone:com.youku.phone.ActivityWelcome:xml_only", "cache_hit": false, "cache_size": 5, "xml_hash": "85590409c2e22a37f32bdbee8189ed63", "screenshot_hash": "21cb92fee65d598fa0507af961f7973d", "screenshot_phash": "d036ed2d639c529c", "xml_hash_raw": "85590409c2e22a37f32bdbee8189ed63", "screenshot_hash_raw": "21cb92fee65d598fa0507af961f7973d", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "76edda1e32188b7493323f627a694ac6", "struct_sig": "234f38fcea436cbd5e127b0bc46ccfbc", "fine_sig": "575abf9fb617a98982e2e23c2ed838f7", "family_sig": "struct:234f38fcea436cbd5e127b0bc46ccfbc", "identity_source": "xml", "identity_hash": "8e2c376c91b9903f5e8a7c7c1b6c064e", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 12, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "page_summary": "Dialog requesting reconsideration", "overlay_kind": "dismiss", "overlay_reason": "Blocking dialog detected", "overlay_dismiss_actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [0, 1764, 539, 156], "anchor_center": null, "anchor_label": "Exit Application", "anchor_class": "android.widget.TextView", "priority": 1, "reasoning": "Dismiss dialog by exiting."}, {"action": "click", "element_id": 4, "text": null, "anchor_frame": [541, 1764, 539, 156], "anchor_center": null, "anchor_label": "View Agreement", "anchor_class": "android.widget.TextView", "priority": 2, "reasoning": "Dismiss dialog by viewing agreement."}], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "76edda1e32188b7493323f627a694ac6", "struct_sig": "234f38fcea436cbd5e127b0bc46ccfbc", "fine_sig": "575abf9fb617a98982e2e23c2ed838f7", "xml_reliable": true, "xml_hash": "ebccd91fd4acd649ccba595210338e0a", "screenshot_hash": "21cb92fee65d598fa0507af961f7973d", "screenshot_phash": "d036ed2d639c529c", "xml_hash_raw": "ebccd91fd4acd649ccba595210338e0a", "screenshot_hash_raw": "21cb92fee65d598fa0507af961f7973d", "family_sig": "struct:234f38fcea436cbd5e127b0bc46ccfbc", "identity_source": "xml", "identity_hash": "8e2c376c91b9903f5e8a7c7c1b6c064e", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.youku.international.phone", "foreground_activity": "com.youku.phone.ActivityWelcome", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none"}, "state_action": {"state_sig": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "family_id": "struct:234f38fcea436cbd5e127b0bc46ccfbc", "overlay_kind": "dismiss", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}}, "edge_details": {"e1": {"id": "e1", "src": "xml:60f8459a1485308aedd5b9638456c53d", "src_alias": "UI1", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "dst_alias": "UI2", "label": "click:4 [nav]", "count": 7, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070906.75694, "action_payload": {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": [0, 1800, 539, 120], "anchor_center": [269.0, 1860.0], "anchor_label": "Decline", "anchor_class": "android.widget.TextView", "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "ouku.international.phone:id/yk_dialog_no", "label": "decline", "frame": [0, 1800, 539, 120]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 1, "ts": 1779070785.8003626, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 4, "ts": 1779070804.5633514, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 7, "ts": 1779070825.106319, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 10, "ts": 1779070844.3187816, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 13, "ts": 1779070868.2295778, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 16, "ts": 1779070888.1182485, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 19, "ts": 1779070906.75694, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "text": null, "label": "Decline", "action_key": "click:4:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e2": {"id": "e2", "src": "xml:4bae0f1288db43a84c1749b849bea602", "src_alias": "UI2", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "dst_alias": "UI1", "label": "click:5 [nav]", "count": 4, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070908.5772812, "action_payload": {"actions": [{"action": "click", "element_id": 5, "text": null, "anchor_frame": [541, 1800, 539, 120], "anchor_center": [810.0, 1860.0], "anchor_label": "Accept", "anchor_class": "android.widget.TextView"}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 2, "ts": 1779070787.6790152, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "text": null, "label": "Accept", "action_key": "click:5:Accept", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 8, "ts": 1779070826.9230115, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "text": null, "label": "Accept", "action_key": "click:5:Accept", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 14, "ts": 1779070870.0264192, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "text": null, "label": "Accept", "action_key": "click:5:Accept", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 20, "ts": 1779070908.578279, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "text": null, "label": "Accept", "action_key": "click:5:Accept", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e3": {"id": "e3", "src": "xml:60f8459a1485308aedd5b9638456c53d", "src_alias": "UI1", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "dst_alias": "UI1", "label": "click:2 [noop]", "count": 3, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070872.0438113, "action_payload": {"actions": [{"action": "click", "element_id": 2, "text": null, "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "ouku.international.phone:id/content_text", "label": "welcome to youku. .we wi", "frame": [90, 761, 900, 871]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 3, "ts": 1779070789.7258327, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "text": null, "label": "", "action_key": "click:2", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 9, "ts": 1779070828.9436536, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "text": null, "label": "", "action_key": "click:2", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 15, "ts": 1779070872.0438113, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "text": null, "label": "", "action_key": "click:2", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {}}, "e4": {"id": "e4", "src": "xml:4bae0f1288db43a84c1749b849bea602", "src_alias": "UI2", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "dst_alias": "UI3", "label": "click:3 [nav]", "count": 2, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070901.2831447, "action_payload": {"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [0, 1764, 539, 156], "anchor_label": "Decline", "anchor_class": "android.widget.TextView", "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "ouku.international.phone:id/yk_dialog_no", "label": "decline", "frame": [0, 1764, 539, 156]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 5, "ts": 1779070816.365332, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "action": "click", "element_id": 3, "text": null, "label": "Decline", "action_key": "click:3:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 17, "ts": 1779070901.2831447, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "action": "click", "element_id": 3, "text": null, "label": "Decline", "action_key": "click:3:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e5": {"id": "e5", "src": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "src_alias": "UI3", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "dst_alias": "UI1", "label": "click:4 [nav]", "count": 2, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070903.714731, "action_payload": {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": [541, 1764, 539, 156], "anchor_label": "View Agreement", "anchor_class": "android.widget.TextView", "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "uku.international.phone:id/yk_dialog_yes", "label": "view agreement", "frame": [541, 1764, 539, 156]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 6, "ts": 1779070818.801249, "src": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "text": null, "label": "View Agreement", "action_key": "click:4:View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 18, "ts": 1779070903.714731, "src": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "text": null, "label": "View Agreement", "action_key": "click:4:View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e6": {"id": "e6", "src": "xml:4bae0f1288db43a84c1749b849bea602", "src_alias": "UI2", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "dst_alias": "UI1", "label": "click:4 [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070859.645237, "action_payload": {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": [541, 1764, 539, 156], "anchor_label": "View Agreement", "anchor_class": "android.widget.TextView", "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "uku.international.phone:id/yk_dialog_yes", "label": "view agreement", "frame": [541, 1764, 539, 156]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 11, "ts": 1779070859.646213, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "text": null, "label": "View Agreement", "action_key": "click:4:View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e7": {"id": "e7", "src": "xml:60f8459a1485308aedd5b9638456c53d", "src_alias": "UI1", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "dst_alias": "UI2", "label": "click:3 [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779070862.0912204, "action_payload": {"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [0, 1764, 539, 156], "anchor_label": "Decline", "anchor_class": "android.widget.TextView", "fingerprint": {"class": "android.widget.TextView", "resource_id_tail": "m.youku.international.phone:id/link_text", "label": "please read the full ver", "frame": [90, 1632, 900, 106]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 12, "ts": 1779070862.0912204, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 3, "text": null, "label": "Decline", "action_key": "click:3:Decline", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}}, "timeline": [{"kind": "state_seen", "ts": 1779070771.4904165, "src": "", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 1, "src_alias": "", "dst_alias": "UI1", "action_display": "observe", "result_display": "发现 UI1 (new)"}, {"kind": "state_seen", "ts": 1779070785.7993855, "src": "", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 2, "src_alias": "", "dst_alias": "UI2", "action_display": "observe", "result_display": "发现 UI2 (new)"}, {"kind": "transition", "ts": 1779070785.8003626, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 3, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070787.6790152, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "label": "Accept", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Accept", "flow_seq": 4, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=5 Accept", "result_display": "UI2 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070789.7258327, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2", "flow_seq": 5, "src_alias": "UI1", "dst_alias": "UI1", "action_display": "click element=2", "result_display": "UI1 -> UI1 / noop"}, {"kind": "transition", "ts": 1779070804.5633514, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 6, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "state_seen", "ts": 1779070816.3638492, "src": "", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 7, "src_alias": "", "dst_alias": "UI3", "action_display": "observe", "result_display": "发现 UI3 (new)"}, {"kind": "transition", "ts": 1779070816.365332, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "action": "click", "element_id": 3, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:Decline", "flow_seq": 8, "src_alias": "UI2", "dst_alias": "UI3", "action_display": "click element=3 Decline", "result_display": "UI2 -> UI3 / nav"}, {"kind": "transition", "ts": 1779070818.801249, "src": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "label": "View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:View Agreement", "flow_seq": 9, "src_alias": "UI3", "dst_alias": "UI1", "action_display": "click element=4 View Agreement", "result_display": "UI3 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070825.106319, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 10, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070826.9230115, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "label": "Accept", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Accept", "flow_seq": 11, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=5 Accept", "result_display": "UI2 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070828.9436536, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2", "flow_seq": 12, "src_alias": "UI1", "dst_alias": "UI1", "action_display": "click element=2", "result_display": "UI1 -> UI1 / noop"}, {"kind": "transition", "ts": 1779070844.3187816, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 13, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070859.646213, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "label": "View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:View Agreement", "flow_seq": 14, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=4 View Agreement", "result_display": "UI2 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070862.0912204, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 3, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:Decline", "flow_seq": 15, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=3 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070868.2295778, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 16, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070870.0264192, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "label": "Accept", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Accept", "flow_seq": 17, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=5 Accept", "result_display": "UI2 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070872.0438113, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 2, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2", "flow_seq": 18, "src_alias": "UI1", "dst_alias": "UI1", "action_display": "click element=2", "result_display": "UI1 -> UI1 / noop"}, {"kind": "transition", "ts": 1779070888.1182485, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 19, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070901.2831447, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "action": "click", "element_id": 3, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:Decline", "flow_seq": 20, "src_alias": "UI2", "dst_alias": "UI3", "action_display": "click element=3 Decline", "result_display": "UI2 -> UI3 / nav"}, {"kind": "transition", "ts": 1779070903.714731, "src": "xml:8e2c376c91b9903f5e8a7c7c1b6c064e", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 4, "label": "View Agreement", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:View Agreement", "flow_seq": 21, "src_alias": "UI3", "dst_alias": "UI1", "action_display": "click element=4 View Agreement", "result_display": "UI3 -> UI1 / nav"}, {"kind": "transition", "ts": 1779070906.75694, "src": "xml:60f8459a1485308aedd5b9638456c53d", "dst": "xml:4bae0f1288db43a84c1749b849bea602", "action": "click", "element_id": 4, "label": "Decline", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:Decline", "flow_seq": 22, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "click element=4 Decline", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779070908.578279, "src": "xml:4bae0f1288db43a84c1749b849bea602", "dst": "xml:60f8459a1485308aedd5b9638456c53d", "action": "click", "element_id": 5, "label": "Accept", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Accept", "flow_seq": 23, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=5 Accept", "result_display": "UI2 -> UI1 / nav"}], "alias_map": {"xml:60f8459a1485308aedd5b9638456c53d": "UI1", "xml:4bae0f1288db43a84c1749b849bea602": "UI2", "xml:8e2c376c91b9903f5e8a7c7c1b6c064e": "UI3"}};
+    const nodeDetails = payload.node_details || {};
+    const edgeDetails = payload.edge_details || {};
+    const timeline = payload.timeline || [];
+
+    function showRuntimeError(msg) {
+      const detail = document.getElementById('detail');
+      const net = document.getElementById('network');
+      if (detail) {
+        detail.innerHTML = `<div class="card" style="border-color:#e6bfc5;background:#fff5f6;">
+          <div class="k" style="color:#9a2230;">渲染失败</div>
+          <div class="mono">${esc(msg)}</div>
+          <div class="meta" style="margin-top:8px;">建议：使用 Chrome/Edge 打开；或在目录下执行 python -m http.server 后通过 http://127.0.0.1:8765 访问。</div>
+        </div>`;
+      }
+      if (net) {
+        net.innerHTML = `<div style="padding:14px;color:#9a2230;background:#fff5f6;border:1px solid #e6bfc5;border-radius:8px;margin:12px;">
+          交互图未渲染：${esc(msg)}
+        </div>`;
+      }
+    }
+
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderPathLink(label, p) {
+      if (!p) return `<div><span class="k">${esc(label)}:</span> -</div>`;
+      return `<div><span class="k">${esc(label)}:</span> <a class="mono" href="${esc(p)}" target="_blank">${esc(p)}</a></div>`;
+    }
+
+    function renderNode(sig) {
+      const d = nodeDetails[sig];
+      if (!d) return '<div class="card">节点详情不存在。</div>';
+      const nav = d.nav_result || {};
+      const router = d.router_observation || {};
+      const blocks = d.blocks_observation || {};
+      const cand = d.state_action || {};
+      const cands = cand.candidates || [];
+
+      const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
+        ? `<span class="pill bad">外部包: ${esc(d.foreground_package)}</span>`
+        : `<span class="pill ok">目标包: ${esc(d.foreground_package || '-')}</span>`;
+
+      let html = '';
+      html += `<div class="card"><div class="k">节点</div><div class="mono">${esc(d.alias)} | ${esc(d.state_sig)}</div>`;
+      html += `<div style="margin-top:6px">${tag}`;
+      html += `<span class="pill warn">overlay=${esc(d.overlay_kind)}</span>`;
+      html += `<span class="pill warn">visit=${esc(d.visit_count)}</span>`;
+      html += `<span class="pill warn">remaining=${esc((d.candidate_summary || {}).remaining_count)}</span>`;
+      html += `</div></div>`;
+
+      const sp = d.snapshot_paths || {};
+      html += `<div class="card"><div class="k">快照文件</div>`;
+      if (sp.preview) {
+        html += `<div style="margin:8px 0"><img class="preview" src="${esc(sp.preview)}" /></div>`;
+      }
+      html += renderPathLink('screenshot', sp.screenshot_path);
+      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
+      html += renderPathLink('xml', sp.xml_path);
+      html += renderPathLink('xml_raw', sp.xml_raw_path);
+      html += renderPathLink('uist', sp.uist_path);
+      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
+      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div>overlay_kind: <span class="mono">${esc(nav.overlay_kind ?? '-')}</span></div>`;
+      html += `<div>overlay_reason: <span class="mono">${esc(nav.overlay_reason ?? '-')}</span></div>`;
+      html += `<div>candidate_count: <span class="mono">${esc((nav.candidate_actions || []).length)}</span></div>`;
+      html += `<div>exhausted: <span class="mono">${esc(nav.exhausted)}</span>, confidence: <span class="mono">${esc(nav.exhausted_confidence)}</span></div>`;
+      html += `<div>why_these_actions: <span class="mono">${esc(nav.why_these_actions ?? '')}</span></div>`;
+      if (cands.length) {
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {
+          const a = (c.actions || [])[0] || {};
+          html += `<tr><td class="mono">${esc(c.candidate_key)}</td><td>${esc(c.score)}</td><td class="mono">${esc((a.action || '') + ':' + (a.element_id ?? 'None'))}</td><td>${esc(a.reasoning || '')}</td></tr>`;
+        }
+        html += `</tbody></table></details>`;
+      }
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
+      html += `<pre>${esc(JSON.stringify(d.vid_map_summary || {}, null, 2))}</pre>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
+      html += `<pre>${esc(JSON.stringify(d.snapshot_meta || {}, null, 2))}</pre>`;
+      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
+      html += `<div>router_answers: <span class="mono">${esc((router.router_answers || []).length)}</span></div>`;
+      html += `<div>matched_block_ids: <span class="mono">${esc((router.matched_block_ids || []).length)}</span></div>`;
+      html += `<div>block_fill_results: <span class="mono">${esc((blocks.block_fill_results || []).length)}</span></div>`;
+      html += `</div>`;
+
+      html += `<details class="card"><summary>Raw JSON</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    function renderEdge(edgeId) {
+      const d = edgeDetails[edgeId];
+      if (!d) return '<div class="card">边详情不存在。</div>';
+      let html = '';
+      html += `<div class="card"><div class="k">边</div>`;
+      html += `<div class="mono">${esc(d.id)}: ${esc(d.src_alias)} -> ${esc(d.dst_alias)}</div>`;
+      html += `<div>label: <span class="mono">${esc(d.label)}</span></div>`;
+      html += `<div>count=${esc(d.count)}, no_effect=${esc(d.no_effect)}, verified_ok=${esc(d.verified_ok)}, verified_fail=${esc(d.verified_fail)}</div>`;
+      html += `</div>`;
+
+      const sm = d.state_action_match || {};
+      const nm = d.nav_candidate_match || {};
+      html += `<div class="card"><div class="k">动作来源与原因</div>`;
+      if (Object.keys(sm).length) {
+        html += `<div><span class="k">state_action match</span></div>`;
+        html += `<div>candidate_key: <span class="mono">${esc(sm.candidate_key)}</span></div>`;
+        html += `<div>score: <span class="mono">${esc(sm.score)}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(sm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
+      }
+      if (Object.keys(nm).length) {
+        html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
+        html += `<div>score: <span class="mono">${esc(nm.score)}</span>, return_method: <span class="mono">${esc(nm.return_method || '-')}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(nm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
+      }
+      html += `</div>`;
+
+      const occ = d.occurrences || [];
+      if (occ.length) {
+        html += `<div class="card"><div class="k">执行序列（来自 trace）</div>`;
+        html += `<table><thead><tr><th>seq</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>`;
+        for (const x of occ) {
+          html += `<tr><td>${esc(x.seq)}</td><td class="mono">${esc(x.action)}</td><td>${esc(x.element_id)}</td><td>${esc(x.change_type)}</td><td>${esc(x.confidence)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<details class="card"><summary>Raw Action Payload</summary><pre>${esc(JSON.stringify(d.action_payload || {}, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
+    function renderTimeline() {
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      for (const x of timeline) {
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${esc(x.flow_seq)}</td>
+          <td class="mono">${esc(x.src_alias || '-')}</td>
+          <td><span class="mono">${esc(x.action_display || x.action || '')}</span></td>
+          <td>${esc(x.result_display || x.result || x.change_type || '')}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function setDetail(html) {
+      document.getElementById('detail').innerHTML = html;
+    }
+    try {
+      if (!window.vis || !window.vis.DataSet || !window.vis.Network) {
+        throw new Error('vis-network 未加载（window.vis 不可用）');
+      }
+      const allNodes = new vis.DataSet(payload.nodes_vis || []);
+      const allEdges = new vis.DataSet(payload.edges_vis || []);
+      let activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+
+      const network = new vis.Network(
+        document.getElementById('network'),
+        { nodes: allNodes, edges: allEdges },
+        {
+          autoResize: true,
+          interaction: { hover: true, navigationButtons: true, keyboard: true },
+          physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -55, springLength: 180, springConstant: 0.06 },
+            stabilization: { iterations: 220, fit: true }
+          },
+          layout: { improvedLayout: true },
+          edges: { smooth: { type: 'dynamic' } },
+        }
+      );
+
+      network.once('stabilizationIterationsDone', function() {
+        try { network.fit({ animation: false }); } catch (e) {}
+      });
+
+      network.on('click', function (params) {
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
+        if (params.nodes && params.nodes.length > 0) {
+          setDetail(renderNode(params.nodes[0]) + renderTimeline());
+          return;
+        }
+        if (params.edges && params.edges.length > 0) {
+          setDetail(renderEdge(params.edges[0]) + renderTimeline());
+          return;
+        }
+        setDetail(renderTimeline());
+      });
+
+      document.getElementById('hideNoop').addEventListener('change', function (e) {
+        const hide = !!e.target.checked;
+        allEdges.clear();
+        if (!hide) {
+          allEdges.add(payload.edges_vis || []);
+          activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+        } else {
+          const filtered = (payload.edges_vis || []).filter(e => {
+            const d = edgeDetails[e.id] || {};
+            return !d.no_effect;
+          });
+          allEdges.add(filtered);
+          activeEdgeIds = filtered.map(e => e.id);
+        }
+      });
+
+      setDetail(renderTimeline());
+    } catch (err) {
+      showRuntimeError((err && err.message) ? err.message : String(err));
+    }
+  </script>
+</body>
+</html>

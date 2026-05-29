@@ -1,0 +1,39 @@
+F:\workplace\framework\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.0.post1)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+[SNAP] 000001_phash_2ae1e2bfe797d18cfbed82bbb1830d6b known=false xml_reliable=False vid=9
+[STATE] phash_2ae1e2bfe7 -> phash_2ae1e2bfe7 kind=observation new=None
+[LLM] enqueue navigation_router sig=phash_2ae1e2bfe7 input=llm_navigation_router_input.json
+[SNAP] 000004_xml_9f1d6e422c1987b7d92250db44b2bed6 known=false xml_reliable=True vid=2
+DRIFT: old=phash:2a new=xml:9f1d. Replanning.
+[DRIFT] phash_2ae1e2bfe7 -> xml_9f1d6e422c19
+[STATE] phash_2ae1e2bfe7 -> xml_9f1d6e422c19 kind=transition new=False
+[LLM] enqueue navigation_router sig=xml_9f1d6e422c19 input=llm_navigation_router_input.json
+[LLM] result nav sig=phash_2ae1e2bfe7 overlay=none candidates=1 return=0 elapsed=16.27710247039795
+[LLM] result block_router sig=phash_2ae1e2bfe7 overlay=- candidates=0 return=0 elapsed=16.27710247039795
+[LLM] result nav sig=xml_9f1d6e422c19 overlay=dismiss candidates=0 return=0 elapsed=24.93796730041504
+[LLM] result block_router sig=xml_9f1d6e422c19 overlay=- candidates=0 return=0 elapsed=24.93796730041504
+[ACT] start sig=xml_9f1d6e422c19 click element=2 label=Click 'Try Again' to dismiss the error.
+[ACT] done sig=xml_9f1d6e422c19 click element=2 success=true reason=-
+[STATE] xml_9f1d6e422c19 -> phash_2ae1e2bfe7 kind=transition new=False
+[DFS] sig=phash_2ae1e2bfe7 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 1, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 1}
+[DFS] sig=phash_2ae1e2bfe7 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:1:Linky:anchor=[337, 1511, 430, 200]:label=Linky:class=ocr_text", "actions": {"actions": [{"action": "click", "element_id":
+[ACT] start sig=phash_2ae1e2bfe7 click element=1 label=Linky
+[ACT] done sig=phash_2ae1e2bfe7 click element=1 success=true reason=-
+[STATE] phash_2ae1e2bfe7 -> xml_9f1d6e422c19 kind=transition new=False
+[ACT] start sig=xml_9f1d6e422c19 click element=2 label=graph_replay
+[ACT] done sig=xml_9f1d6e422c19 click element=2 success=true reason=-
+[STATE] xml_9f1d6e422c19 -> xml_9f1d6e422c19 kind=transition new=False
+[ACT] start sig=xml_9f1d6e422c19 click element=2 label=Click 'Try Again' to dismiss the error.
+[ACT] done sig=xml_9f1d6e422c19 click element=2 success=true reason=-
+Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.
+[ACT] start sig=xml_9f1d6e422c19 back element=None label=recovery_back
+[ACT] done sig=xml_9f1d6e422c19 back element=None success=true reason=-
+[SNAP] 000035_phash_2ae1e2bfe797d18cfbed82bbb1830d6b known=true xml_reliable=False vid=9
+[STATE] xml_9f1d6e422c19 -> phash_2ae1e2bfe7 kind=transition new=False
+[SNAP] 000038_phash_2ae1e2bfe797d18cfbed82bbb1830d6b known=true xml_reliable=False vid=9
+[DFS] sig=phash_2ae1e2bfe7 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 1, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 1}
+[TRACE] timeline saved json=F:\workplace\framework\traces\20260528_132704_rerun_com.aigc.ushow.ichat\timeline.json md=F:\workplace\framework\traces\20260528_132704_rerun_com.aigc.ushow.ichat\timeline.md
+[RUN] elapsed_seconds=90.582
+[TOKENS] calls=2 prompt=12405 completion=3401 total=15806
+[TOKENS][propose_navigation_and_router] calls=2 prompt=12405 completion=3401 total=15806
+[VIS] interactive_html=F:\workplace\framework\traces\20260528_132704_rerun_com.aigc.ushow.ichat\analysis\interactive\ui_transition_interactive.html

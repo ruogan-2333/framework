@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Transition Interactive - 20260518_103851_com.lbrc.PeriodCalendar</title>
+  <script src="vendor/vis-network.min.js"></script>
+  <script>
+    if (!window.vis) {
+      document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\/script>');
+    }
+    if (!window.vis) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.0/standalone/umd/vis-network.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+    }
+    #root { display: flex; width: 100%; height: 100%; }
+    #left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #toolbar {
+      background: #fff; border-bottom: 1px solid #d9e1ef; padding: 10px 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #network { flex: 1; background: #f8fbff; }
+    #network { min-height: 520px; }
+    #right {
+      width: 460px; max-width: 46vw; min-width: 340px;
+      border-left: 1px solid #d9e1ef; background: #fff; overflow: auto;
+      padding: 12px 14px;
+    }
+    .meta { font-size: 12px; color: #5f6b7a; }
+    .k { font-weight: 600; color: #23303f; }
+    .card { border: 1px solid #e4e9f2; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .mono { font-family: Consolas, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    .ok { background: #e7f6ec; color: #17653a; }
+    .warn { background: #fff2e3; color: #8a5315; }
+    .bad { background: #fde8ea; color: #9a2230; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #f6f9ff; }
+    img.preview { width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }
+    details > summary { cursor: pointer; color: #2d5fa8; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }
+    a { color: #2a66b0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
+    </div>
+  </noscript>
+  <div id="root">
+    <div id="left">
+      <div id="toolbar">
+        <div><span class="k">run_id</span>: <span class="mono">20260518_103851_com.lbrc.PeriodCalendar</span></div>
+        <div><span class="k">stop_reason</span>: <span class="mono">recovery_route_exhausted</span></div>
+        <div><span class="k">nodes</span>: <span class="mono">3</span></div>
+        <div><span class="k">edges</span>: <span class="mono">6</span></div>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
+      </div>
+      <div id="network"></div>
+    </div>
+    <div id="right">
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const payload = {"run_id": "20260518_103851_com.lbrc.PeriodCalendar", "entry_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "cur_sig": "xml:df0da8baa82034b99ffe476f9a7f0df9", "stop_reason": "recovery_route_exhausted", "target_package": "com.lbrc.PeriodCalendar", "node_count": 3, "edge_count": 6, "nodes_vis": [{"id": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "label": "UI1\nvisit=2 rem=2\nnone", "shape": "box", "color": {"background": "#e8f5ff", "border": "#2f6fad"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:df0da8baa82034b99ffe476f9a7f0df9", "label": "UI2\nvisit=4 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:431d50aa5144876dbd02239ccbe99e75", "label": "UI3\nvisit=14 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}], "edges_vis": [{"id": "e1", "from": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "to": "xml:df0da8baa82034b99ffe476f9a7f0df9", "label": "wait [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e2", "from": "xml:df0da8baa82034b99ffe476f9a7f0df9", "to": "xml:431d50aa5144876dbd02239ccbe99e75", "label": "click:3 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e3", "from": "xml:431d50aa5144876dbd02239ccbe99e75", "to": "xml:431d50aa5144876dbd02239ccbe99e75", "label": "click:1 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e4", "from": "xml:431d50aa5144876dbd02239ccbe99e75", "to": "xml:431d50aa5144876dbd02239ccbe99e75", "label": "click:3 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e5", "from": "xml:431d50aa5144876dbd02239ccbe99e75", "to": "xml:431d50aa5144876dbd02239ccbe99e75", "label": "click:5 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e6", "from": "xml:431d50aa5144876dbd02239ccbe99e75", "to": "xml:df0da8baa82034b99ffe476f9a7f0df9", "label": "back [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}], "node_details": {"phash:18912ea2efd04ce8ee0c1a4711fd8de2": {"alias": "UI1", "state_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "visit_count": 2, "unfinished": true, "target_package": "com.lbrc.PeriodCalendar", "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "overlay_kind": "none", "xml_reliable": false, "candidate_summary": {"candidate_count": 2, "explored_count": 0, "attempted_count": 0, "remaining_count": 2}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000001_phash_18912ea2efd04ce8ee0c1a4711fd8de2/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [915, 18, 37, 37], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "2": {"bounds": [24, 17, 236, 42], "text": "", "content_desc": "10:38··X\n10:38 X", "ocr_text": "10:38··X\n10:38 X", "class": "uied_text", "clickable": true, "enabled": true}, "3": {"bounds": [912, 16, 39, 39], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}, "4": {"bounds": [865, 16, 45, 38], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "5": {"bounds": [864, 16, 45, 39], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}, "6": {"bounds": [279, 13, 45, 46], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}, "7": {"bounds": [278, 13, 45, 45], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "5c9a0c7087576a1bd31053669ca78fd4:72a09c33e467d2f510b6eff8d0bec3c1:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.lbrc.PeriodCalendar:com.digitalchemy.period.activity.MainActivity:three_tools", "cache_hit": false, "cache_size": 1, "xml_hash": "5c9a0c7087576a1bd31053669ca78fd4", "screenshot_hash": "72a09c33e467d2f510b6eff8d0bec3c1", "screenshot_phash": "9a5a5a5a5a5a5a5a", "xml_hash_raw": "5c9a0c7087576a1bd31053669ca78fd4", "screenshot_hash_raw": "72a09c33e467d2f510b6eff8d0bec3c1", "xml_reliable": false, "coord_scale": 1.0, "coarse_sig": "2700a60247379e7a8acaddc45c680b2e", "struct_sig": "db22a94c5e253eae01c0bd1c19322fa3", "fine_sig": "b87422356d3accd7678bafe53ebcbbab", "family_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "identity_source": "phash", "identity_hash": "9a5a5a5a5a5a5a5a", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 11, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "page_summary": "Main screen with icons for navigation.", "overlay_kind": "none", "overlay_reason": "No overlay detected.", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": [915, 18, 37, 37], "anchor_center": [933.0, 37.0], "anchor_label": "ICON_PLAY", "anchor_class": "template_triangle", "priority": 1, "reasoning": "Explore main function icon."}], "score": 0.8}, {"actions": [{"action": "click", "element_id": 7, "text": null, "anchor_frame": [278, 13, 45, 45], "anchor_center": [300.0, 35.0], "anchor_label": "ICON_SUN", "anchor_class": "uied_compo", "priority": 1, "reasoning": "Explore settings or themes."}], "score": 0.6}], "page_return_actions": []}, "router_observation": {"state_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "2700a60247379e7a8acaddc45c680b2e", "struct_sig": "db22a94c5e253eae01c0bd1c19322fa3", "fine_sig": "b87422356d3accd7678bafe53ebcbbab", "xml_reliable": false, "xml_hash": "5c9a0c7087576a1bd31053669ca78fd4", "screenshot_hash": "72a09c33e467d2f510b6eff8d0bec3c1", "screenshot_phash": "9a5a5a5a5a5a5a5a", "xml_hash_raw": "5c9a0c7087576a1bd31053669ca78fd4", "screenshot_hash_raw": "72a09c33e467d2f510b6eff8d0bec3c1", "family_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "identity_source": "phash", "identity_hash": "9a5a5a5a5a5a5a5a", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "entry": true}, "state_action": {"state_sig": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "family_id": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "overlay_kind": "none", "candidate_count": 2, "explored_count": 0, "attempted_count": 0, "remaining_count": 2, "is_exhausted": false, "candidate_keys": ["click:1::anchor=[915, 18, 37, 37]:label=ICON_PLAY:class=template_triangle", "click:7::anchor=[278, 13, 45, 45]:label=ICON_SUN:class=uied_compo"], "remaining_candidate_keys": ["click:1::anchor=[915, 18, 37, 37]:label=ICON_PLAY:class=template_triangle", "click:7::anchor=[278, 13, 45, 45]:label=ICON_SUN:class=uied_compo"], "explored_keys": ["drift"], "attempted_keys": [], "candidates": [{"candidate_key": "click:1::anchor=[915, 18, 37, 37]:label=ICON_PLAY:class=template_triangle", "score": 0.8, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 1, "text": "", "reasoning": "Explore main function icon."}]}, {"candidate_key": "click:7::anchor=[278, 13, 45, 45]:label=ICON_SUN:class=uied_compo", "score": 0.6, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 7, "text": "", "reasoning": "Explore settings or themes."}]}]}}, "xml:df0da8baa82034b99ffe476f9a7f0df9": {"alias": "UI2", "state_sig": "xml:df0da8baa82034b99ffe476f9a7f0df9", "visit_count": 4, "unfinished": false, "target_package": "com.lbrc.PeriodCalendar", "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 1, "explored_count": 1, "attempted_count": 1, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000005_xml_df0da8baa82034b99ffe476f9a7f0df9/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [347, 734, 386, 99], "text": "", "content_desc": "Welcome to", "ocr_text": null, "class": "android.view.View", "clickable": false, "enabled": true}, "2": {"bounds": [55, 833, 970, 147], "text": "", "content_desc": "My Period Calendar!", "ocr_text": null, "class": "android.view.View", "clickable": false, "enabled": true}, "3": {"bounds": [48, 1488, 984, 144], "text": "", "content_desc": "Get started", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "4": {"bounds": [48, 1680, 984, 144], "text": "", "content_desc": "Sign in to restore data", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "431f4b75104e7e42cb6a2598c2dba5bb:b7349e8d63eebe741254db144b37b135:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.lbrc.PeriodCalendar:com.digitalchemy.period.activity.MainActivity:xml_only", "cache_hit": false, "cache_size": 2, "xml_hash": "431f4b75104e7e42cb6a2598c2dba5bb", "screenshot_hash": "b7349e8d63eebe741254db144b37b135", "screenshot_phash": "dad05e5ad03a943e", "xml_hash_raw": "431f4b75104e7e42cb6a2598c2dba5bb", "screenshot_hash_raw": "b7349e8d63eebe741254db144b37b135", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "5145fe13255287fac5993a842cde0838", "struct_sig": "44316b8cf90495003a2997ac5f690618", "fine_sig": "e2c2b2a4c4fe36f771d798dcb9cfbadd", "family_sig": "struct:44316b8cf90495003a2997ac5f690618", "identity_source": "xml", "identity_hash": "df0da8baa82034b99ffe476f9a7f0df9", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 16, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:df0da8baa82034b99ffe476f9a7f0df9", "page_summary": "Welcome screen with start and sign-in options.", "overlay_kind": "none", "overlay_reason": "No overlay detected.", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [48, 1488, 984, 144], "anchor_center": [516.0, 1560.0], "anchor_label": "Get started", "anchor_class": "android.view.View", "priority": 0, "reasoning": "Start main app flow."}], "score": 1.0}], "page_return_actions": []}, "router_observation": {"state_sig": "xml:df0da8baa82034b99ffe476f9a7f0df9", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "5145fe13255287fac5993a842cde0838", "struct_sig": "44316b8cf90495003a2997ac5f690618", "fine_sig": "e2c2b2a4c4fe36f771d798dcb9cfbadd", "xml_reliable": true, "xml_hash": "c7a5befd3b538dfb8880b85e70dd4a57", "screenshot_hash": "b7349e8d63eebe741254db144b37b135", "screenshot_phash": "dad05e5ad03a943e", "xml_hash_raw": "c7a5befd3b538dfb8880b85e70dd4a57", "screenshot_hash_raw": "b7349e8d63eebe741254db144b37b135", "family_sig": "struct:44316b8cf90495003a2997ac5f690618", "identity_source": "xml", "identity_hash": "df0da8baa82034b99ffe476f9a7f0df9", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "post_restart": true}, "state_action": {"state_sig": "xml:df0da8baa82034b99ffe476f9a7f0df9", "family_id": "struct:44316b8cf90495003a2997ac5f690618", "overlay_kind": "none", "candidate_count": 1, "explored_count": 1, "attempted_count": 1, "remaining_count": 0, "is_exhausted": true, "candidate_keys": ["click:3::anchor=[48, 1488, 984, 144]:label=Get started:class=android.view.View"], "remaining_candidate_keys": [], "explored_keys": ["click:3::anchor=[48, 1488, 984, 144]:label=Get started:class=android.view.View"], "attempted_keys": ["click:3::anchor=[48, 1488, 984, 144]:label=Get started:class=android.view.View"], "candidates": [{"candidate_key": "click:3::anchor=[48, 1488, 984, 144]:label=Get started:class=android.view.View", "score": 1.0, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 3, "text": "", "reasoning": "Start main app flow."}]}]}}, "xml:431d50aa5144876dbd02239ccbe99e75": {"alias": "UI3", "state_sig": "xml:431d50aa5144876dbd02239ccbe99e75", "visit_count": 14, "unfinished": false, "target_package": "com.lbrc.PeriodCalendar", "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 5, "explored_count": 5, "attempted_count": 5, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_103851_com.lbrc.PeriodCalendar/debug_pages/000018_xml_431d50aa5144876dbd02239ccbe99e75/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [48, 657, 984, 300], "text": "", "content_desc": "", "ocr_text": null, "class": "android.widget.ImageView", "clickable": true, "enabled": true}, "2": {"bounds": [132, 861, 327, 90], "text": "", "content_desc": "Privacy Policy", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "3": {"bounds": [48, 957, 984, 168], "text": "", "content_desc": "", "ocr_text": null, "class": "android.widget.ImageView", "clickable": true, "enabled": true}, "4": {"bounds": [426, 963, 327, 90], "text": "", "content_desc": "Privacy Policy", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "5": {"bounds": [132, 963, 873, 156], "text": "", "content_desc": "Terms of Service", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "6": {"bounds": [36, 1503, 273, 90], "text": "", "content_desc": "Learn more", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "d3720ddd280e4cbb0fde8fb5cc34e51c:78e68dfa43285681a404fe96b282235b:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.lbrc.PeriodCalendar:com.digitalchemy.period.activity.MainActivity:xml_only", "cache_hit": false, "cache_size": 3, "xml_hash": "d3720ddd280e4cbb0fde8fb5cc34e51c", "screenshot_hash": "78e68dfa43285681a404fe96b282235b", "screenshot_phash": "bed443845eab6bc0", "xml_hash_raw": "fd2792a0d05c0693896df2fdaffbef1a", "screenshot_hash_raw": "1322f87bda71d94279edc71e010be0f0", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "fff47ee2119e52f8bd5e1fa7d90ab9c2", "struct_sig": "84d53eea6939bc2a42537c08dd368d02", "fine_sig": "a4e3c52b9a4f3693f1a5163bf6267ca1", "family_sig": "struct:84d53eea6939bc2a42537c08dd368d02", "identity_source": "xml", "identity_hash": "431d50aa5144876dbd02239ccbe99e75", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 480, "status_bar_crop_xml": 480, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 31, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:431d50aa5144876dbd02239ccbe99e75", "page_summary": "Privacy consent screen with options.", "overlay_kind": "none", "overlay_reason": "No overlay detected.", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": [48, 657, 984, 300], "anchor_center": [228.0, 702.0], "anchor_label": ".", "anchor_class": "android.widget.ImageView", "priority": 0, "reasoning": "Explore consent option 1."}], "score": 0.5}, {"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [48, 957, 984, 168], "anchor_center": [516.0, 1047.0], "anchor_label": ".", "anchor_class": "android.widget.ImageView", "priority": 0, "reasoning": "Explore consent option 2."}], "score": 0.5}, {"actions": [{"action": "click", "element_id": 2, "text": null, "anchor_frame": [132, 861, 327, 90], "anchor_center": [168.0, 906.0], "anchor_label": "Privacy Policy", "anchor_class": "android.view.View", "priority": 0, "reasoning": "View Privacy Policy."}], "score": 0.7}, {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": [426, 963, 327, 90], "anchor_center": [564.0, 1008.0], "anchor_label": "Privacy Policy", "anchor_class": "android.view.View", "priority": 0, "reasoning": "View Privacy Policy."}], "score": 0.7}, {"actions": [{"action": "click", "element_id": 5, "text": null, "anchor_frame": [132, 963, 873, 156], "anchor_center": [504.0, 1041.0], "anchor_label": "Terms of Service", "anchor_class": "android.view.View", "priority": 0, "reasoning": "View Terms of Service."}], "score": 0.7}], "page_return_actions": []}, "router_observation": {"state_sig": "xml:431d50aa5144876dbd02239ccbe99e75", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "fff47ee2119e52f8bd5e1fa7d90ab9c2", "struct_sig": "84d53eea6939bc2a42537c08dd368d02", "fine_sig": "a4e3c52b9a4f3693f1a5163bf6267ca1", "xml_reliable": true, "xml_hash": "d3720ddd280e4cbb0fde8fb5cc34e51c", "screenshot_hash": "78e68dfa43285681a404fe96b282235b", "screenshot_phash": "bed443845eab6bc0", "xml_hash_raw": "fd2792a0d05c0693896df2fdaffbef1a", "screenshot_hash_raw": "1322f87bda71d94279edc71e010be0f0", "family_sig": "struct:84d53eea6939bc2a42537c08dd368d02", "identity_source": "xml", "identity_hash": "431d50aa5144876dbd02239ccbe99e75", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.lbrc.PeriodCalendar", "foreground_activity": "com.digitalchemy.period.activity.MainActivity", "status_bar_crop_px": 480, "status_bar_crop_xml": 480, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920}, "state_action": {"state_sig": "xml:431d50aa5144876dbd02239ccbe99e75", "family_id": "struct:84d53eea6939bc2a42537c08dd368d02", "overlay_kind": "none", "candidate_count": 5, "explored_count": 5, "attempted_count": 5, "remaining_count": 0, "is_exhausted": true, "candidate_keys": ["click:1::anchor=[48, 657, 984, 300]:label=.:class=android.widget.ImageView", "click:3::anchor=[48, 957, 984, 168]:label=.:class=android.widget.ImageView", "click:2::anchor=[132, 861, 327, 90]:label=Privacy Policy:class=android.view.View", "click:4::anchor=[426, 963, 327, 90]:label=Privacy Policy:class=android.view.View", "click:5::anchor=[132, 963, 873, 156]:label=Terms of Service:class=android.view.View"], "remaining_candidate_keys": [], "explored_keys": ["click:1::anchor=[48, 657, 984, 300]:label=.:class=android.widget.ImageView", "click:2::anchor=[132, 861, 327, 90]:label=Privacy Policy:class=android.view.View", "click:3::anchor=[48, 957, 984, 168]:label=.:class=android.widget.ImageView", "click:4::anchor=[426, 963, 327, 90]:label=Privacy Policy:class=android.view.View", "click:5::anchor=[132, 963, 873, 156]:label=Terms of Service:class=android.view.View"], "attempted_keys": ["click:1::anchor=[48, 657, 984, 300]:label=.:class=android.widget.ImageView", "click:2::anchor=[132, 861, 327, 90]:label=Privacy Policy:class=android.view.View", "click:3::anchor=[48, 957, 984, 168]:label=.:class=android.widget.ImageView", "click:4::anchor=[426, 963, 327, 90]:label=Privacy Policy:class=android.view.View", "click:5::anchor=[132, 963, 873, 156]:label=Terms of Service:class=android.view.View"], "candidates": [{"candidate_key": "click:1::anchor=[48, 657, 984, 300]:label=.:class=android.widget.ImageView", "score": 0.5, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 1, "text": "", "reasoning": "Explore consent option 1."}]}, {"candidate_key": "click:3::anchor=[48, 957, 984, 168]:label=.:class=android.widget.ImageView", "score": 0.5, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 3, "text": "", "reasoning": "Explore consent option 2."}]}, {"candidate_key": "click:2::anchor=[132, 861, 327, 90]:label=Privacy Policy:class=android.view.View", "score": 0.7, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 2, "text": "", "reasoning": "View Privacy Policy."}]}, {"candidate_key": "click:4::anchor=[426, 963, 327, 90]:label=Privacy Policy:class=android.view.View", "score": 0.7, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 4, "text": "", "reasoning": "View Privacy Policy."}]}, {"candidate_key": "click:5::anchor=[132, 963, 873, 156]:label=Terms of Service:class=android.view.View", "score": 0.7, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 5, "text": "", "reasoning": "View Terms of Service."}]}]}}}, "edge_details": {"e1": {"id": "e1", "src": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "src_alias": "UI1", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "dst_alias": "UI2", "label": "wait [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071946.168761, "action_payload": {"actions": [{"action": "wait", "element_id": null, "text": "0.2"}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 1, "ts": 1779071946.168761, "src": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "action": "wait", "element_id": null, "text": "0.2", "label": "0.2", "action_key": "wait:None:0.2", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e2": {"id": "e2", "src": "xml:df0da8baa82034b99ffe476f9a7f0df9", "src_alias": "UI2", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "dst_alias": "UI3", "label": "click:3 [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071960.3127189, "action_payload": {"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [48, 1488, 984, 144], "anchor_center": [516.0, 1560.0], "anchor_label": "Get started", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "", "label": "get started", "frame": [48, 1488, 984, 144]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 2, "ts": 1779071960.3127189, "src": "xml:df0da8baa82034b99ffe476f9a7f0df9", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "text": null, "label": "Get started", "action_key": "click:3:Get started", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {"score": 1.0, "tags": [], "reasoning": "Start main app flow.", "return_method": null}}, "e3": {"id": "e3", "src": "xml:431d50aa5144876dbd02239ccbe99e75", "src_alias": "UI3", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "dst_alias": "UI3", "label": "click:1 [noop]", "count": 2, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071971.000616, "action_payload": {"actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": [48, 657, 984, 300], "anchor_center": [228.0, 702.0], "anchor_label": ".", "anchor_class": "android.widget.ImageView", "fingerprint": {"class": "android.widget.ImageView", "resource_id_tail": "", "label": "", "frame": [48, 657, 984, 300]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 3, "ts": 1779071969.0580246, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 1, "text": null, "label": ".", "action_key": "click:1:.", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 4, "ts": 1779071971.000616, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 1, "text": null, "label": ".", "action_key": "click:1:.", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {"score": 0.5, "tags": [], "reasoning": "Explore consent option 1.", "return_method": null}}, "e4": {"id": "e4", "src": "xml:431d50aa5144876dbd02239ccbe99e75", "src_alias": "UI3", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "dst_alias": "UI3", "label": "click:3 [noop]", "count": 2, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071974.9010425, "action_payload": {"actions": [{"action": "click", "element_id": 3, "text": null, "anchor_frame": [48, 957, 984, 168], "anchor_center": [516.0, 1047.0], "anchor_label": ".", "anchor_class": "android.widget.ImageView", "fingerprint": {"class": "android.widget.ImageView", "resource_id_tail": "", "label": "", "frame": [48, 957, 984, 168]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 5, "ts": 1779071972.9430547, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "text": null, "label": ".", "action_key": "click:3:.", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 6, "ts": 1779071974.9010425, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "text": null, "label": ".", "action_key": "click:3:.", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {"score": 0.5, "tags": [], "reasoning": "Explore consent option 2.", "return_method": null}}, "e5": {"id": "e5", "src": "xml:431d50aa5144876dbd02239ccbe99e75", "src_alias": "UI3", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "dst_alias": "UI3", "label": "click:5 [noop]", "count": 2, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071989.323761, "action_payload": {"actions": [{"action": "click", "element_id": 5, "text": null, "anchor_frame": [132, 963, 873, 156], "anchor_center": [504.0, 1041.0], "anchor_label": "Terms of Service", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "", "label": "terms of service", "frame": [132, 963, 873, 156]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 7, "ts": 1779071987.3847904, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 5, "text": null, "label": "Terms of Service", "action_key": "click:5:Terms of Service", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 8, "ts": 1779071989.323761, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 5, "text": null, "label": "Terms of Service", "action_key": "click:5:Terms of Service", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {"score": 0.7, "tags": [], "reasoning": "View Terms of Service.", "return_method": null}}, "e6": {"id": "e6", "src": "xml:431d50aa5144876dbd02239ccbe99e75", "src_alias": "UI3", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "dst_alias": "UI2", "label": "back [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779071991.192112, "action_payload": {"actions": [{"action": "back", "element_id": null, "text": null}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 9, "ts": 1779071991.192112, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}}, "timeline": [{"kind": "state_seen", "ts": 1779071945.6027594, "src": "", "dst": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 1, "src_alias": "", "dst_alias": "UI1", "action_display": "observe", "result_display": "发现 UI1 (new)"}, {"kind": "state_seen", "ts": 1779071946.1667974, "src": "", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 2, "src_alias": "", "dst_alias": "UI2", "action_display": "observe", "result_display": "发现 UI2 (new)"}, {"kind": "transition", "ts": 1779071946.168761, "src": "phash:18912ea2efd04ce8ee0c1a4711fd8de2", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "action": "wait", "element_id": null, "label": "0.2", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "wait:None:0.2", "flow_seq": 3, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "wait 0.2", "result_display": "UI1 -> UI2 / nav"}, {"kind": "state_seen", "ts": 1779071960.3127189, "src": "", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 4, "src_alias": "", "dst_alias": "UI3", "action_display": "observe", "result_display": "发现 UI3 (new)"}, {"kind": "transition", "ts": 1779071960.3127189, "src": "xml:df0da8baa82034b99ffe476f9a7f0df9", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "label": "Get started", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:Get started", "flow_seq": 5, "src_alias": "UI2", "dst_alias": "UI3", "action_display": "click element=3 Get started", "result_display": "UI2 -> UI3 / nav"}, {"kind": "transition", "ts": 1779071969.0580246, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 1, "label": ".", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:.", "flow_seq": 6, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=1 .", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071971.000616, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 1, "label": ".", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:.", "flow_seq": 7, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=1 .", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071972.9430547, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "label": ".", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:.", "flow_seq": 8, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=3 .", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071974.9010425, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 3, "label": ".", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:3:.", "flow_seq": 9, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=3 .", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071987.3847904, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 5, "label": "Terms of Service", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Terms of Service", "flow_seq": 10, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=5 Terms of Service", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071989.323761, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:431d50aa5144876dbd02239ccbe99e75", "action": "click", "element_id": 5, "label": "Terms of Service", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:Terms of Service", "flow_seq": 11, "src_alias": "UI3", "dst_alias": "UI3", "action_display": "click element=5 Terms of Service", "result_display": "UI3 -> UI3 / noop"}, {"kind": "transition", "ts": 1779071991.192112, "src": "xml:431d50aa5144876dbd02239ccbe99e75", "dst": "xml:df0da8baa82034b99ffe476f9a7f0df9", "action": "back", "element_id": null, "label": "", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 12, "src_alias": "UI3", "dst_alias": "UI2", "action_display": "back", "result_display": "UI3 -> UI2 / nav"}], "alias_map": {"phash:18912ea2efd04ce8ee0c1a4711fd8de2": "UI1", "xml:df0da8baa82034b99ffe476f9a7f0df9": "UI2", "xml:431d50aa5144876dbd02239ccbe99e75": "UI3"}};
+    const nodeDetails = payload.node_details || {};
+    const edgeDetails = payload.edge_details || {};
+    const timeline = payload.timeline || [];
+
+    function showRuntimeError(msg) {
+      const detail = document.getElementById('detail');
+      const net = document.getElementById('network');
+      if (detail) {
+        detail.innerHTML = `<div class="card" style="border-color:#e6bfc5;background:#fff5f6;">
+          <div class="k" style="color:#9a2230;">渲染失败</div>
+          <div class="mono">${esc(msg)}</div>
+          <div class="meta" style="margin-top:8px;">建议：使用 Chrome/Edge 打开；或在目录下执行 python -m http.server 后通过 http://127.0.0.1:8765 访问。</div>
+        </div>`;
+      }
+      if (net) {
+        net.innerHTML = `<div style="padding:14px;color:#9a2230;background:#fff5f6;border:1px solid #e6bfc5;border-radius:8px;margin:12px;">
+          交互图未渲染：${esc(msg)}
+        </div>`;
+      }
+    }
+
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderPathLink(label, p) {
+      if (!p) return `<div><span class="k">${esc(label)}:</span> -</div>`;
+      return `<div><span class="k">${esc(label)}:</span> <a class="mono" href="${esc(p)}" target="_blank">${esc(p)}</a></div>`;
+    }
+
+    function renderNode(sig) {
+      const d = nodeDetails[sig];
+      if (!d) return '<div class="card">节点详情不存在。</div>';
+      const nav = d.nav_result || {};
+      const router = d.router_observation || {};
+      const blocks = d.blocks_observation || {};
+      const cand = d.state_action || {};
+      const cands = cand.candidates || [];
+
+      const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
+        ? `<span class="pill bad">外部包: ${esc(d.foreground_package)}</span>`
+        : `<span class="pill ok">目标包: ${esc(d.foreground_package || '-')}</span>`;
+
+      let html = '';
+      html += `<div class="card"><div class="k">节点</div><div class="mono">${esc(d.alias)} | ${esc(d.state_sig)}</div>`;
+      html += `<div style="margin-top:6px">${tag}`;
+      html += `<span class="pill warn">overlay=${esc(d.overlay_kind)}</span>`;
+      html += `<span class="pill warn">visit=${esc(d.visit_count)}</span>`;
+      html += `<span class="pill warn">remaining=${esc((d.candidate_summary || {}).remaining_count)}</span>`;
+      html += `</div></div>`;
+
+      const sp = d.snapshot_paths || {};
+      html += `<div class="card"><div class="k">快照文件</div>`;
+      if (sp.preview) {
+        html += `<div style="margin:8px 0"><img class="preview" src="${esc(sp.preview)}" /></div>`;
+      }
+      html += renderPathLink('screenshot', sp.screenshot_path);
+      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
+      html += renderPathLink('xml', sp.xml_path);
+      html += renderPathLink('xml_raw', sp.xml_raw_path);
+      html += renderPathLink('uist', sp.uist_path);
+      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
+      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div>overlay_kind: <span class="mono">${esc(nav.overlay_kind ?? '-')}</span></div>`;
+      html += `<div>overlay_reason: <span class="mono">${esc(nav.overlay_reason ?? '-')}</span></div>`;
+      html += `<div>candidate_count: <span class="mono">${esc((nav.candidate_actions || []).length)}</span></div>`;
+      html += `<div>exhausted: <span class="mono">${esc(nav.exhausted)}</span>, confidence: <span class="mono">${esc(nav.exhausted_confidence)}</span></div>`;
+      html += `<div>why_these_actions: <span class="mono">${esc(nav.why_these_actions ?? '')}</span></div>`;
+      if (cands.length) {
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {
+          const a = (c.actions || [])[0] || {};
+          html += `<tr><td class="mono">${esc(c.candidate_key)}</td><td>${esc(c.score)}</td><td class="mono">${esc((a.action || '') + ':' + (a.element_id ?? 'None'))}</td><td>${esc(a.reasoning || '')}</td></tr>`;
+        }
+        html += `</tbody></table></details>`;
+      }
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
+      html += `<pre>${esc(JSON.stringify(d.vid_map_summary || {}, null, 2))}</pre>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
+      html += `<pre>${esc(JSON.stringify(d.snapshot_meta || {}, null, 2))}</pre>`;
+      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
+      html += `<div>router_answers: <span class="mono">${esc((router.router_answers || []).length)}</span></div>`;
+      html += `<div>matched_block_ids: <span class="mono">${esc((router.matched_block_ids || []).length)}</span></div>`;
+      html += `<div>block_fill_results: <span class="mono">${esc((blocks.block_fill_results || []).length)}</span></div>`;
+      html += `</div>`;
+
+      html += `<details class="card"><summary>Raw JSON</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    function renderEdge(edgeId) {
+      const d = edgeDetails[edgeId];
+      if (!d) return '<div class="card">边详情不存在。</div>';
+      let html = '';
+      html += `<div class="card"><div class="k">边</div>`;
+      html += `<div class="mono">${esc(d.id)}: ${esc(d.src_alias)} -> ${esc(d.dst_alias)}</div>`;
+      html += `<div>label: <span class="mono">${esc(d.label)}</span></div>`;
+      html += `<div>count=${esc(d.count)}, no_effect=${esc(d.no_effect)}, verified_ok=${esc(d.verified_ok)}, verified_fail=${esc(d.verified_fail)}</div>`;
+      html += `</div>`;
+
+      const sm = d.state_action_match || {};
+      const nm = d.nav_candidate_match || {};
+      html += `<div class="card"><div class="k">动作来源与原因</div>`;
+      if (Object.keys(sm).length) {
+        html += `<div><span class="k">state_action match</span></div>`;
+        html += `<div>candidate_key: <span class="mono">${esc(sm.candidate_key)}</span></div>`;
+        html += `<div>score: <span class="mono">${esc(sm.score)}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(sm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
+      }
+      if (Object.keys(nm).length) {
+        html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
+        html += `<div>score: <span class="mono">${esc(nm.score)}</span>, return_method: <span class="mono">${esc(nm.return_method || '-')}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(nm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
+      }
+      html += `</div>`;
+
+      const occ = d.occurrences || [];
+      if (occ.length) {
+        html += `<div class="card"><div class="k">执行序列（来自 trace）</div>`;
+        html += `<table><thead><tr><th>seq</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>`;
+        for (const x of occ) {
+          html += `<tr><td>${esc(x.seq)}</td><td class="mono">${esc(x.action)}</td><td>${esc(x.element_id)}</td><td>${esc(x.change_type)}</td><td>${esc(x.confidence)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<details class="card"><summary>Raw Action Payload</summary><pre>${esc(JSON.stringify(d.action_payload || {}, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
+    function renderTimeline() {
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      for (const x of timeline) {
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${esc(x.flow_seq)}</td>
+          <td class="mono">${esc(x.src_alias || '-')}</td>
+          <td><span class="mono">${esc(x.action_display || x.action || '')}</span></td>
+          <td>${esc(x.result_display || x.result || x.change_type || '')}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function setDetail(html) {
+      document.getElementById('detail').innerHTML = html;
+    }
+    try {
+      if (!window.vis || !window.vis.DataSet || !window.vis.Network) {
+        throw new Error('vis-network 未加载（window.vis 不可用）');
+      }
+      const allNodes = new vis.DataSet(payload.nodes_vis || []);
+      const allEdges = new vis.DataSet(payload.edges_vis || []);
+      let activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+
+      const network = new vis.Network(
+        document.getElementById('network'),
+        { nodes: allNodes, edges: allEdges },
+        {
+          autoResize: true,
+          interaction: { hover: true, navigationButtons: true, keyboard: true },
+          physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -55, springLength: 180, springConstant: 0.06 },
+            stabilization: { iterations: 220, fit: true }
+          },
+          layout: { improvedLayout: true },
+          edges: { smooth: { type: 'dynamic' } },
+        }
+      );
+
+      network.once('stabilizationIterationsDone', function() {
+        try { network.fit({ animation: false }); } catch (e) {}
+      });
+
+      network.on('click', function (params) {
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
+        if (params.nodes && params.nodes.length > 0) {
+          setDetail(renderNode(params.nodes[0]) + renderTimeline());
+          return;
+        }
+        if (params.edges && params.edges.length > 0) {
+          setDetail(renderEdge(params.edges[0]) + renderTimeline());
+          return;
+        }
+        setDetail(renderTimeline());
+      });
+
+      document.getElementById('hideNoop').addEventListener('change', function (e) {
+        const hide = !!e.target.checked;
+        allEdges.clear();
+        if (!hide) {
+          allEdges.add(payload.edges_vis || []);
+          activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+        } else {
+          const filtered = (payload.edges_vis || []).filter(e => {
+            const d = edgeDetails[e.id] || {};
+            return !d.no_effect;
+          });
+          allEdges.add(filtered);
+          activeEdgeIds = filtered.map(e => e.id);
+        }
+      });
+
+      setDetail(renderTimeline());
+    } catch (err) {
+      showRuntimeError((err && err.message) ? err.message : String(err));
+    }
+  </script>
+</body>
+</html>

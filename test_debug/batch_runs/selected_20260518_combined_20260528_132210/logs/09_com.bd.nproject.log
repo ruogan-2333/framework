@@ -1,0 +1,35 @@
+F:\workplace\framework\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.0.post1)/charset_normalizer (3.4.6) doesn't match a supported version!
+  warnings.warn(
+[SNAP] 000001_xml_602a409274b4e87d876b89405b70217c known=false xml_reliable=True vid=5
+[STATE] xml_602a409274b4 -> xml_602a409274b4 kind=observation new=None
+[LLM] enqueue navigation_router sig=xml_602a409274b4 input=llm_navigation_router_input.json
+[SNAP] 000004_xml_602a409274b4e87d876b89405b70217c known=true xml_reliable=True vid=5
+[SNAP] 000006_xml_602a409274b4e87d876b89405b70217c known=true xml_reliable=True vid=5
+[LLM] result nav sig=xml_602a409274b4 overlay=none candidates=1 return=0 elapsed=24.79117512702942
+[LLM] result block_router sig=xml_602a409274b4 overlay=- candidates=0 return=0 elapsed=24.79117512702942
+[DFS] sig=xml_602a409274b4 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 1, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 1}
+[DFS] sig=xml_602a409274b4 plan=dfs_candidate_commit detail={"plan": "dfs_candidate_commit", "candidate_key": "click:5::anchor=[438, 1552, 204, 156]:label=Skip:class=android.widget.FrameLayout", "actions": {"actions": [{"action": "click", "
+[ACT] start sig=xml_602a409274b4 click element=5 label=Skip login to proceed with exploration.
+[ACT] done sig=xml_602a409274b4 click element=5 success=true reason=-
+[SNAP] 000013_xml_99a81d4d68607f4b295bf295d8210497 known=false xml_reliable=True vid=6
+[STATE] xml_602a409274b4 -> xml_99a81d4d6860 kind=transition new=False
+[LLM] enqueue navigation_router sig=xml_99a81d4d6860 input=llm_navigation_router_input.json
+[LLM] result nav sig=xml_99a81d4d6860 overlay=workflow candidates=0 return=1 elapsed=20.7431960105896
+[LLM] enqueue blocks_fill sig=xml_99a81d4d6860 input=llm_blocks_fill_input.json
+[LLM] result block_router sig=xml_99a81d4d6860 overlay=- candidates=0 return=0 elapsed=20.7431960105896
+[DFS] sig=xml_99a81d4d6860 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 0, "using_heuristics": false, "overlay_kind": "workflow", "stack_depth": 2}
+[DFS] sig=xml_99a81d4d6860 plan=dfs_return_from_exhausted_state detail={"plan": "dfs_return_from_exhausted_state", "stack_depth": 2}
+[DFS] sig=xml_99a81d4d6860 plan=page_return_actions detail={"plan": "page_return_actions", "count": 1}
+[ACT] start sig=xml_99a81d4d6860 click element=2 label=Go back as main flow is blocked.
+[ACT] done sig=xml_99a81d4d6860 click element=2 success=true reason=-
+[SNAP] 000026_xml_602a409274b4e87d876b89405b70217c known=true xml_reliable=True vid=5
+[STATE] xml_99a81d4d6860 -> xml_602a409274b4 kind=transition new=False
+[LLM] result blocks_fill sig=xml_99a81d4d6860 overlay=- candidates=0 return=0 elapsed=13.143653154373169
+[SNAP] 000029_xml_602a409274b4e87d876b89405b70217c known=true xml_reliable=True vid=5
+[DFS] sig=xml_602a409274b4 plan=dfs_evaluate_candidates detail={"plan": "dfs_evaluate_candidates", "candidate_count": 1, "using_heuristics": false, "overlay_kind": "none", "stack_depth": 1}
+[TRACE] timeline saved json=F:\workplace\framework\traces\20260528_135326_rerun_com.bd.nproject\timeline.json md=F:\workplace\framework\traces\20260528_135326_rerun_com.bd.nproject\timeline.md
+[RUN] elapsed_seconds=91.917
+[TOKENS] calls=3 prompt=30015 completion=7087 total=37102
+[TOKENS][propose_blocks_fill] calls=1 prompt=1297 completion=1266 total=2563
+[TOKENS][propose_navigation_and_router] calls=2 prompt=28718 completion=5821 total=34539
+[VIS] interactive_html=F:\workplace\framework\traces\20260528_135326_rerun_com.bd.nproject\analysis\interactive\ui_transition_interactive.html

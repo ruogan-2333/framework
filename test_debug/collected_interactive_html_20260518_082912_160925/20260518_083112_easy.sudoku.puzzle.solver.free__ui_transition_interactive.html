@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Transition Interactive - 20260518_083112_easy.sudoku.puzzle.solver.free</title>
+  <script src="vendor/vis-network.min.js"></script>
+  <script>
+    if (!window.vis) {
+      document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\/script>');
+    }
+    if (!window.vis) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.0/standalone/umd/vis-network.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+    }
+    #root { display: flex; width: 100%; height: 100%; }
+    #left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #toolbar {
+      background: #fff; border-bottom: 1px solid #d9e1ef; padding: 10px 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #network { flex: 1; background: #f8fbff; }
+    #network { min-height: 520px; }
+    #right {
+      width: 460px; max-width: 46vw; min-width: 340px;
+      border-left: 1px solid #d9e1ef; background: #fff; overflow: auto;
+      padding: 12px 14px;
+    }
+    .meta { font-size: 12px; color: #5f6b7a; }
+    .k { font-weight: 600; color: #23303f; }
+    .card { border: 1px solid #e4e9f2; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .mono { font-family: Consolas, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    .ok { background: #e7f6ec; color: #17653a; }
+    .warn { background: #fff2e3; color: #8a5315; }
+    .bad { background: #fde8ea; color: #9a2230; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #f6f9ff; }
+    img.preview { width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }
+    details > summary { cursor: pointer; color: #2d5fa8; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }
+    a { color: #2a66b0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
+    </div>
+  </noscript>
+  <div id="root">
+    <div id="left">
+      <div id="toolbar">
+        <div><span class="k">run_id</span>: <span class="mono">20260518_083112_easy.sudoku.puzzle.solver.free</span></div>
+        <div><span class="k">stop_reason</span>: <span class="mono">recovery_route_exhausted</span></div>
+        <div><span class="k">nodes</span>: <span class="mono">3</span></div>
+        <div><span class="k">edges</span>: <span class="mono">5</span></div>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
+      </div>
+      <div id="network"></div>
+    </div>
+    <div id="right">
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const payload = {"run_id": "20260518_083112_easy.sudoku.puzzle.solver.free", "entry_sig": "xml:c80e155ffc537943e43c28f6b6022534", "cur_sig": "xml:d3d0537778b314f6ab0c806e46c9f77b", "stop_reason": "recovery_route_exhausted", "target_package": "easy.sudoku.puzzle.solver.free", "node_count": 3, "edge_count": 5, "nodes_vis": [{"id": "xml:c80e155ffc537943e43c28f6b6022534", "label": "UI1\nvisit=2 rem=1\nnone", "shape": "box", "color": {"background": "#e8f5ff", "border": "#2f6fad"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "UI2\nvisit=13 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:ae8980ed8872efd7ba0b62f250294ce6", "label": "UI3\nvisit=1 rem=0\nnone", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}], "edges_vis": [{"id": "e1", "from": "xml:c80e155ffc537943e43c28f6b6022534", "to": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "wait [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e2", "from": "xml:d3d0537778b314f6ab0c806e46c9f77b", "to": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "click:5 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e3", "from": "xml:d3d0537778b314f6ab0c806e46c9f77b", "to": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "click:4 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e4", "from": "xml:d3d0537778b314f6ab0c806e46c9f77b", "to": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "click:2 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e5", "from": "xml:d3d0537778b314f6ab0c806e46c9f77b", "to": "xml:d3d0537778b314f6ab0c806e46c9f77b", "label": "back [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}], "node_details": {"xml:c80e155ffc537943e43c28f6b6022534": {"alias": "UI1", "state_sig": "xml:c80e155ffc537943e43c28f6b6022534", "visit_count": 2, "unfinished": true, "target_package": "easy.sudoku.puzzle.solver.free", "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 1, "explored_count": 0, "attempted_count": 0, "remaining_count": 1}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000001_xml_c80e155ffc537943e43c28f6b6022534/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [180, 831, 720, 257], "text": "", "content_desc": "", "ocr_text": "Cakever", "class": "android.widget.ImageView", "clickable": false, "enabled": true}}, "snapshot_meta": {"raw_key": "17fad24dc65a98e62cea310bae1cb356:47e7a83caf6d9925e48b9955fde99a40:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:easy.sudoku.puzzle.solver.free:com.meevii.ui.activity.SplashActivity:xml_only", "cache_hit": false, "cache_size": 1, "xml_hash": "17fad24dc65a98e62cea310bae1cb356", "screenshot_hash": "47e7a83caf6d9925e48b9955fde99a40", "screenshot_phash": "b939c6c63939c646", "xml_hash_raw": "8bcc662ef7551595e7736c1c60c8b656", "screenshot_hash_raw": "d6d2e4a699db8ed39fafefc667e5aa5c", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "3ef0113c2651839497c0e4f9b9728a04", "struct_sig": "87a787d04f96a883b5f206c54f713514", "fine_sig": "4a0475712e8d18de4608dff58b490002", "family_sig": "struct:87a787d04f96a883b5f206c54f713514", "identity_source": "xml", "identity_hash": "c80e155ffc537943e43c28f6b6022534", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "status_bar_crop_px": 418, "status_bar_crop_xml": 418, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 9, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:c80e155ffc537943e43c28f6b6022534", "page_summary": "Splash screen with logo displayed.", "overlay_kind": "none", "overlay_reason": "No overlay detected.", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": null, "text": null, "anchor_frame": [0, 0, 1080, 1920], "anchor_center": null, "anchor_label": "Proceed", "anchor_class": "android.widget.FrameLayout", "priority": 1, "reasoning": "Advance past splash screen"}], "score": 0.8}], "page_return_actions": []}, "router_observation": {"state_sig": "xml:c80e155ffc537943e43c28f6b6022534", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "3ef0113c2651839497c0e4f9b9728a04", "struct_sig": "87a787d04f96a883b5f206c54f713514", "fine_sig": "4a0475712e8d18de4608dff58b490002", "xml_reliable": true, "xml_hash": "17fad24dc65a98e62cea310bae1cb356", "screenshot_hash": "47e7a83caf6d9925e48b9955fde99a40", "screenshot_phash": "b939c6c63939c646", "xml_hash_raw": "8bcc662ef7551595e7736c1c60c8b656", "screenshot_hash_raw": "d6d2e4a699db8ed39fafefc667e5aa5c", "family_sig": "struct:87a787d04f96a883b5f206c54f713514", "identity_source": "xml", "identity_hash": "c80e155ffc537943e43c28f6b6022534", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "status_bar_crop_px": 418, "status_bar_crop_xml": 418, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "entry": true}, "state_action": {"state_sig": "xml:c80e155ffc537943e43c28f6b6022534", "family_id": "struct:87a787d04f96a883b5f206c54f713514", "overlay_kind": "none", "candidate_count": 1, "explored_count": 0, "attempted_count": 0, "remaining_count": 1, "is_exhausted": false, "candidate_keys": ["click:None::anchor=[0, 0, 1080, 1920]:label=Proceed:class=android.widget.FrameLayout"], "remaining_candidate_keys": ["click:None::anchor=[0, 0, 1080, 1920]:label=Proceed:class=android.widget.FrameLayout"], "explored_keys": ["drift"], "attempted_keys": [], "candidates": [{"candidate_key": "click:None::anchor=[0, 0, 1080, 1920]:label=Proceed:class=android.widget.FrameLayout", "score": 0.8, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": null, "text": "", "reasoning": "Advance past splash screen"}]}]}}, "xml:d3d0537778b314f6ab0c806e46c9f77b": {"alias": "UI2", "state_sig": "xml:d3d0537778b314f6ab0c806e46c9f77b", "visit_count": 13, "unfinished": false, "target_package": "easy.sudoku.puzzle.solver.free", "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.MainActivity", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 2, "explored_count": 2, "attempted_count": 2, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000005_xml_d3d0537778b314f6ab0c806e46c9f77b/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [0, 0, 1080, 1920], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.ViewGroup", "clickable": true, "enabled": true}, "2": {"bounds": [30, 48, 120, 120], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "3": {"bounds": [665, 48, 120, 120], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "4": {"bounds": [797, 48, 120, 120], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "5": {"bounds": [929, 48, 120, 120], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "6": {"bounds": [45, 1218, 251, 192], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.ViewGroup", "clickable": true, "enabled": true}, "7": {"bounds": [296, 1218, 251, 192], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.ViewGroup", "clickable": true, "enabled": true}, "8": {"bounds": [547, 1218, 251, 192], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.ViewGroup", "clickable": true, "enabled": true}, "9": {"bounds": [798, 1218, 237, 192], "text": "", "content_desc": "", "ocr_text": null, "class": "android.widget.FrameLayout", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "225a510928ca4459d2e92cc81549fca0:ec05f84174e4e55e2f6bf471ac12f2ab:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:easy.sudoku.puzzle.solver.free:com.meevii.ui.activity.MainActivity:xml_only", "cache_hit": false, "cache_size": 2, "xml_hash": "225a510928ca4459d2e92cc81549fca0", "screenshot_hash": "ec05f84174e4e55e2f6bf471ac12f2ab", "screenshot_phash": "bb3bc4849b99846e", "xml_hash_raw": "b94eb797a9f2a50706d7e92aabc65456", "screenshot_hash_raw": "726b6dc36915951e34b4bebd40f84a30", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "69f66d93700a4e714983e6001003ca65", "struct_sig": "29e175e74c35b0918a617f1d0748a194", "fine_sig": "2d3d25b56cfde7312ccc854d674f7a0b", "family_sig": "struct:29e175e74c35b0918a617f1d0748a194", "identity_source": "xml", "identity_hash": "d3d0537778b314f6ab0c806e46c9f77b", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.MainActivity", "status_bar_crop_px": 24, "status_bar_crop_xml": 24, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 73, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:d3d0537778b314f6ab0c806e46c9f77b", "page_summary": "Sudoku game tutorial screen", "overlay_kind": "none", "overlay_reason": "No blocking overlay detected", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": 5, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "", "anchor_class": "android.view.ViewGroup", "priority": 1, "reasoning": "Explore the settings menu"}], "score": 0.9}, {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "", "anchor_class": "android.view.ViewGroup", "priority": 2, "reasoning": "Change the theme"}], "score": 0.8}], "page_return_actions": [{"action": "click", "element_id": 2, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "", "anchor_class": "android.view.View", "priority": 1, "reasoning": "Return to previous screen"}]}, "router_observation": {"state_sig": "xml:d3d0537778b314f6ab0c806e46c9f77b", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "69f66d93700a4e714983e6001003ca65", "struct_sig": "29e175e74c35b0918a617f1d0748a194", "fine_sig": "2d3d25b56cfde7312ccc854d674f7a0b", "xml_reliable": true, "xml_hash": "225a510928ca4459d2e92cc81549fca0", "screenshot_hash": "ec05f84174e4e55e2f6bf471ac12f2ab", "screenshot_phash": "bb3bc4849b99846e", "xml_hash_raw": "b94eb797a9f2a50706d7e92aabc65456", "screenshot_hash_raw": "726b6dc36915951e34b4bebd40f84a30", "family_sig": "struct:29e175e74c35b0918a617f1d0748a194", "identity_source": "xml", "identity_hash": "d3d0537778b314f6ab0c806e46c9f77b", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.MainActivity", "status_bar_crop_px": 24, "status_bar_crop_xml": 24, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920}, "state_action": {"state_sig": "xml:d3d0537778b314f6ab0c806e46c9f77b", "family_id": "struct:29e175e74c35b0918a617f1d0748a194", "overlay_kind": "none", "candidate_count": 2, "explored_count": 2, "attempted_count": 2, "remaining_count": 0, "is_exhausted": true, "candidate_keys": ["click:5::anchor=[929, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View", "click:4::anchor=[797, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View"], "remaining_candidate_keys": [], "explored_keys": ["click:4::anchor=[797, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View", "click:5::anchor=[929, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View"], "attempted_keys": ["click:4::anchor=[797, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View", "click:5::anchor=[929, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View"], "candidates": [{"candidate_key": "click:5::anchor=[929, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View", "score": 0.9, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 5, "text": "", "reasoning": "Explore the settings menu"}]}, {"candidate_key": "click:4::anchor=[797, 48, 120, 120]:label=easy.sudoku.puzzle.solver.free:i:class=android.view.View", "score": 0.8, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 4, "text": "", "reasoning": "Change the theme"}]}]}}, "xml:ae8980ed8872efd7ba0b62f250294ce6": {"alias": "UI3", "state_sig": "xml:ae8980ed8872efd7ba0b62f250294ce6", "visit_count": 1, "unfinished": false, "target_package": "easy.sudoku.puzzle.solver.free", "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "overlay_kind": "none", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_083112_easy.sudoku.puzzle.solver.free/debug_pages/000055_xml_ae8980ed8872efd7ba0b62f250294ce6/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [108, 946, 864, 112], "text": "Keep Your Mind Sharp", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "2": {"bounds": [170, 1559, 274, 63], "text": "10,153,315", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "3": {"bounds": [72, 1622, 470, 49], "text": "Games Today", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "4": {"bounds": [691, 1559, 168, 63], "text": "52,595", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "5": {"bounds": [659, 1622, 233, 49], "text": "Playing Now", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "6": {"bounds": [0, 1671, 1080, 249], "text": "Oakever Games", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}}, "snapshot_meta": {"raw_key": "47c41d4cded017513e18c7b5f50f3de0:c7fd707f30c9d91b5512569674dea3a9:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:easy.sudoku.puzzle.solver.free:com.meevii.ui.activity.SplashActivity:xml_only", "cache_hit": false, "cache_size": 3, "xml_hash": "47c41d4cded017513e18c7b5f50f3de0", "screenshot_hash": "c7fd707f30c9d91b5512569674dea3a9", "screenshot_phash": "ec66999b1b24e46c", "xml_hash_raw": "67ad27c1c25762ff9b7c4b542c622552", "screenshot_hash_raw": "3f099a7636f17deb1fb01734af74d1de", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "565435bf54fc0372965c4893f35d4480", "struct_sig": "004d5aed42113ea3996772a245042b0d", "fine_sig": "b64f0583be07a0610736f388d4530f2a", "family_sig": "struct:004d5aed42113ea3996772a245042b0d", "identity_source": "xml", "identity_hash": "ae8980ed8872efd7ba0b62f250294ce6", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "status_bar_crop_px": 418, "status_bar_crop_xml": 418, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 20, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {}, "router_observation": {}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "565435bf54fc0372965c4893f35d4480", "struct_sig": "004d5aed42113ea3996772a245042b0d", "fine_sig": "b64f0583be07a0610736f388d4530f2a", "xml_reliable": true, "xml_hash": "47c41d4cded017513e18c7b5f50f3de0", "screenshot_hash": "c7fd707f30c9d91b5512569674dea3a9", "screenshot_phash": "ec66999b1b24e46c", "xml_hash_raw": "67ad27c1c25762ff9b7c4b542c622552", "screenshot_hash_raw": "3f099a7636f17deb1fb01734af74d1de", "family_sig": "struct:004d5aed42113ea3996772a245042b0d", "identity_source": "xml", "identity_hash": "ae8980ed8872efd7ba0b62f250294ce6", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "easy.sudoku.puzzle.solver.free", "foreground_activity": "com.meevii.ui.activity.SplashActivity", "status_bar_crop_px": 418, "status_bar_crop_xml": 418, "status_bar_crop_method": "content_top_y", "status_bar_screen_h_xml_est": 1920, "post_restart": true}, "state_action": {"state_sig": "xml:ae8980ed8872efd7ba0b62f250294ce6", "family_id": "struct:004d5aed42113ea3996772a245042b0d", "overlay_kind": "none", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}}, "edge_details": {"e1": {"id": "e1", "src": "xml:c80e155ffc537943e43c28f6b6022534", "src_alias": "UI1", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst_alias": "UI2", "label": "wait [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064284.5241158, "action_payload": {"actions": [{"action": "wait", "element_id": null, "text": "0.2"}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 1, "ts": 1779064284.5251577, "src": "xml:c80e155ffc537943e43c28f6b6022534", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "wait", "element_id": null, "text": "0.2", "label": "0.2", "action_key": "wait:None:0.2", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e2": {"id": "e2", "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "src_alias": "UI2", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst_alias": "UI2", "label": "click:5 [noop]", "count": 2, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064305.2131722, "action_payload": {"actions": [{"action": "click", "element_id": 5, "text": null, "anchor_frame": [929, 48, 120, 120], "anchor_center": [989.0, 108.0], "anchor_label": "easy.sudoku.puzzle.solver.free:id/settingIconParent", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": ".puzzle.solver.free:id/settingIconParent", "label": "", "frame": [929, 48, 120, 120]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 2, "ts": 1779064303.2994053, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 5, "text": null, "label": "easy.sudoku.puzzle.solver.free:id/settingIconParent", "action_key": "click:5:easy.sudoku.puzzle.solver.free:id/settingIconParent", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 3, "ts": 1779064305.2131722, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 5, "text": null, "label": "easy.sudoku.puzzle.solver.free:id/settingIconParent", "action_key": "click:5:easy.sudoku.puzzle.solver.free:id/settingIconParent", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {"score": 0.9, "tags": [], "reasoning": "Explore the settings menu", "return_method": null}}, "e3": {"id": "e3", "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "src_alias": "UI2", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst_alias": "UI2", "label": "click:4 [noop]", "count": 2, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064308.954727, "action_payload": {"actions": [{"action": "click", "element_id": 4, "text": null, "anchor_frame": [797, 48, 120, 120], "anchor_center": [857.0, 108.0], "anchor_label": "easy.sudoku.puzzle.solver.free:id/themeIconParent", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "ku.puzzle.solver.free:id/themeIconParent", "label": "", "frame": [797, 48, 120, 120]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 4, "ts": 1779064307.0948474, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 4, "text": null, "label": "easy.sudoku.puzzle.solver.free:id/themeIconParent", "action_key": "click:4:easy.sudoku.puzzle.solver.free:id/themeIconParent", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 5, "ts": 1779064308.954727, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 4, "text": null, "label": "easy.sudoku.puzzle.solver.free:id/themeIconParent", "action_key": "click:4:easy.sudoku.puzzle.solver.free:id/themeIconParent", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {"score": 0.8, "tags": [], "reasoning": "Change the theme", "return_method": null}}, "e4": {"id": "e4", "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "src_alias": "UI2", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst_alias": "UI2", "label": "click:2 [noop]", "count": 1, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064310.8081348, "action_payload": {"actions": [{"action": "click", "element_id": 2, "text": null, "anchor_frame": [30, 48, 120, 120], "anchor_center": [90.0, 108.0], "anchor_label": "easy.sudoku.puzzle.solver.free:id/leftIconParent", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "oku.puzzle.solver.free:id/leftIconParent", "label": "", "frame": [30, 48, 120, 120]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 6, "ts": 1779064310.8081348, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 2, "text": null, "label": "easy.sudoku.puzzle.solver.free:id/leftIconParent", "action_key": "click:2:easy.sudoku.puzzle.solver.free:id/leftIconParent", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {}}, "e5": {"id": "e5", "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "src_alias": "UI2", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst_alias": "UI2", "label": "back [noop]", "count": 1, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064313.1128411, "action_payload": {"actions": [{"action": "back", "element_id": null, "text": null}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 7, "ts": 1779064313.1138213, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {}}}, "timeline": [{"kind": "state_seen", "ts": 1779064283.9036677, "src": "", "dst": "xml:c80e155ffc537943e43c28f6b6022534", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 1, "src_alias": "", "dst_alias": "UI1", "action_display": "observe", "result_display": "发现 UI1 (new)"}, {"kind": "state_seen", "ts": 1779064284.5231285, "src": "", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 2, "src_alias": "", "dst_alias": "UI2", "action_display": "observe", "result_display": "发现 UI2 (new)"}, {"kind": "transition", "ts": 1779064284.5251577, "src": "xml:c80e155ffc537943e43c28f6b6022534", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "wait", "element_id": null, "label": "0.2", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "wait:None:0.2", "flow_seq": 3, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "wait 0.2", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779064303.2994053, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 5, "label": "easy.sudoku.puzzle.solver.free:id/settingIconParent", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:easy.sudoku.puzzle.solver.free:id/settingIconParent", "flow_seq": 4, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=5 easy.sudoku.puzzle.solver.free:id/settingIconParent", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064305.2131722, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 5, "label": "easy.sudoku.puzzle.solver.free:id/settingIconParent", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:5:easy.sudoku.puzzle.solver.free:id/settingIconParent", "flow_seq": 5, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=5 easy.sudoku.puzzle.solver.free:id/settingIconParent", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064307.0948474, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 4, "label": "easy.sudoku.puzzle.solver.free:id/themeIconParent", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:easy.sudoku.puzzle.solver.free:id/themeIconParent", "flow_seq": 6, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=4 easy.sudoku.puzzle.solver.free:id/themeIconParent", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064308.954727, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 4, "label": "easy.sudoku.puzzle.solver.free:id/themeIconParent", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:4:easy.sudoku.puzzle.solver.free:id/themeIconParent", "flow_seq": 7, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=4 easy.sudoku.puzzle.solver.free:id/themeIconParent", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064310.8081348, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "click", "element_id": 2, "label": "easy.sudoku.puzzle.solver.free:id/leftIconParent", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2:easy.sudoku.puzzle.solver.free:id/leftIconParent", "flow_seq": 8, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=2 easy.sudoku.puzzle.solver.free:id/leftIconParent", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064313.1138213, "src": "xml:d3d0537778b314f6ab0c806e46c9f77b", "dst": "xml:d3d0537778b314f6ab0c806e46c9f77b", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 9, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "state_seen", "ts": 1779064317.8258624, "src": "", "dst": "xml:ae8980ed8872efd7ba0b62f250294ce6", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 10, "src_alias": "", "dst_alias": "UI3", "action_display": "observe", "result_display": "发现 UI3 (new)"}], "alias_map": {"xml:c80e155ffc537943e43c28f6b6022534": "UI1", "xml:d3d0537778b314f6ab0c806e46c9f77b": "UI2", "xml:ae8980ed8872efd7ba0b62f250294ce6": "UI3"}};
+    const nodeDetails = payload.node_details || {};
+    const edgeDetails = payload.edge_details || {};
+    const timeline = payload.timeline || [];
+
+    function showRuntimeError(msg) {
+      const detail = document.getElementById('detail');
+      const net = document.getElementById('network');
+      if (detail) {
+        detail.innerHTML = `<div class="card" style="border-color:#e6bfc5;background:#fff5f6;">
+          <div class="k" style="color:#9a2230;">渲染失败</div>
+          <div class="mono">${esc(msg)}</div>
+          <div class="meta" style="margin-top:8px;">建议：使用 Chrome/Edge 打开；或在目录下执行 python -m http.server 后通过 http://127.0.0.1:8765 访问。</div>
+        </div>`;
+      }
+      if (net) {
+        net.innerHTML = `<div style="padding:14px;color:#9a2230;background:#fff5f6;border:1px solid #e6bfc5;border-radius:8px;margin:12px;">
+          交互图未渲染：${esc(msg)}
+        </div>`;
+      }
+    }
+
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderPathLink(label, p) {
+      if (!p) return `<div><span class="k">${esc(label)}:</span> -</div>`;
+      return `<div><span class="k">${esc(label)}:</span> <a class="mono" href="${esc(p)}" target="_blank">${esc(p)}</a></div>`;
+    }
+
+    function renderNode(sig) {
+      const d = nodeDetails[sig];
+      if (!d) return '<div class="card">节点详情不存在。</div>';
+      const nav = d.nav_result || {};
+      const router = d.router_observation || {};
+      const blocks = d.blocks_observation || {};
+      const cand = d.state_action || {};
+      const cands = cand.candidates || [];
+
+      const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
+        ? `<span class="pill bad">外部包: ${esc(d.foreground_package)}</span>`
+        : `<span class="pill ok">目标包: ${esc(d.foreground_package || '-')}</span>`;
+
+      let html = '';
+      html += `<div class="card"><div class="k">节点</div><div class="mono">${esc(d.alias)} | ${esc(d.state_sig)}</div>`;
+      html += `<div style="margin-top:6px">${tag}`;
+      html += `<span class="pill warn">overlay=${esc(d.overlay_kind)}</span>`;
+      html += `<span class="pill warn">visit=${esc(d.visit_count)}</span>`;
+      html += `<span class="pill warn">remaining=${esc((d.candidate_summary || {}).remaining_count)}</span>`;
+      html += `</div></div>`;
+
+      const sp = d.snapshot_paths || {};
+      html += `<div class="card"><div class="k">快照文件</div>`;
+      if (sp.preview) {
+        html += `<div style="margin:8px 0"><img class="preview" src="${esc(sp.preview)}" /></div>`;
+      }
+      html += renderPathLink('screenshot', sp.screenshot_path);
+      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
+      html += renderPathLink('xml', sp.xml_path);
+      html += renderPathLink('xml_raw', sp.xml_raw_path);
+      html += renderPathLink('uist', sp.uist_path);
+      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
+      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div>overlay_kind: <span class="mono">${esc(nav.overlay_kind ?? '-')}</span></div>`;
+      html += `<div>overlay_reason: <span class="mono">${esc(nav.overlay_reason ?? '-')}</span></div>`;
+      html += `<div>candidate_count: <span class="mono">${esc((nav.candidate_actions || []).length)}</span></div>`;
+      html += `<div>exhausted: <span class="mono">${esc(nav.exhausted)}</span>, confidence: <span class="mono">${esc(nav.exhausted_confidence)}</span></div>`;
+      html += `<div>why_these_actions: <span class="mono">${esc(nav.why_these_actions ?? '')}</span></div>`;
+      if (cands.length) {
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {
+          const a = (c.actions || [])[0] || {};
+          html += `<tr><td class="mono">${esc(c.candidate_key)}</td><td>${esc(c.score)}</td><td class="mono">${esc((a.action || '') + ':' + (a.element_id ?? 'None'))}</td><td>${esc(a.reasoning || '')}</td></tr>`;
+        }
+        html += `</tbody></table></details>`;
+      }
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
+      html += `<pre>${esc(JSON.stringify(d.vid_map_summary || {}, null, 2))}</pre>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
+      html += `<pre>${esc(JSON.stringify(d.snapshot_meta || {}, null, 2))}</pre>`;
+      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
+      html += `<div>router_answers: <span class="mono">${esc((router.router_answers || []).length)}</span></div>`;
+      html += `<div>matched_block_ids: <span class="mono">${esc((router.matched_block_ids || []).length)}</span></div>`;
+      html += `<div>block_fill_results: <span class="mono">${esc((blocks.block_fill_results || []).length)}</span></div>`;
+      html += `</div>`;
+
+      html += `<details class="card"><summary>Raw JSON</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    function renderEdge(edgeId) {
+      const d = edgeDetails[edgeId];
+      if (!d) return '<div class="card">边详情不存在。</div>';
+      let html = '';
+      html += `<div class="card"><div class="k">边</div>`;
+      html += `<div class="mono">${esc(d.id)}: ${esc(d.src_alias)} -> ${esc(d.dst_alias)}</div>`;
+      html += `<div>label: <span class="mono">${esc(d.label)}</span></div>`;
+      html += `<div>count=${esc(d.count)}, no_effect=${esc(d.no_effect)}, verified_ok=${esc(d.verified_ok)}, verified_fail=${esc(d.verified_fail)}</div>`;
+      html += `</div>`;
+
+      const sm = d.state_action_match || {};
+      const nm = d.nav_candidate_match || {};
+      html += `<div class="card"><div class="k">动作来源与原因</div>`;
+      if (Object.keys(sm).length) {
+        html += `<div><span class="k">state_action match</span></div>`;
+        html += `<div>candidate_key: <span class="mono">${esc(sm.candidate_key)}</span></div>`;
+        html += `<div>score: <span class="mono">${esc(sm.score)}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(sm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
+      }
+      if (Object.keys(nm).length) {
+        html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
+        html += `<div>score: <span class="mono">${esc(nm.score)}</span>, return_method: <span class="mono">${esc(nm.return_method || '-')}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(nm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
+      }
+      html += `</div>`;
+
+      const occ = d.occurrences || [];
+      if (occ.length) {
+        html += `<div class="card"><div class="k">执行序列（来自 trace）</div>`;
+        html += `<table><thead><tr><th>seq</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>`;
+        for (const x of occ) {
+          html += `<tr><td>${esc(x.seq)}</td><td class="mono">${esc(x.action)}</td><td>${esc(x.element_id)}</td><td>${esc(x.change_type)}</td><td>${esc(x.confidence)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<details class="card"><summary>Raw Action Payload</summary><pre>${esc(JSON.stringify(d.action_payload || {}, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
+    function renderTimeline() {
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      for (const x of timeline) {
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${esc(x.flow_seq)}</td>
+          <td class="mono">${esc(x.src_alias || '-')}</td>
+          <td><span class="mono">${esc(x.action_display || x.action || '')}</span></td>
+          <td>${esc(x.result_display || x.result || x.change_type || '')}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function setDetail(html) {
+      document.getElementById('detail').innerHTML = html;
+    }
+    try {
+      if (!window.vis || !window.vis.DataSet || !window.vis.Network) {
+        throw new Error('vis-network 未加载（window.vis 不可用）');
+      }
+      const allNodes = new vis.DataSet(payload.nodes_vis || []);
+      const allEdges = new vis.DataSet(payload.edges_vis || []);
+      let activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+
+      const network = new vis.Network(
+        document.getElementById('network'),
+        { nodes: allNodes, edges: allEdges },
+        {
+          autoResize: true,
+          interaction: { hover: true, navigationButtons: true, keyboard: true },
+          physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -55, springLength: 180, springConstant: 0.06 },
+            stabilization: { iterations: 220, fit: true }
+          },
+          layout: { improvedLayout: true },
+          edges: { smooth: { type: 'dynamic' } },
+        }
+      );
+
+      network.once('stabilizationIterationsDone', function() {
+        try { network.fit({ animation: false }); } catch (e) {}
+      });
+
+      network.on('click', function (params) {
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
+        if (params.nodes && params.nodes.length > 0) {
+          setDetail(renderNode(params.nodes[0]) + renderTimeline());
+          return;
+        }
+        if (params.edges && params.edges.length > 0) {
+          setDetail(renderEdge(params.edges[0]) + renderTimeline());
+          return;
+        }
+        setDetail(renderTimeline());
+      });
+
+      document.getElementById('hideNoop').addEventListener('change', function (e) {
+        const hide = !!e.target.checked;
+        allEdges.clear();
+        if (!hide) {
+          allEdges.add(payload.edges_vis || []);
+          activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+        } else {
+          const filtered = (payload.edges_vis || []).filter(e => {
+            const d = edgeDetails[e.id] || {};
+            return !d.no_effect;
+          });
+          allEdges.add(filtered);
+          activeEdgeIds = filtered.map(e => e.id);
+        }
+      });
+
+      setDetail(renderTimeline());
+    } catch (err) {
+      showRuntimeError((err && err.message) ? err.message : String(err));
+    }
+  </script>
+</body>
+</html>

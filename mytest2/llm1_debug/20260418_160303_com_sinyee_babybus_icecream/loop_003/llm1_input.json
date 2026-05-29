@@ -1,9 +1,0 @@
-{
-  "state_sig": "xml:f364761fafe309cc8644bb3bc7be2704",
-  "task": "Explore the app to fill the questionnaire.",
-  "xml_reliable": true,
-  "identity_source": "xml",
-  "foreground_package": "com.sinyee.babybus.icecream",
-  "foreground_activity": "com.sinyee.babybus.Main",
-  "vid_count": 38
-}

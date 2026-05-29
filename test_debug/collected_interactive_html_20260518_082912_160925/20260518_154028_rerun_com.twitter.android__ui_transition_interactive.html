@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Transition Interactive - 20260518_154028_rerun_com.twitter.android</title>
+  <script src="vendor/vis-network.min.js"></script>
+  <script>
+    if (!window.vis) {
+      document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\/script>');
+    }
+    if (!window.vis) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.0/standalone/umd/vis-network.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+    }
+    #root { display: flex; width: 100%; height: 100%; }
+    #left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #toolbar {
+      background: #fff; border-bottom: 1px solid #d9e1ef; padding: 10px 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #network { flex: 1; background: #f8fbff; }
+    #network { min-height: 520px; }
+    #right {
+      width: 460px; max-width: 46vw; min-width: 340px;
+      border-left: 1px solid #d9e1ef; background: #fff; overflow: auto;
+      padding: 12px 14px;
+    }
+    .meta { font-size: 12px; color: #5f6b7a; }
+    .k { font-weight: 600; color: #23303f; }
+    .card { border: 1px solid #e4e9f2; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .mono { font-family: Consolas, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    .ok { background: #e7f6ec; color: #17653a; }
+    .warn { background: #fff2e3; color: #8a5315; }
+    .bad { background: #fde8ea; color: #9a2230; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #f6f9ff; }
+    img.preview { width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }
+    details > summary { cursor: pointer; color: #2d5fa8; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }
+    a { color: #2a66b0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
+    </div>
+  </noscript>
+  <div id="root">
+    <div id="left">
+      <div id="toolbar">
+        <div><span class="k">run_id</span>: <span class="mono">20260518_154028_rerun_com.twitter.android</span></div>
+        <div><span class="k">stop_reason</span>: <span class="mono">time_budget_reached</span></div>
+        <div><span class="k">nodes</span>: <span class="mono">2</span></div>
+        <div><span class="k">edges</span>: <span class="mono">2</span></div>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
+      </div>
+      <div id="network"></div>
+    </div>
+    <div id="right">
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const payload = {"run_id": "20260518_154028_rerun_com.twitter.android", "entry_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "cur_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "stop_reason": "time_budget_reached", "target_package": "com.twitter.android", "node_count": 2, "edge_count": 2, "nodes_vis": [{"id": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "label": "UI1\nvisit=6 rem=0\nloading", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:7d456e79142e541cee37c5353754a163", "label": "UI2\nvisit=4 rem=0\ndismiss", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}], "edges_vis": [{"id": "e1", "from": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "to": "xml:7d456e79142e541cee37c5353754a163", "label": "wait [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e2", "from": "xml:7d456e79142e541cee37c5353754a163", "to": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "label": "click:2 [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}], "node_details": {"phash:e3ceab0896590f56fdd1b9e3a51477e9": {"alias": "UI1", "state_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "visit_count": 6, "unfinished": false, "target_package": "com.twitter.android", "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "overlay_kind": "loading", "xml_reliable": false, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000001_phash_e3ceab0896590f56fdd1b9e3a51477e9/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [503, 936, 93, 47], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}, "2": {"bounds": [24, 20, 163, 36], "text": "15:40 ···", "content_desc": "", "ocr_text": "15:40 ···", "class": "ocr_text", "clickable": true, "enabled": true}, "3": {"bounds": [915, 18, 37, 37], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "4": {"bounds": [912, 16, 39, 39], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}, "5": {"bounds": [865, 16, 45, 38], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "6": {"bounds": [864, 16, 45, 39], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}, "7": {"bounds": [213, 13, 45, 46], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}, "8": {"bounds": [212, 13, 45, 45], "text": "", "content_desc": "", "ocr_text": null, "class": "uied_compo", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "dc16cdd69c7cad2770fa4248447bfe9e:4bfc07fe094da902a35cebec3f5b01d7:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.twitter.android:com.twitter.x.lite.XLiteActivity:three_tools", "cache_hit": false, "cache_size": 1, "xml_hash": "dc16cdd69c7cad2770fa4248447bfe9e", "screenshot_hash": "4bfc07fe094da902a35cebec3f5b01d7", "screenshot_phash": "d65a5a5a525a5a5a", "xml_hash_raw": "dc16cdd69c7cad2770fa4248447bfe9e", "screenshot_hash_raw": "4bfc07fe094da902a35cebec3f5b01d7", "xml_reliable": false, "coord_scale": 1.0, "coarse_sig": "07ff52d3f59654f69294ce634c52b6a9", "struct_sig": "f7adbce206ebb57e47a9e86950091719", "fine_sig": "f9f08e72aac89a905cf7355cdef53b10", "family_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "identity_source": "phash", "identity_hash": "d65a5a5a525a5a5a", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 10, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "page_summary": "Loading screen with spinner", "overlay_kind": "loading", "overlay_reason": "Loading spinner detected", "overlay_dismiss_actions": [], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "9dfa87ce776134cc645944e676b4231f", "struct_sig": "af007dde54ecfcbfac692e21dd7ab775", "fine_sig": "9d88a22e506f0e1c5fed007cca684667", "xml_reliable": false, "xml_hash": "a35509a14c385d2cb65302048c520365", "screenshot_hash": "b63f4a421b352993287daa0b8e919f60", "screenshot_phash": "d65a5a5a525a5a5a", "xml_hash_raw": "a35509a14c385d2cb65302048c520365", "screenshot_hash_raw": "b63f4a421b352993287daa0b8e919f60", "family_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "identity_source": "phash", "identity_hash": "d65a5a5a525a5a5a", "matched_existing": true, "matched_similarity": 0.96875, "coord_scale": 1.0, "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "entry": true}, "state_action": {"state_sig": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "family_id": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "overlay_kind": "loading", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}, "xml:7d456e79142e541cee37c5353754a163": {"alias": "UI2", "state_sig": "xml:7d456e79142e541cee37c5353754a163", "visit_count": 4, "unfinished": false, "target_package": "com.twitter.android", "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "overlay_kind": "dismiss", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_154028_rerun_com.twitter.android/debug_pages/000041_xml_7d456e79142e541cee37c5353754a163/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [238, 879, 605, 54], "text": "Oops, something went wrong", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}, "2": {"bounds": [434, 987, 214, 144], "text": "", "content_desc": "", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "3": {"bounds": [482, 1032, 118, 54], "text": "Retry", "content_desc": "", "ocr_text": null, "class": "android.widget.TextView", "clickable": false, "enabled": true}}, "snapshot_meta": {"raw_key": "3dd6a7ec1d07543d76ed0ef272d2e26c:5c25898c21f94e93b592654cd1874ffb:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.twitter.android:com.twitter.x.lite.XLiteActivity:xml_only", "cache_hit": false, "cache_size": 21, "xml_hash": "3dd6a7ec1d07543d76ed0ef272d2e26c", "screenshot_hash": "5c25898c21f94e93b592654cd1874ffb", "screenshot_phash": "e6d8d87262d8d872", "xml_hash_raw": "3dd6a7ec1d07543d76ed0ef272d2e26c", "screenshot_hash_raw": "5c25898c21f94e93b592654cd1874ffb", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "a25e56aa0a5544d0e95db6f0c883c648", "struct_sig": "40c6f10b6af133ba1e859c017ed47b66", "fine_sig": "b91e9c2d7ff1c1bda343badbf457b48c", "family_sig": "struct:40c6f10b6af133ba1e859c017ed47b66", "identity_source": "xml", "identity_hash": "7d456e79142e541cee37c5353754a163", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 13, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:7d456e79142e541cee37c5353754a163", "page_summary": "Error screen with retry option", "overlay_kind": "dismiss", "overlay_reason": "Error message with retry option", "overlay_dismiss_actions": [{"action": "click", "element_id": 2, "text": null, "anchor_frame": [434, 987, 214, 144], "anchor_center": [541.0, 1059.0], "anchor_label": "ICON_CHAT", "anchor_class": "android.view.View", "priority": 1, "reasoning": "Retry to resolve error"}], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "xml:7d456e79142e541cee37c5353754a163", "screenshot_path": "", "router_answers": [], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "a25e56aa0a5544d0e95db6f0c883c648", "struct_sig": "40c6f10b6af133ba1e859c017ed47b66", "fine_sig": "b91e9c2d7ff1c1bda343badbf457b48c", "xml_reliable": true, "xml_hash": "3dd6a7ec1d07543d76ed0ef272d2e26c", "screenshot_hash": "8d6edccd70978c9cbde70cf1bba287ad", "screenshot_phash": "e6d8d87262d8d872", "xml_hash_raw": "3dd6a7ec1d07543d76ed0ef272d2e26c", "screenshot_hash_raw": "8d6edccd70978c9cbde70cf1bba287ad", "family_sig": "struct:40c6f10b6af133ba1e859c017ed47b66", "identity_source": "xml", "identity_hash": "7d456e79142e541cee37c5353754a163", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.twitter.android", "foreground_activity": "com.twitter.x.lite.XLiteActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none"}, "state_action": {"state_sig": "xml:7d456e79142e541cee37c5353754a163", "family_id": "struct:40c6f10b6af133ba1e859c017ed47b66", "overlay_kind": "dismiss", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}}, "edge_details": {"e1": {"id": "e1", "src": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "src_alias": "UI1", "dst": "xml:7d456e79142e541cee37c5353754a163", "dst_alias": "UI2", "label": "wait [nav]", "count": 2, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779090271.7213235, "action_payload": {"actions": [{"action": "wait", "element_id": null, "text": "0.5"}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 1, "ts": 1779090169.2807817, "src": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "dst": "xml:7d456e79142e541cee37c5353754a163", "action": "wait", "element_id": null, "text": "0.5", "label": "0.5", "action_key": "wait:None:0.5", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 3, "ts": 1779090271.7213235, "src": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "dst": "xml:7d456e79142e541cee37c5353754a163", "action": "wait", "element_id": null, "text": "0.5", "label": "0.5", "action_key": "wait:None:0.5", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e2": {"id": "e2", "src": "xml:7d456e79142e541cee37c5353754a163", "src_alias": "UI2", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "dst_alias": "UI1", "label": "click:2 [nav]", "count": 2, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779090278.7074428, "action_payload": {"actions": [{"action": "click", "element_id": 2, "text": null, "anchor_frame": [434, 987, 214, 144], "anchor_center": [541.0, 1059.0], "anchor_label": "ICON_CHAT", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "", "label": "icon_chat", "frame": [434, 987, 214, 144]}}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 2, "ts": 1779090184.6364217, "src": "xml:7d456e79142e541cee37c5353754a163", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "action": "click", "element_id": 2, "text": null, "label": "ICON_CHAT", "action_key": "click:2:ICON_CHAT", "changed": true, "change_type": "nav", "confidence": 0.9}, {"seq": 4, "ts": 1779090278.7089167, "src": "xml:7d456e79142e541cee37c5353754a163", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "action": "click", "element_id": 2, "text": null, "label": "ICON_CHAT", "action_key": "click:2:ICON_CHAT", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}}, "timeline": [{"kind": "state_seen", "ts": 1779090050.5713813, "src": "", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 1, "src_alias": "", "dst_alias": "UI1", "action_display": "observe", "result_display": "发现 UI1 (new)"}, {"kind": "state_seen", "ts": 1779090169.2792706, "src": "", "dst": "xml:7d456e79142e541cee37c5353754a163", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 2, "src_alias": "", "dst_alias": "UI2", "action_display": "observe", "result_display": "发现 UI2 (new)"}, {"kind": "transition", "ts": 1779090169.2807817, "src": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "dst": "xml:7d456e79142e541cee37c5353754a163", "action": "wait", "element_id": null, "label": "0.5", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "wait:None:0.5", "flow_seq": 3, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "wait 0.5", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779090184.6364217, "src": "xml:7d456e79142e541cee37c5353754a163", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "action": "click", "element_id": 2, "label": "ICON_CHAT", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2:ICON_CHAT", "flow_seq": 4, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=2 ICON_CHAT", "result_display": "UI2 -> UI1 / nav"}, {"kind": "transition", "ts": 1779090271.7213235, "src": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "dst": "xml:7d456e79142e541cee37c5353754a163", "action": "wait", "element_id": null, "label": "0.5", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "wait:None:0.5", "flow_seq": 5, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "wait 0.5", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779090278.7089167, "src": "xml:7d456e79142e541cee37c5353754a163", "dst": "phash:e3ceab0896590f56fdd1b9e3a51477e9", "action": "click", "element_id": 2, "label": "ICON_CHAT", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "click:2:ICON_CHAT", "flow_seq": 6, "src_alias": "UI2", "dst_alias": "UI1", "action_display": "click element=2 ICON_CHAT", "result_display": "UI2 -> UI1 / nav"}], "alias_map": {"phash:e3ceab0896590f56fdd1b9e3a51477e9": "UI1", "xml:7d456e79142e541cee37c5353754a163": "UI2"}};
+    const nodeDetails = payload.node_details || {};
+    const edgeDetails = payload.edge_details || {};
+    const timeline = payload.timeline || [];
+
+    function showRuntimeError(msg) {
+      const detail = document.getElementById('detail');
+      const net = document.getElementById('network');
+      if (detail) {
+        detail.innerHTML = `<div class="card" style="border-color:#e6bfc5;background:#fff5f6;">
+          <div class="k" style="color:#9a2230;">渲染失败</div>
+          <div class="mono">${esc(msg)}</div>
+          <div class="meta" style="margin-top:8px;">建议：使用 Chrome/Edge 打开；或在目录下执行 python -m http.server 后通过 http://127.0.0.1:8765 访问。</div>
+        </div>`;
+      }
+      if (net) {
+        net.innerHTML = `<div style="padding:14px;color:#9a2230;background:#fff5f6;border:1px solid #e6bfc5;border-radius:8px;margin:12px;">
+          交互图未渲染：${esc(msg)}
+        </div>`;
+      }
+    }
+
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderPathLink(label, p) {
+      if (!p) return `<div><span class="k">${esc(label)}:</span> -</div>`;
+      return `<div><span class="k">${esc(label)}:</span> <a class="mono" href="${esc(p)}" target="_blank">${esc(p)}</a></div>`;
+    }
+
+    function renderNode(sig) {
+      const d = nodeDetails[sig];
+      if (!d) return '<div class="card">节点详情不存在。</div>';
+      const nav = d.nav_result || {};
+      const router = d.router_observation || {};
+      const blocks = d.blocks_observation || {};
+      const cand = d.state_action || {};
+      const cands = cand.candidates || [];
+
+      const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
+        ? `<span class="pill bad">外部包: ${esc(d.foreground_package)}</span>`
+        : `<span class="pill ok">目标包: ${esc(d.foreground_package || '-')}</span>`;
+
+      let html = '';
+      html += `<div class="card"><div class="k">节点</div><div class="mono">${esc(d.alias)} | ${esc(d.state_sig)}</div>`;
+      html += `<div style="margin-top:6px">${tag}`;
+      html += `<span class="pill warn">overlay=${esc(d.overlay_kind)}</span>`;
+      html += `<span class="pill warn">visit=${esc(d.visit_count)}</span>`;
+      html += `<span class="pill warn">remaining=${esc((d.candidate_summary || {}).remaining_count)}</span>`;
+      html += `</div></div>`;
+
+      const sp = d.snapshot_paths || {};
+      html += `<div class="card"><div class="k">快照文件</div>`;
+      if (sp.preview) {
+        html += `<div style="margin:8px 0"><img class="preview" src="${esc(sp.preview)}" /></div>`;
+      }
+      html += renderPathLink('screenshot', sp.screenshot_path);
+      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
+      html += renderPathLink('xml', sp.xml_path);
+      html += renderPathLink('xml_raw', sp.xml_raw_path);
+      html += renderPathLink('uist', sp.uist_path);
+      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
+      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div>overlay_kind: <span class="mono">${esc(nav.overlay_kind ?? '-')}</span></div>`;
+      html += `<div>overlay_reason: <span class="mono">${esc(nav.overlay_reason ?? '-')}</span></div>`;
+      html += `<div>candidate_count: <span class="mono">${esc((nav.candidate_actions || []).length)}</span></div>`;
+      html += `<div>exhausted: <span class="mono">${esc(nav.exhausted)}</span>, confidence: <span class="mono">${esc(nav.exhausted_confidence)}</span></div>`;
+      html += `<div>why_these_actions: <span class="mono">${esc(nav.why_these_actions ?? '')}</span></div>`;
+      if (cands.length) {
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {
+          const a = (c.actions || [])[0] || {};
+          html += `<tr><td class="mono">${esc(c.candidate_key)}</td><td>${esc(c.score)}</td><td class="mono">${esc((a.action || '') + ':' + (a.element_id ?? 'None'))}</td><td>${esc(a.reasoning || '')}</td></tr>`;
+        }
+        html += `</tbody></table></details>`;
+      }
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
+      html += `<pre>${esc(JSON.stringify(d.vid_map_summary || {}, null, 2))}</pre>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
+      html += `<pre>${esc(JSON.stringify(d.snapshot_meta || {}, null, 2))}</pre>`;
+      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
+      html += `<div>router_answers: <span class="mono">${esc((router.router_answers || []).length)}</span></div>`;
+      html += `<div>matched_block_ids: <span class="mono">${esc((router.matched_block_ids || []).length)}</span></div>`;
+      html += `<div>block_fill_results: <span class="mono">${esc((blocks.block_fill_results || []).length)}</span></div>`;
+      html += `</div>`;
+
+      html += `<details class="card"><summary>Raw JSON</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    function renderEdge(edgeId) {
+      const d = edgeDetails[edgeId];
+      if (!d) return '<div class="card">边详情不存在。</div>';
+      let html = '';
+      html += `<div class="card"><div class="k">边</div>`;
+      html += `<div class="mono">${esc(d.id)}: ${esc(d.src_alias)} -> ${esc(d.dst_alias)}</div>`;
+      html += `<div>label: <span class="mono">${esc(d.label)}</span></div>`;
+      html += `<div>count=${esc(d.count)}, no_effect=${esc(d.no_effect)}, verified_ok=${esc(d.verified_ok)}, verified_fail=${esc(d.verified_fail)}</div>`;
+      html += `</div>`;
+
+      const sm = d.state_action_match || {};
+      const nm = d.nav_candidate_match || {};
+      html += `<div class="card"><div class="k">动作来源与原因</div>`;
+      if (Object.keys(sm).length) {
+        html += `<div><span class="k">state_action match</span></div>`;
+        html += `<div>candidate_key: <span class="mono">${esc(sm.candidate_key)}</span></div>`;
+        html += `<div>score: <span class="mono">${esc(sm.score)}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(sm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
+      }
+      if (Object.keys(nm).length) {
+        html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
+        html += `<div>score: <span class="mono">${esc(nm.score)}</span>, return_method: <span class="mono">${esc(nm.return_method || '-')}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(nm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
+      }
+      html += `</div>`;
+
+      const occ = d.occurrences || [];
+      if (occ.length) {
+        html += `<div class="card"><div class="k">执行序列（来自 trace）</div>`;
+        html += `<table><thead><tr><th>seq</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>`;
+        for (const x of occ) {
+          html += `<tr><td>${esc(x.seq)}</td><td class="mono">${esc(x.action)}</td><td>${esc(x.element_id)}</td><td>${esc(x.change_type)}</td><td>${esc(x.confidence)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<details class="card"><summary>Raw Action Payload</summary><pre>${esc(JSON.stringify(d.action_payload || {}, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
+    function renderTimeline() {
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      for (const x of timeline) {
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${esc(x.flow_seq)}</td>
+          <td class="mono">${esc(x.src_alias || '-')}</td>
+          <td><span class="mono">${esc(x.action_display || x.action || '')}</span></td>
+          <td>${esc(x.result_display || x.result || x.change_type || '')}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function setDetail(html) {
+      document.getElementById('detail').innerHTML = html;
+    }
+    try {
+      if (!window.vis || !window.vis.DataSet || !window.vis.Network) {
+        throw new Error('vis-network 未加载（window.vis 不可用）');
+      }
+      const allNodes = new vis.DataSet(payload.nodes_vis || []);
+      const allEdges = new vis.DataSet(payload.edges_vis || []);
+      let activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+
+      const network = new vis.Network(
+        document.getElementById('network'),
+        { nodes: allNodes, edges: allEdges },
+        {
+          autoResize: true,
+          interaction: { hover: true, navigationButtons: true, keyboard: true },
+          physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -55, springLength: 180, springConstant: 0.06 },
+            stabilization: { iterations: 220, fit: true }
+          },
+          layout: { improvedLayout: true },
+          edges: { smooth: { type: 'dynamic' } },
+        }
+      );
+
+      network.once('stabilizationIterationsDone', function() {
+        try { network.fit({ animation: false }); } catch (e) {}
+      });
+
+      network.on('click', function (params) {
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
+        if (params.nodes && params.nodes.length > 0) {
+          setDetail(renderNode(params.nodes[0]) + renderTimeline());
+          return;
+        }
+        if (params.edges && params.edges.length > 0) {
+          setDetail(renderEdge(params.edges[0]) + renderTimeline());
+          return;
+        }
+        setDetail(renderTimeline());
+      });
+
+      document.getElementById('hideNoop').addEventListener('change', function (e) {
+        const hide = !!e.target.checked;
+        allEdges.clear();
+        if (!hide) {
+          allEdges.add(payload.edges_vis || []);
+          activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+        } else {
+          const filtered = (payload.edges_vis || []).filter(e => {
+            const d = edgeDetails[e.id] || {};
+            return !d.no_effect;
+          });
+          allEdges.add(filtered);
+          activeEdgeIds = filtered.map(e => e.id);
+        }
+      });
+
+      setDetail(renderTimeline());
+    } catch (err) {
+      showRuntimeError((err && err.message) ? err.message : String(err));
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI Transition Interactive - 20260518_083508_com.aigc.ushow.ichat</title>
+  <script src="vendor/vis-network.min.js"></script>
+  <script>
+    if (!window.vis) {
+      document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\/script>');
+    }
+    if (!window.vis) {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.0/standalone/umd/vis-network.min.js"><\/script>');
+    }
+  </script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: #f5f7fb;
+    }
+    #root { display: flex; width: 100%; height: 100%; }
+    #left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #toolbar {
+      background: #fff; border-bottom: 1px solid #d9e1ef; padding: 10px 14px;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #network { flex: 1; background: #f8fbff; }
+    #network { min-height: 520px; }
+    #right {
+      width: 460px; max-width: 46vw; min-width: 340px;
+      border-left: 1px solid #d9e1ef; background: #fff; overflow: auto;
+      padding: 12px 14px;
+    }
+    .meta { font-size: 12px; color: #5f6b7a; }
+    .k { font-weight: 600; color: #23303f; }
+    .card { border: 1px solid #e4e9f2; border-radius: 8px; padding: 10px; margin: 10px 0; }
+    .mono { font-family: Consolas, Menlo, monospace; font-size: 12px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; margin-right: 6px; }
+    .ok { background: #e7f6ec; color: #17653a; }
+    .warn { background: #fff2e3; color: #8a5315; }
+    .bad { background: #fde8ea; color: #9a2230; }
+    table { border-collapse: collapse; width: 100%; font-size: 12px; }
+    th, td { border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }
+    th { background: #f6f9ff; }
+    img.preview { width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }
+    details > summary { cursor: pointer; color: #2d5fa8; }
+    pre { white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }
+    a { color: #2a66b0; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fde8ea;color:#9a2230;border-bottom:1px solid #e6bfc5;">
+      JavaScript is disabled, so the interactive graph cannot be rendered. Open this file in a browser with scripts enabled.
+    </div>
+  </noscript>
+  <div id="root">
+    <div id="left">
+      <div id="toolbar">
+        <div><span class="k">run_id</span>: <span class="mono">20260518_083508_com.aigc.ushow.ichat</span></div>
+        <div><span class="k">stop_reason</span>: <span class="mono">overlay_recovery_exhausted</span></div>
+        <div><span class="k">nodes</span>: <span class="mono">2</span></div>
+        <div><span class="k">edges</span>: <span class="mono">3</span></div>
+        <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
+      </div>
+      <div id="network"></div>
+    </div>
+    <div id="right">
+      <h3 style="margin:4px 0 6px 0;">Details</h3>
+      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
+      <div id="detail"></div>
+    </div>
+  </div>
+
+  <script>
+    const payload = {"run_id": "20260518_083508_com.aigc.ushow.ichat", "entry_sig": "phash:781b2c1b48a2312a057b05308ae29685", "cur_sig": "xml:5e1d9efcb56e626d3599eb407e325542", "stop_reason": "overlay_recovery_exhausted", "target_package": "com.aigc.ushow.ichat", "node_count": 2, "edge_count": 3, "nodes_vis": [{"id": "phash:781b2c1b48a2312a057b05308ae29685", "label": "UI1\nvisit=4 rem=3\nnone", "shape": "box", "color": {"background": "#e8f5ff", "border": "#2f6fad"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}, {"id": "xml:5e1d9efcb56e626d3599eb407e325542", "label": "UI2\nvisit=27 rem=0\ndismiss", "shape": "box", "color": {"background": "#eef6ee", "border": "#5a8f5a"}, "font": {"face": "Consolas", "size": 14}, "margin": 10}], "edges_vis": [{"id": "e1", "from": "phash:781b2c1b48a2312a057b05308ae29685", "to": "xml:5e1d9efcb56e626d3599eb407e325542", "label": "wait [nav]", "arrows": "to", "color": {"color": "#2c5aa0"}, "dashes": false, "font": {"align": "middle", "size": 12}}, {"id": "e2", "from": "xml:5e1d9efcb56e626d3599eb407e325542", "to": "xml:5e1d9efcb56e626d3599eb407e325542", "label": "back [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}, {"id": "e3", "from": "xml:5e1d9efcb56e626d3599eb407e325542", "to": "xml:5e1d9efcb56e626d3599eb407e325542", "label": "click:1 [noop]", "arrows": "to", "color": {"color": "#6f6f6f"}, "dashes": true, "font": {"align": "middle", "size": 12}}], "node_details": {"phash:781b2c1b48a2312a057b05308ae29685": {"alias": "UI1", "state_sig": "phash:781b2c1b48a2312a057b05308ae29685", "visit_count": 4, "unfinished": true, "target_package": "com.aigc.ushow.ichat", "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "overlay_kind": "none", "xml_reliable": false, "candidate_summary": {"candidate_count": 3, "explored_count": 0, "attempted_count": 0, "remaining_count": 3}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000001_phash_781b2c1b48a2312a057b05308ae29685/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [337, 1511, 430, 200], "text": "Linky", "content_desc": "", "ocr_text": "Linky", "class": "ocr_text", "clickable": true, "enabled": true}, "2": {"bounds": [642, 719, 82, 54], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}, "3": {"bounds": [616, 671, 84, 66], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "4": {"bounds": [711, 451, 37, 70], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}, "5": {"bounds": [915, 18, 37, 37], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "6": {"bounds": [865, 16, 45, 38], "text": "", "content_desc": "", "ocr_text": null, "class": "template_triangle", "clickable": true, "enabled": true}, "7": {"bounds": [24, 16, 232, 42], "text": "08:35 ·… X", "content_desc": "", "ocr_text": "08:35 ·… X", "class": "ocr_text", "clickable": true, "enabled": true}, "8": {"bounds": [345, 13, 45, 45], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}, "9": {"bounds": [279, 13, 45, 46], "text": "", "content_desc": "", "ocr_text": null, "class": "template_rectangle", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "28ea2bdb2602bb759b689ea7ba087360:d81dbb615ffad34d7b9eb7c66ad4c265:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.aigc.ushow.ichat:.MainActivity:three_tools", "cache_hit": false, "cache_size": 1, "xml_hash": "28ea2bdb2602bb759b689ea7ba087360", "screenshot_hash": "d81dbb615ffad34d7b9eb7c66ad4c265", "screenshot_phash": "dac16726b83965cc", "xml_hash_raw": "28ea2bdb2602bb759b689ea7ba087360", "screenshot_hash_raw": "d81dbb615ffad34d7b9eb7c66ad4c265", "xml_reliable": false, "coord_scale": 1.0, "coarse_sig": "6b74bfb43165a1d4051184d86b7cc694", "struct_sig": "cc48260d192d4a98d9e38f0cba3c3b57", "fine_sig": "9ddc9ef57a88415c3ae0e138925561aa", "family_sig": "phash:781b2c1b48a2312a057b05308ae29685", "identity_source": "phash", "identity_hash": "dac16726b83965cc", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 8, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "phash:781b2c1b48a2312a057b05308ae29685", "page_summary": "Initial screen with app branding.", "overlay_kind": "none", "overlay_reason": "No overlay detected.", "overlay_dismiss_actions": [], "candidate_actions": [{"actions": [{"action": "click", "element_id": 9, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "ICON_MOON", "anchor_class": "template_rectangle", "priority": 1, "reasoning": "Explore moon icon functionality."}], "score": 0.8}, {"actions": [{"action": "click", "element_id": 8, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "ICON_SAD_FACE", "anchor_class": "template_rectangle", "priority": 1, "reasoning": "Investigate sad face icon."}], "score": 0.7}, {"actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "Linky", "anchor_class": "ocr_text", "priority": 1, "reasoning": "Access main app interface."}], "score": 0.9}], "page_return_actions": [{"action": "click", "element_id": 7, "text": null, "anchor_frame": null, "anchor_center": null, "anchor_label": "08:35 ·… X", "anchor_class": "ocr_text", "priority": 1, "reasoning": "Close or return from this screen."}]}, "router_observation": {"state_sig": "phash:781b2c1b48a2312a057b05308ae29685", "screenshot_path": "", "router_answers": [{"question_id": "exec_social.exec_social_app_type_visible", "new_answer": "yes", "confidence": 0.8, "rationale": "The screen suggests a focus on social interaction or entertainment, possibly indicating the app's primary type."}], "matched_block_ids": ["social_app.app_type"], "block_fill_results": []}, "blocks_observation": {"state_sig": "phash:781b2c1b48a2312a057b05308ae29685", "screenshot_path": "", "router_answers": [{"question_id": "exec_social.exec_social_app_type_visible", "new_answer": "yes", "confidence": 0.8, "rationale": "The screen suggests a focus on social interaction or entertainment, possibly indicating the app's primary type."}], "matched_block_ids": ["social_app.app_type"], "block_fill_results": [{"block_id": "social_app.app_type", "detected_signals": ["Social interaction and sharing focus inferred from branding and imagery."], "proposed_updates": [{"question_id": "app_type", "new_answer": "social_used_to_communicate_post_and_share_conten", "confidence": 0.9, "evidence_refs": ["phash:781b2c1b48a2312a057b05308ae29685"], "note": "The app appears to focus on social interaction and sharing, as suggested by the imagery and branding."}], "conflicts": []}]}, "graph_meta": {"coarse_sig": "d251e90eb10fdc69636cabe1e476bdf6", "struct_sig": "0595134ccb3cc981787efca8c0cbb389", "fine_sig": "471363d33860d1431601155063f9da65", "xml_reliable": false, "xml_hash": "8ad4b0170bbff81b90236462e0daa193", "screenshot_hash": "ccceb1d55eef1ba3df8d652f6269f0c0", "screenshot_phash": "dac16726b83965cc", "xml_hash_raw": "8ad4b0170bbff81b90236462e0daa193", "screenshot_hash_raw": "ccceb1d55eef1ba3df8d652f6269f0c0", "family_sig": "phash:781b2c1b48a2312a057b05308ae29685", "identity_source": "phash", "identity_hash": "dac16726b83965cc", "matched_existing": true, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "entry": true, "post_restart": true}, "state_action": {"state_sig": "phash:781b2c1b48a2312a057b05308ae29685", "family_id": "phash:781b2c1b48a2312a057b05308ae29685", "overlay_kind": "none", "candidate_count": 3, "explored_count": 0, "attempted_count": 0, "remaining_count": 3, "is_exhausted": false, "candidate_keys": ["click:9:", "click:8:", "click:1:"], "remaining_candidate_keys": ["click:9:", "click:8:", "click:1:"], "explored_keys": [], "attempted_keys": [], "candidates": [{"candidate_key": "click:9:", "score": 0.8, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 9, "text": "", "reasoning": "Explore moon icon functionality."}]}, {"candidate_key": "click:8:", "score": 0.7, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 8, "text": "", "reasoning": "Investigate sad face icon."}]}, {"candidate_key": "click:1:", "score": 0.9, "tags": [], "actions": [{"action": "ActionType.CLICK", "element_id": 1, "text": "", "reasoning": "Access main app interface."}]}]}}, "xml:5e1d9efcb56e626d3599eb407e325542": {"alias": "UI2", "state_sig": "xml:5e1d9efcb56e626d3599eb407e325542", "visit_count": 27, "unfinished": false, "target_package": "com.aigc.ushow.ichat", "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "overlay_kind": "dismiss", "xml_reliable": true, "candidate_summary": {"candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0}, "snapshot_paths": {"preview": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/vid_map_overlay.png", "screenshot_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/screenshot.png", "screenshot_raw_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/screenshot_raw.png", "xml_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/xml.xml", "xml_raw_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/xml_raw.xml", "uist_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/uist.json", "uist_overlay_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/uist_overlay.png", "vidmap_overlay_path": "F:/workplace/framework/traces/20260518_083508_com.aigc.ushow.ichat/debug_pages/000005_xml_5e1d9efcb56e626d3599eb407e325542/vid_map_overlay.png"}, "vid_map_summary": {"1": {"bounds": [0, 0, 1080, 1920], "text": "", "content_desc": "Security Center Alert\nOur services are currently not available in your country/region. Thank you for your understanding. (ID: 53173110)\nConfirm", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "2": {"bounds": [24, 1056, 276, 114], "text": "", "content_desc": "Male", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "3": {"bounds": [348, 1056, 286, 114], "text": "", "content_desc": "Female", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "4": {"bounds": [682, 1056, 357, 114], "text": "", "content_desc": "Non-Binary", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "5": {"bounds": [24, 1326, 363, 114], "text": "", "content_desc": "18-24", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "6": {"bounds": [435, 1326, 363, 114], "text": "", "content_desc": "25-30", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "7": {"bounds": [24, 1476, 363, 114], "text": "", "content_desc": "over 30", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}, "8": {"bounds": [24, 1686, 1032, 132], "text": "", "content_desc": "Start a journey", "ocr_text": null, "class": "android.view.View", "clickable": true, "enabled": true}}, "snapshot_meta": {"raw_key": "8d7e5daf839c180aa1656dd9fa0a19b6:9f399f090ec4f449c6e0d9dcf4a62552:1.0000:64f5bc1eb8c55b79e1119e40bac5d0ac:com.aigc.ushow.ichat:.MainActivity:xml_only", "cache_hit": false, "cache_size": 2, "xml_hash": "8d7e5daf839c180aa1656dd9fa0a19b6", "screenshot_hash": "9f399f090ec4f449c6e0d9dcf4a62552", "screenshot_phash": "c5a72bc1957f8185", "xml_hash_raw": "8d7e5daf839c180aa1656dd9fa0a19b6", "screenshot_hash_raw": "9f399f090ec4f449c6e0d9dcf4a62552", "xml_reliable": true, "coord_scale": 1.0, "coarse_sig": "5fb7e54b65ebcc669a011b0f9a1b0cdd", "struct_sig": "bdd7e5e79f40ebbf42cb08176c9a7326", "fine_sig": "3ae718a235744a35f4d3f423465312b9", "family_sig": "struct:bdd7e5e79f40ebbf42cb08176c9a7326", "identity_source": "xml", "identity_hash": "5e1d9efcb56e626d3599eb407e325542", "matched_existing": false, "matched_similarity": 1.0, "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "device_pixel_ratio": 1.0, "png_w": 1080, "png_h": 1920, "xml_w": 1080, "xml_h": 1920, "xml_bounds_n": 18, "ratio_w": 1.0, "ratio_h": 1.0, "ratio_rel_diff": 0.0, "ratio_avg": 1.0, "coord_scale_reason": "ratio_near_1"}, "nav_result": {"state_sig": "xml:5e1d9efcb56e626d3599eb407e325542", "page_summary": "Security Center Alert displayed", "overlay_kind": "dismiss", "overlay_reason": "Blocking alert about service availability", "overlay_dismiss_actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": [24, 1686, 1032, 132], "anchor_center": null, "anchor_label": "Confirm", "anchor_class": "android.view.View", "priority": 1, "reasoning": "Dismiss the alert"}], "candidate_actions": [], "page_return_actions": []}, "router_observation": {"state_sig": "xml:5e1d9efcb56e626d3599eb407e325542", "screenshot_path": "", "router_answers": [{"question_id": "exec_social.exec_social_app_type_visible", "new_answer": "no", "confidence": 0.9, "rationale": "The screenshot does not provide evidence about the app's primary type or focus."}, {"question_id": "exec_social.exec_social_digital_purchase_visible", "new_answer": "no", "confidence": 0.9, "rationale": "There is no visible evidence of digital purchases or related features."}, {"question_id": "exec_social.exec_social_graphic_violence_visible", "new_answer": "no", "confidence": 0.9, "rationale": "No graphic violence is visible in the screenshot."}, {"question_id": "exec_social.exec_social_precise_location_visible", "new_answer": "no", "confidence": 0.9, "rationale": "There is no indication of precise location sharing in the screenshot."}, {"question_id": "exec_social.exec_social_block_users_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Blocking users or content is not evident in the screenshot."}, {"question_id": "exec_social.exec_social_report_users_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Reporting users or content is not evident in the screenshot."}, {"question_id": "exec_social.exec_social_chat_moderation_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Chat moderation features are not visible in the screenshot."}, {"question_id": "exec_social.exec_social_invited_friends_visible", "new_answer": "no", "confidence": 0.9, "rationale": "There is no evidence of limiting interactions to invited friends."}, {"question_id": "addition.exec_addition_age_verification_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Age verification or related features are not visible in the screenshot."}, {"question_id": "addition.exec_addition_unsafe_ad_visible", "new_answer": "no", "confidence": 0.9, "rationale": "No unsuitable advertising content is visible in the screenshot."}, {"question_id": "addition.exec_addition_anti_addiction_notice_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Anti-addiction notices or related features are not visible in the screenshot."}, {"question_id": "addition.exec_addition_parental_controls_visible", "new_answer": "no", "confidence": 0.9, "rationale": "Parental controls or related features are not visible in the screenshot."}], "matched_block_ids": [], "block_fill_results": []}, "blocks_observation": {}, "graph_meta": {"coarse_sig": "5fb7e54b65ebcc669a011b0f9a1b0cdd", "struct_sig": "bdd7e5e79f40ebbf42cb08176c9a7326", "fine_sig": "3ae718a235744a35f4d3f423465312b9", "xml_reliable": true, "xml_hash": "a1c55708c07d1ecc6f0f3701fc6fe724", "screenshot_hash": "c07a3ba46bec8700025f0d93c64baf37", "screenshot_phash": "d1ff2b81856f8584", "xml_hash_raw": "a1c55708c07d1ecc6f0f3701fc6fe724", "screenshot_hash_raw": "c07a3ba46bec8700025f0d93c64baf37", "family_sig": "struct:bdd7e5e79f40ebbf42cb08176c9a7326", "identity_source": "xml", "identity_hash": "5e1d9efcb56e626d3599eb407e325542", "matched_existing": false, "matched_similarity": 1.0, "coord_scale": 1.0, "foreground_package": "com.aigc.ushow.ichat", "foreground_activity": ".MainActivity", "status_bar_crop_px": 0, "status_bar_crop_xml": 0, "status_bar_crop_method": "none", "implicit": true, "prev_sig": "phash:781b2c1b48a2312a057b05308ae29685"}, "state_action": {"state_sig": "xml:5e1d9efcb56e626d3599eb407e325542", "family_id": "struct:bdd7e5e79f40ebbf42cb08176c9a7326", "overlay_kind": "dismiss", "candidate_count": 0, "explored_count": 0, "attempted_count": 0, "remaining_count": 0, "is_exhausted": false, "candidate_keys": [], "remaining_candidate_keys": [], "explored_keys": [], "attempted_keys": [], "candidates": []}}}, "edge_details": {"e1": {"id": "e1", "src": "phash:781b2c1b48a2312a057b05308ae29685", "src_alias": "UI1", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "dst_alias": "UI2", "label": "wait [nav]", "count": 1, "no_effect": false, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064532.498087, "action_payload": {"actions": [{"action": "wait", "element_id": null, "text": "0.2"}], "outcome": {"changed": true, "change_type": "nav", "confidence": 0.9}}, "occurrences": [{"seq": 1, "ts": 1779064532.498087, "src": "phash:781b2c1b48a2312a057b05308ae29685", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "wait", "element_id": null, "text": "0.2", "label": "0.2", "action_key": "wait:None:0.2", "changed": true, "change_type": "nav", "confidence": 0.9}], "state_action_match": {}, "nav_candidate_match": {}}, "e2": {"id": "e2", "src": "xml:5e1d9efcb56e626d3599eb407e325542", "src_alias": "UI2", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "dst_alias": "UI2", "label": "back [noop]", "count": 6, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064682.4993742, "action_payload": {"actions": [{"action": "back", "element_id": null, "text": null}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 2, "ts": 1779064572.657852, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 3, "ts": 1779064575.9205782, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 6, "ts": 1779064633.2240024, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 7, "ts": 1779064636.4212961, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 10, "ts": 1779064678.9190354, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 11, "ts": 1779064682.4993742, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "text": null, "label": "", "action_key": "back:None", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {}}, "e3": {"id": "e3", "src": "xml:5e1d9efcb56e626d3599eb407e325542", "src_alias": "UI2", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "dst_alias": "UI2", "label": "click:1 [noop]", "count": 6, "no_effect": true, "verified_ok": 0, "verified_fail": 0, "last_ts": 1779064714.6527495, "action_payload": {"actions": [{"action": "click", "element_id": 1, "text": null, "anchor_frame": [24, 1686, 1032, 132], "anchor_label": "Confirm", "anchor_class": "android.view.View", "fingerprint": {"class": "android.view.View", "resource_id_tail": "", "label": "security center alert ou", "frame": [0, 0, 1080, 1920]}}], "outcome": {"changed": false, "change_type": "noop", "confidence": 1.0}}, "occurrences": [{"seq": 4, "ts": 1779064599.4015508, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "text": null, "label": "Confirm", "action_key": "click:1:Confirm", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 5, "ts": 1779064613.973983, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "text": null, "label": "Confirm", "action_key": "click:1:Confirm", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 8, "ts": 1779064650.0475245, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "text": null, "label": "Confirm", "action_key": "click:1:Confirm", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 12, "ts": 1779064699.9418797, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "text": null, "label": "Confirm", "action_key": "click:1:Confirm", "changed": false, "change_type": "noop", "confidence": 1.0}, {"seq": 13, "ts": 1779064714.6527495, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "text": null, "label": "Confirm", "action_key": "click:1:Confirm", "changed": false, "change_type": "noop", "confidence": 1.0}], "state_action_match": {}, "nav_candidate_match": {}}}, "timeline": [{"kind": "state_seen", "ts": 1779064531.714632, "src": "", "dst": "phash:781b2c1b48a2312a057b05308ae29685", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 1, "src_alias": "", "dst_alias": "UI1", "action_display": "observe", "result_display": "发现 UI1 (new)"}, {"kind": "state_seen", "ts": 1779064532.4960837, "src": "", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "observe", "element_id": null, "label": "", "changed": null, "change_type": "snapshot", "confidence": null, "result": "first_seen", "page": "", "known": false, "xml_reliable": null, "action_key": "", "flow_seq": 2, "src_alias": "", "dst_alias": "UI2", "action_display": "observe", "result_display": "发现 UI2 (new)"}, {"kind": "transition", "ts": 1779064532.498087, "src": "phash:781b2c1b48a2312a057b05308ae29685", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "wait", "element_id": null, "label": "0.2", "changed": true, "change_type": "nav", "confidence": 0.9, "result": "changed", "page": "", "known": null, "xml_reliable": null, "action_key": "wait:None:0.2", "flow_seq": 3, "src_alias": "UI1", "dst_alias": "UI2", "action_display": "wait 0.2", "result_display": "UI1 -> UI2 / nav"}, {"kind": "transition", "ts": 1779064572.657852, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 4, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064575.9205782, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 5, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064599.4015508, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 6, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064613.973983, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 7, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064633.2240024, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 8, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064636.4212961, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 9, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064650.0475245, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 10, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064659.7650695, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 11, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064678.9190354, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 12, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064682.4993742, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "back", "element_id": null, "label": "", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "back:None", "flow_seq": 13, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "back", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064699.9418797, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 14, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}, {"kind": "transition", "ts": 1779064714.6527495, "src": "xml:5e1d9efcb56e626d3599eb407e325542", "dst": "xml:5e1d9efcb56e626d3599eb407e325542", "action": "click", "element_id": 1, "label": "Confirm", "changed": false, "change_type": "noop", "confidence": 1.0, "result": "same_state", "page": "", "known": null, "xml_reliable": null, "action_key": "click:1:Confirm", "flow_seq": 15, "src_alias": "UI2", "dst_alias": "UI2", "action_display": "click element=1 Confirm", "result_display": "UI2 -> UI2 / noop"}], "alias_map": {"phash:781b2c1b48a2312a057b05308ae29685": "UI1", "xml:5e1d9efcb56e626d3599eb407e325542": "UI2"}};
+    const nodeDetails = payload.node_details || {};
+    const edgeDetails = payload.edge_details || {};
+    const timeline = payload.timeline || [];
+
+    function showRuntimeError(msg) {
+      const detail = document.getElementById('detail');
+      const net = document.getElementById('network');
+      if (detail) {
+        detail.innerHTML = `<div class="card" style="border-color:#e6bfc5;background:#fff5f6;">
+          <div class="k" style="color:#9a2230;">渲染失败</div>
+          <div class="mono">${esc(msg)}</div>
+          <div class="meta" style="margin-top:8px;">建议：使用 Chrome/Edge 打开；或在目录下执行 python -m http.server 后通过 http://127.0.0.1:8765 访问。</div>
+        </div>`;
+      }
+      if (net) {
+        net.innerHTML = `<div style="padding:14px;color:#9a2230;background:#fff5f6;border:1px solid #e6bfc5;border-radius:8px;margin:12px;">
+          交互图未渲染：${esc(msg)}
+        </div>`;
+      }
+    }
+
+    function esc(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderPathLink(label, p) {
+      if (!p) return `<div><span class="k">${esc(label)}:</span> -</div>`;
+      return `<div><span class="k">${esc(label)}:</span> <a class="mono" href="${esc(p)}" target="_blank">${esc(p)}</a></div>`;
+    }
+
+    function renderNode(sig) {
+      const d = nodeDetails[sig];
+      if (!d) return '<div class="card">节点详情不存在。</div>';
+      const nav = d.nav_result || {};
+      const router = d.router_observation || {};
+      const blocks = d.blocks_observation || {};
+      const cand = d.state_action || {};
+      const cands = cand.candidates || [];
+
+      const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
+        ? `<span class="pill bad">外部包: ${esc(d.foreground_package)}</span>`
+        : `<span class="pill ok">目标包: ${esc(d.foreground_package || '-')}</span>`;
+
+      let html = '';
+      html += `<div class="card"><div class="k">节点</div><div class="mono">${esc(d.alias)} | ${esc(d.state_sig)}</div>`;
+      html += `<div style="margin-top:6px">${tag}`;
+      html += `<span class="pill warn">overlay=${esc(d.overlay_kind)}</span>`;
+      html += `<span class="pill warn">visit=${esc(d.visit_count)}</span>`;
+      html += `<span class="pill warn">remaining=${esc((d.candidate_summary || {}).remaining_count)}</span>`;
+      html += `</div></div>`;
+
+      const sp = d.snapshot_paths || {};
+      html += `<div class="card"><div class="k">快照文件</div>`;
+      if (sp.preview) {
+        html += `<div style="margin:8px 0"><img class="preview" src="${esc(sp.preview)}" /></div>`;
+      }
+      html += renderPathLink('screenshot', sp.screenshot_path);
+      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
+      html += renderPathLink('xml', sp.xml_path);
+      html += renderPathLink('xml_raw', sp.xml_raw_path);
+      html += renderPathLink('uist', sp.uist_path);
+      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
+      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div>overlay_kind: <span class="mono">${esc(nav.overlay_kind ?? '-')}</span></div>`;
+      html += `<div>overlay_reason: <span class="mono">${esc(nav.overlay_reason ?? '-')}</span></div>`;
+      html += `<div>candidate_count: <span class="mono">${esc((nav.candidate_actions || []).length)}</span></div>`;
+      html += `<div>exhausted: <span class="mono">${esc(nav.exhausted)}</span>, confidence: <span class="mono">${esc(nav.exhausted_confidence)}</span></div>`;
+      html += `<div>why_these_actions: <span class="mono">${esc(nav.why_these_actions ?? '')}</span></div>`;
+      if (cands.length) {
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {
+          const a = (c.actions || [])[0] || {};
+          html += `<tr><td class="mono">${esc(c.candidate_key)}</td><td>${esc(c.score)}</td><td class="mono">${esc((a.action || '') + ':' + (a.element_id ?? 'None'))}</td><td>${esc(a.reasoning || '')}</td></tr>`;
+        }
+        html += `</tbody></table></details>`;
+      }
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
+      html += `<pre>${esc(JSON.stringify(d.vid_map_summary || {}, null, 2))}</pre>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
+      html += `<pre>${esc(JSON.stringify(d.snapshot_meta || {}, null, 2))}</pre>`;
+      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
+      html += `<div>router_answers: <span class="mono">${esc((router.router_answers || []).length)}</span></div>`;
+      html += `<div>matched_block_ids: <span class="mono">${esc((router.matched_block_ids || []).length)}</span></div>`;
+      html += `<div>block_fill_results: <span class="mono">${esc((blocks.block_fill_results || []).length)}</span></div>`;
+      html += `</div>`;
+
+      html += `<details class="card"><summary>Raw JSON</summary><pre>${esc(JSON.stringify(d, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    function renderEdge(edgeId) {
+      const d = edgeDetails[edgeId];
+      if (!d) return '<div class="card">边详情不存在。</div>';
+      let html = '';
+      html += `<div class="card"><div class="k">边</div>`;
+      html += `<div class="mono">${esc(d.id)}: ${esc(d.src_alias)} -> ${esc(d.dst_alias)}</div>`;
+      html += `<div>label: <span class="mono">${esc(d.label)}</span></div>`;
+      html += `<div>count=${esc(d.count)}, no_effect=${esc(d.no_effect)}, verified_ok=${esc(d.verified_ok)}, verified_fail=${esc(d.verified_fail)}</div>`;
+      html += `</div>`;
+
+      const sm = d.state_action_match || {};
+      const nm = d.nav_candidate_match || {};
+      html += `<div class="card"><div class="k">动作来源与原因</div>`;
+      if (Object.keys(sm).length) {
+        html += `<div><span class="k">state_action match</span></div>`;
+        html += `<div>candidate_key: <span class="mono">${esc(sm.candidate_key)}</span></div>`;
+        html += `<div>score: <span class="mono">${esc(sm.score)}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(sm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
+      }
+      if (Object.keys(nm).length) {
+        html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
+        html += `<div>score: <span class="mono">${esc(nm.score)}</span>, return_method: <span class="mono">${esc(nm.return_method || '-')}</span></div>`;
+        html += `<div>reasoning: <span class="mono">${esc(nm.reasoning || '-')}</span></div>`;
+      } else {
+        html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
+      }
+      html += `</div>`;
+
+      const occ = d.occurrences || [];
+      if (occ.length) {
+        html += `<div class="card"><div class="k">执行序列（来自 trace）</div>`;
+        html += `<table><thead><tr><th>seq</th><th>action</th><th>element_id</th><th>change_type</th><th>conf</th></tr></thead><tbody>`;
+        for (const x of occ) {
+          html += `<tr><td>${esc(x.seq)}</td><td class="mono">${esc(x.action)}</td><td>${esc(x.element_id)}</td><td>${esc(x.change_type)}</td><td>${esc(x.confidence)}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+
+      html += `<details class="card"><summary>Raw Action Payload</summary><pre>${esc(JSON.stringify(d.action_payload || {}, null, 2))}</pre></details>`;
+      return html;
+    }
+
+    // Input: global timeline rows from the trace payload. Output: HTML summary table for human debugging.
+    function renderTimeline() {
+      let html = '<div class="card"><div class="k">Global Action Timeline</div>';
+      if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      for (const x of timeline) {
+        const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        html += `<tr>
+          <td>${esc(x.flow_seq)}</td>
+          <td class="mono">${esc(x.src_alias || '-')}</td>
+          <td><span class="mono">${esc(x.action_display || x.action || '')}</span></td>
+          <td>${esc(x.result_display || x.result || x.change_type || '')}</td>
+          <td>${esc(conf)}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function setDetail(html) {
+      document.getElementById('detail').innerHTML = html;
+    }
+    try {
+      if (!window.vis || !window.vis.DataSet || !window.vis.Network) {
+        throw new Error('vis-network 未加载（window.vis 不可用）');
+      }
+      const allNodes = new vis.DataSet(payload.nodes_vis || []);
+      const allEdges = new vis.DataSet(payload.edges_vis || []);
+      let activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+
+      const network = new vis.Network(
+        document.getElementById('network'),
+        { nodes: allNodes, edges: allEdges },
+        {
+          autoResize: true,
+          interaction: { hover: true, navigationButtons: true, keyboard: true },
+          physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: { gravitationalConstant: -55, springLength: 180, springConstant: 0.06 },
+            stabilization: { iterations: 220, fit: true }
+          },
+          layout: { improvedLayout: true },
+          edges: { smooth: { type: 'dynamic' } },
+        }
+      );
+
+      network.once('stabilizationIterationsDone', function() {
+        try { network.fit({ animation: false }); } catch (e) {}
+      });
+
+      network.on('click', function (params) {
+        // Input: vis-network click event. Output: right-panel HTML; node/edge details are shown above the timeline.
+        if (params.nodes && params.nodes.length > 0) {
+          setDetail(renderNode(params.nodes[0]) + renderTimeline());
+          return;
+        }
+        if (params.edges && params.edges.length > 0) {
+          setDetail(renderEdge(params.edges[0]) + renderTimeline());
+          return;
+        }
+        setDetail(renderTimeline());
+      });
+
+      document.getElementById('hideNoop').addEventListener('change', function (e) {
+        const hide = !!e.target.checked;
+        allEdges.clear();
+        if (!hide) {
+          allEdges.add(payload.edges_vis || []);
+          activeEdgeIds = (payload.edges_vis || []).map(e => e.id);
+        } else {
+          const filtered = (payload.edges_vis || []).filter(e => {
+            const d = edgeDetails[e.id] || {};
+            return !d.no_effect;
+          });
+          allEdges.add(filtered);
+          activeEdgeIds = filtered.map(e => e.id);
+        }
+      });
+
+      setDetail(renderTimeline());
+    } catch (err) {
+      showRuntimeError((err && err.message) ? err.message : String(err));
+    }
+  </script>
+</body>
+</html>

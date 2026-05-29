@@ -1,9 +1,0 @@
-{
-  "state_sig": "phash:0531e661df938a0b624f6cee252b2fd3",
-  "task": "Explore the app to fill the questionnaire.",
-  "xml_reliable": false,
-  "identity_source": "phash",
-  "foreground_package": "com.Polystation.BuildABabe",
-  "foreground_activity": "com.unity3d.player.UnityPlayerActivity",
-  "vid_count": 9
-}

@@ -43,11 +43,9 @@ from utils import time_consumed, token_record  # do NOT modify user's utils.py
 
 R = TypeVar("R", bound=BaseModel)
 
-# Hard-coded OpenAI-compatible API endpoint.
-# Fill this with your alternate provider URL, for example: "https://your-provider.example.com/v1".
-# Leave it empty to keep the SDK default endpoint.
-# HARDCODED_OPENAI_BASE_URL = "https://api.openai.com"
-HARDCODED_OPENAI_BASE_URL = "https://api.uniapi.io/v1"
+# Default OpenAI-compatible API endpoint. Override with OPENAI_BASE_URL when
+# moving the project between machines/providers.
+DEFAULT_OPENAI_BASE_URL = "https://api.uniapi.io/v1"
 
 
 
@@ -789,7 +787,7 @@ class GPTClient:
     ):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.model = model
-        self.base_url = HARDCODED_OPENAI_BASE_URL.strip()
+        self.base_url = (os.getenv("OPENAI_BASE_URL", "").strip() or DEFAULT_OPENAI_BASE_URL).strip()
         self.temperature = float(temperature)
         self.timeout_s = int(timeout_s)
         self.total_prompt_tokens: int = 0

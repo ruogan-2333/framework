@@ -1,9 +1,0 @@
-{
-  "state_sig": "phash:63b44f4041d68bc11e459ddd5bd628c4",
-  "task": "Explore the app to fill the questionnaire.",
-  "xml_reliable": false,
-  "identity_source": "phash",
-  "foreground_package": "bim.app",
-  "foreground_activity": ".AppActivity",
-  "vid_count": 10
-}

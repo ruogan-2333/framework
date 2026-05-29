@@ -38,7 +38,13 @@ def screenshot(path: str, device_name: Optional[str] = None):
 
 def dump_ui(path: str, device_name: Optional[str] = None):
     dev = _get_device(device_name)
-    xml = dev.dump()
+    if hasattr(dev, "dump_hierarchy"):
+        xml = dev.dump_hierarchy()
+    else:
+        xml = dev.shell(["uiautomator", "dump", "/dev/tty"])
+        marker = "<?xml"
+        if marker in xml:
+            xml = xml[xml.index(marker):]
     with open(path, "w", encoding="utf-8") as f:
         f.write(xml)
 

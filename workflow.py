@@ -68,6 +68,7 @@ from gpt_cls import (
     BlocksFillResult,
     GPTClient,
     NavigationProposal,
+    NavigationRouterResult,
     OverlayKind,
     QuestionnaireUpdate,
     RecoveryProposal,
@@ -552,7 +553,8 @@ class WorkflowRunner:
     # Thread pool for LLM calls
     _pool: Optional[ThreadPoolExecutor] = field(default=None, init=False)
 
-    # Futures keyed by state_sig (stale-safe)
+    # Futures keyed by state_sig (stale-safe). _nav_futures carries the combined
+    # navigation/router LLM result because the main loop still waits on nav_cache.
     _nav_futures: Dict[str, Future] = field(default_factory=dict, init=False)
     # _topic_route_futures: Dict[str, Future] = field(default_factory=dict, init=False)
     # _topic_fill_futures: Dict[Tuple[str, str, str], Future] = field(default_factory=dict, init=False)
@@ -3962,33 +3964,47 @@ class WorkflowRunner:
         now = time.time()
         self._remember_llm_snap(sig, snap)
 
-        # NAV scheduling (LLM1)
+        # Combined navigation/router scheduling. The main loop still uses nav_cache
+        # as the action barrier, so the combined future is stored in _nav_futures.
         if now >= self.nav_cooldown_until.get(sig, 0.0):
             if sig not in self.nav_cache and sig not in self._nav_futures:
                 block_status = copy.deepcopy(getattr(self.questionnaires, "block_status", {}) or {})
-                logger.debug("Schedule NAV for sig=%s blocks=%d", sig[:8], len(block_status))
+                q2 = self.questionnaires
+                router_questions = list(getattr(q2, "routers", []) or [])
+                logger.debug(
+                    "Schedule NavigationRouter for sig=%s blocks=%d routers=%d",
+                    sig[:8],
+                    len(block_status),
+                    len(router_questions),
+                )
                 self._nav_enqueue_ts[sig] = time.time()
-                self._log_event("nav_scheduled", sig=sig, blocks=len(block_status), enqueue_ts=self._nav_enqueue_ts[sig])
-                nav_payload_path = str(self._debug_page_artifact_path(sig, "llm_nav_payload.json"))
+                self._log_event(
+                    "navigation_router_scheduled",
+                    sig=sig,
+                    blocks=len(block_status),
+                    router_questions=len(router_questions),
+                    enqueue_ts=self._nav_enqueue_ts[sig],
+                )
                 self._emit_llm_enqueued(
-                    "nav",
+                    "navigation_router",
                     sig,
                     {
                         "state_sig": sig,
                         "block_status": block_status,
+                        "router_question_count": len(router_questions),
                         "app_intro": self.app_intro,
                         "focus_hints": self.focus_hints,
                         "task": task,
                         "history": list(self.history),
                         "xml_reliable": snap.get("xml_reliable"),
-                        "debug_payload_path": nav_payload_path,
                         "enqueue_ts": self._nav_enqueue_ts[sig],
                     },
                 )
                 self._nav_futures[sig] = self._pool.submit(
-                    self.gpt.propose_navigation,
+                    self.gpt.propose_navigation_and_router,
                     screenshot_b64=snap["screenshot"],
                     ui_json=snap["uist"],
+                    router_questions=router_questions,
                     block_status=block_status,
                     task=task,
                     app_intro=self.app_intro,
@@ -3996,65 +4012,12 @@ class WorkflowRunner:
                     history=list(self.history),
                     state_sig=sig,
                     xml_reliable=snap.get("xml_reliable"),
-                    debug_payload_path=nav_payload_path,
                 )
         else:
             logger.debug("NAV cooldown active for sig=%s", sig[:8])
             self._log_event("nav_cooldown", sig=sig, cooldown_until=self.nav_cooldown_until.get(sig))
 
         # Old topic_route/topic_fill are disabled in the block_status workflow.
-
-        # New UI-level router/block path, observation mode only.
-        # Input:
-        # - current screenshot
-        # - flat router list from QuestionnaireState2
-        # Processing:
-        # - LLM2-1 answers router questions
-        # - local code maps router answers to matched blocks
-        # Output:
-        # - an observation JSON saved by `_drain_futures`.
-        q2 = self.questionnaires
-        if (
-            sig not in self.block_router_cache
-            and sig not in self.block_match_cache
-            and sig not in self._block_router_futures
-        ):
-            router_questions = list(getattr(q2, "routers", []) or [])
-            if router_questions:
-                self._block_router_enqueue_ts[sig] = time.time()
-                self._emit_llm_enqueued(
-                    "block_router",
-                    sig,
-                    {
-                        "state_sig": sig,
-                        "app_intro": self.app_intro,
-                        "focus_hints": self.focus_hints,
-                        "router_question_count": len(router_questions),
-                        "enqueue_ts": self._block_router_enqueue_ts[sig],
-                    },
-                )
-                self._block_router_futures[sig] = self._pool.submit(
-                    self.gpt.propose_router_answers,
-                    screenshot_b64=snap.get("screenshot", ""),
-                    router_questions=router_questions,
-                    app_intro=self.app_intro,
-                    focus_hints=self.focus_hints,
-                    state_sig=sig,
-                )
-            else:
-                try:
-                    matched_blocks = q2.match_blocks_from_router_answers([])
-                    q2.mark_blocks_hit(matched_blocks)
-                    self.block_match_cache[sig] = matched_blocks
-                    obs_path = self._save_questionnaire2_observation(sig, [], matched_blocks, stage="router")
-                    self._log_event(
-                        "block_router_no_routers",
-                        sig=sig,
-                        matched_block_count=len(matched_blocks),
-                        observation_path=str(obs_path or ""),
-                    )
-                except Exception:
-                    logger.debug("QuestionnaireState2 no-router matching failed sig=%s", sig[:8], exc_info=True)
 
 
     def _schedule_topic_fills(self, sig: str, snap: Dict[str, Any]) -> None:
@@ -4187,7 +4150,11 @@ class WorkflowRunner:
             fut = self._nav_futures[sig]
             if fut.done():
                 try:
-                    nav = fut.result()
+                    combined: NavigationRouterResult = fut.result()
+                    nav = combined.navigation
+                    route = combined.router
+                    nav.state_sig = sig or getattr(nav, "state_sig", "")
+                    route.state_sig = sig or getattr(route, "state_sig", "")
                     self.nav_cache[sig] = nav
                     self.nav_ready_once = True
                     try:
@@ -4227,6 +4194,57 @@ class WorkflowRunner:
                             "result": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
                         },
                     )
+                    try:
+                        q2 = self.questionnaires
+                        router_answers = [
+                            item.model_dump(mode="json") if hasattr(item, "model_dump") else getattr(item, "__dict__", {})
+                            for item in (getattr(route, "router_updates", None) or [])
+                        ]
+                        matched_blocks: List[Dict[str, Any]] = q2.match_blocks_from_router_answers(router_answers)
+                        q2.mark_blocks_hit(matched_blocks)
+                        self.block_router_cache[sig] = route
+                        self.block_match_cache[sig] = matched_blocks
+
+                        router_obs_path = self._save_questionnaire2_observation(sig, router_answers, matched_blocks, stage="router")
+                        self._log_event(
+                            "block_router_ready",
+                            sig=sig,
+                            router_update_count=len(router_answers),
+                            matched_block_count=len(matched_blocks),
+                            observation_path=str(router_obs_path or ""),
+                        )
+                        snap = self.llm_snap_cache.get(sig)
+                        if snap and matched_blocks:
+                            self._schedule_blocks_fill(sig, snap, matched_blocks)
+                        elif snap and not matched_blocks:
+                            self._log_event(
+                                "blocks_fill_skipped_no_matched_blocks",
+                                sig=sig,
+                                router_update_count=len(router_answers),
+                                observation_path=str(router_obs_path or ""),
+                            )
+
+                        self._emit_llm_result(
+                            "block_router",
+                            sig,
+                            {
+                                "state_sig": sig,
+                                "duration_s": duration_s,
+                                "matched_block_ids": [block.get("id") for block in self.block_match_cache.get(sig, [])],
+                                "result": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                            },
+                        )
+                    except Exception:
+                        logger.debug("Combined router post-process failed sig=%s", sig[:8], exc_info=True)
+                        self._emit_llm_result(
+                            "block_router",
+                            sig,
+                            {
+                                "state_sig": sig,
+                                "duration_s": duration_s,
+                                "error": "combined_router_postprocess_failed",
+                            },
+                        )
                 except CancelledError:
                     # Most commonly cancelled by NAV timeout; do not double-count failures/backoff here.
                     start = self._nav_enqueue_ts.pop(sig, None)

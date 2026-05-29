@@ -1,9 +1,0 @@
-{
-  "state_sig": "xml:312076f3ac8de5fbce3d68d24d8f5352",
-  "task": "Explore the app to fill the questionnaire.",
-  "xml_reliable": true,
-  "identity_source": "xml",
-  "foreground_package": "com.Polystation.BuildABabe",
-  "foreground_activity": "com.unity3d.player.UnityPlayerActivity",
-  "vid_count": 13
-}
