@@ -37,7 +37,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 
 
@@ -45,6 +44,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from env_config import load_project_env
 from gpt_cls import GPTClient, _compact_digest
 from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 
@@ -592,7 +592,7 @@ def main() -> int:
     Output: process exit code, 0 when all selected LLM calls succeed.
     Function: selects one fetch_snap session, replays selected snaps through the chosen LLM mode, and writes results in place.
     """
-    load_dotenv(PROJECT_ROOT / ".env")
+    load_project_env(PROJECT_ROOT / ".env")
     setup_logging(DEBUG_LOG)
 
     mode = LLM_MODE.strip().lower()

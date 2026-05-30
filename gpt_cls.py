@@ -1065,6 +1065,7 @@ class GPTClient:
         history: Optional[List[str]] = None,
         state_sig: str = "",
         xml_reliable: Optional[bool] = None,
+        debug_payload_path: str = "",
     ) -> NavigationRouterResult:
         """
         Ask one LLM call to produce both navigation planning and router answers.
@@ -1094,6 +1095,13 @@ class GPTClient:
             "xml_reliable": xml_reliable
 
         }
+        if debug_payload_path:
+            try:
+                out_path = Path(debug_payload_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.debug("Failed to write navigation/router debug payload", exc_info=True)
 
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": _NAV_ROUTER_SYSTEM},
@@ -1237,6 +1245,7 @@ class GPTClient:
         app_intro: Optional[str] = None,
         focus_hints: Optional[str] = None,
         state_sig: str = "",
+        debug_payload_path: str = "",
     ) -> BlocksFillResult:
         """
         Fill all matched blocks for one UI state in a single LLM2-2 call.
@@ -1260,6 +1269,13 @@ class GPTClient:
             "focus_hints": focus_hints,
             "blocks": blocks_payload,
         }
+        if debug_payload_path:
+            try:
+                out_path = Path(debug_payload_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.debug("Failed to write blocks_fill debug payload", exc_info=True)
 
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": _BLOCKS_FILL_SYSTEM},

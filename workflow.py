@@ -694,6 +694,7 @@ class WorkflowRunner:
     recent_transitions: List[Tuple[str, str, str, str, str]] = field(default_factory=list, init=False)
     loop_detected_count: int = field(default=0, init=False)
     analysis_export_count: int = field(default=0, init=False)
+    run_started_at_ms: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         cb_run = getattr(self.callbacks, "run_id", None)
@@ -707,6 +708,7 @@ class WorkflowRunner:
         elif cb_run:
             self.run_id = cb_run
         now = time.time()
+        self.run_started_at_ms = int(now * 1000)
         self.last_strong_progress_ts = now
         self.last_weak_progress_ts = now
 
@@ -738,6 +740,7 @@ class WorkflowRunner:
             )
         except Exception:
             logger.debug("QuestionnaireState2 summary failed", exc_info=True)
+        self._write_run_json(stop_reason="")
         self._save_app_metadata_context()
 
     # ---------------------------
@@ -843,10 +846,10 @@ class WorkflowRunner:
     def _debug_page_artifact_path(self, sig: str, filename: str) -> Path:
         """
         Input: state signature and artifact filename.
-        Output: preferred debug_pages/<step_sig>/<filename> path for this state.
+        Output: preferred states/<UI...>/<filename> path for this state.
         Function: lets workflow-owned debug artifacts land beside callback-owned snapshot/LLM files.
         """
-        root = self._run_output_root() / "debug_pages"
+        root = self._run_output_root() / "states"
         safe = self._safe_filename_token(sig)[:48]
         try:
             matches = sorted(root.glob(f"*_{safe}"))
@@ -854,19 +857,50 @@ class WorkflowRunner:
                 return matches[0] / filename
         except Exception:
             pass
-        return root / f"{int(self._step_seq):06d}_{safe}" / filename
+        return root / f"UI{int(self._step_seq):06d}_{safe}" / filename
+
+    def _write_run_json(self, *, stop_reason: str) -> Optional[Path]:
+        """
+        Input: current final stop reason, or an empty string while the run is active.
+        Output: path to run.json when written.
+        Function: saves run-level configuration and final status at the trace root.
+        """
+        try:
+            out_root = self._run_output_root()
+            out_root.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "run_id": self.run_id,
+                "target_package": str(self.target_package or ""),
+                "target_activity": str(self.target_activity or ""),
+                "questionnaire_type": str(self.questionnaire_type or ""),
+                "questionnaire_type_source": str(self.questionnaire_type_source or ""),
+                "metadata_csv_path": str(self.metadata_csv_path or ""),
+                "time_budget_s": float(getattr(self.budget, "time_budget_s", 0.0) or 0.0),
+                "max_actions": int(getattr(self.budget, "max_actions", 0) or 0),
+                "probe_cap": int(getattr(self.budget, "per_page_probe_cap", 0) or 0),
+                "started_at": self.run_started_at_ms,
+                "updated_at": int(time.time() * 1000),
+                "finished_at": int(time.time() * 1000) if stop_reason else None,
+                "stop_reason": stop_reason,
+            }
+            out_path = out_root / "run.json"
+            out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            return out_path
+        except Exception:
+            logger.debug("Failed to write run.json", exc_info=True)
+            return None
 
     def _save_app_metadata_context(self) -> Optional[Path]:
         """
         Persist app-level metadata context once per run for reproducibility.
 
         Output:
-        - Path to `app_metadata_context.json`, or None on failure.
+        - Path to `app_metadata.json`, or None on failure.
         """
         try:
             out_root = self._run_output_root()
             out_root.mkdir(parents=True, exist_ok=True)
-            out_path = out_root / "app_metadata_context.json"
+            out_path = out_root / "app_metadata.json"
             payload = {
                 "run_id": self.run_id,
                 "target_package": str(self.target_package or ""),
@@ -1077,7 +1111,7 @@ class WorkflowRunner:
         Files are overwritten by the latest snapshot.
         """
         try:
-            out_dir = self._run_output_root() / "analysis"
+            out_dir = self._run_output_root() / "graph"
             out_dir.mkdir(parents=True, exist_ok=True)
 
             graph_nodes: Dict[str, Any] = {}
@@ -2416,6 +2450,7 @@ class WorkflowRunner:
             pass
         try:
             final_stop_reason = str(getattr(self, "_final_stop_reason", "run_exit") or "run_exit")
+            self._write_run_json(stop_reason=final_stop_reason)
             self._export_analysis_snapshot(cur_sig=cur_sig, stop_reason=final_stop_reason)
             export_timeline = getattr(self.callbacks, "export_timeline", None)
             if callable(export_timeline):
@@ -4012,6 +4047,7 @@ class WorkflowRunner:
                     history=list(self.history),
                     state_sig=sig,
                     xml_reliable=snap.get("xml_reliable"),
+                    debug_payload_path=str(self._debug_page_artifact_path(sig, "llm/navigation_router_input.json")),
                 )
         else:
             logger.debug("NAV cooldown active for sig=%s", sig[:8])
@@ -4134,6 +4170,7 @@ class WorkflowRunner:
             app_intro=self.app_intro,
             focus_hints=self.focus_hints,
             state_sig=sig,
+            debug_payload_path=str(self._debug_page_artifact_path(sig, "llm/blocks_fill_input.json")),
         )
 
     def _drain_futures(self) -> None:
@@ -4181,19 +4218,6 @@ class WorkflowRunner:
                         candidate_count=len(getattr(nav, "candidate_actions", []) or []),
                         duration_s=duration_s,
                     )
-                    nav_obs_path = self._save_nav_observation(sig, nav)
-                    if nav_obs_path is not None:
-                        self._log_event("nav_observation_saved", sig=sig, observation_path=str(nav_obs_path))
-                    self._emit_llm_result(
-                        "nav",
-                        sig,
-                        {
-                            "state_sig": sig,
-                            "duration_s": duration_s,
-                            "observation_path": str(nav_obs_path or ""),
-                            "result": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
-                        },
-                    )
                     try:
                         q2 = self.questionnaires
                         router_answers = [
@@ -4205,13 +4229,11 @@ class WorkflowRunner:
                         self.block_router_cache[sig] = route
                         self.block_match_cache[sig] = matched_blocks
 
-                        router_obs_path = self._save_questionnaire2_observation(sig, router_answers, matched_blocks, stage="router")
                         self._log_event(
                             "block_router_ready",
                             sig=sig,
                             router_update_count=len(router_answers),
                             matched_block_count=len(matched_blocks),
-                            observation_path=str(router_obs_path or ""),
                         )
                         snap = self.llm_snap_cache.get(sig)
                         if snap and matched_blocks:
@@ -4221,27 +4243,36 @@ class WorkflowRunner:
                                 "blocks_fill_skipped_no_matched_blocks",
                                 sig=sig,
                                 router_update_count=len(router_answers),
-                                observation_path=str(router_obs_path or ""),
                             )
 
                         self._emit_llm_result(
-                            "block_router",
+                            "navigation_router",
                             sig,
                             {
                                 "state_sig": sig,
                                 "duration_s": duration_s,
                                 "matched_block_ids": [block.get("id") for block in self.block_match_cache.get(sig, [])],
-                                "result": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                                "result": {
+                                    "state_sig": sig,
+                                    "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
+                                    "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                                },
                             },
                         )
                     except Exception:
                         logger.debug("Combined router post-process failed sig=%s", sig[:8], exc_info=True)
                         self._emit_llm_result(
-                            "block_router",
+                            "navigation_router",
                             sig,
                             {
                                 "state_sig": sig,
                                 "duration_s": duration_s,
+                                "matched_block_ids": [],
+                                "result": {
+                                    "state_sig": sig,
+                                    "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
+                                    "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                                },
                                 "error": "combined_router_postprocess_failed",
                             },
                         )
@@ -4250,12 +4281,12 @@ class WorkflowRunner:
                     start = self._nav_enqueue_ts.pop(sig, None)
                     self._log_event("nav_cancelled", sig=sig, duration_s=(time.time() - start) if start else None)
                     self._emit_llm_result(
-                        "nav",
+                        "navigation_router",
                         sig,
                         {
                             "state_sig": sig,
                             "duration_s": (time.time() - start) if start else None,
-                            "error": "nav_cancelled",
+                            "error": "navigation_router_cancelled",
                         },
                     )
                 except Exception:
@@ -4267,12 +4298,12 @@ class WorkflowRunner:
                     self._log_event("nav_failure", sig=sig, failures=failures, backoff_s=backoff_s, cooldown_until=self.nav_cooldown_until.get(sig))
                     start = self._nav_enqueue_ts.pop(sig, None)
                     self._emit_llm_result(
-                        "nav",
+                        "navigation_router",
                         sig,
                         {
                             "state_sig": sig,
                             "duration_s": (time.time() - start) if start else None,
-                            "error": "nav_future_failed",
+                            "error": "navigation_router_future_failed",
                         },
                     )
                 finally:
@@ -4360,14 +4391,6 @@ class WorkflowRunner:
                         item.model_dump(mode="json") if hasattr(item, "model_dump") else getattr(item, "__dict__", {})
                         for item in (getattr(result, "block_results", None) or [])
                     ]
-                    obs_path = self._save_questionnaire2_observation(
-                        sig,
-                        router_answers,
-                        matched_blocks,
-                        block_fill_results=block_fill_results,
-                        stage="blocks_fill",
-                    )
-
                     proposed_ct = sum(len(row.get("proposed_updates") or []) for row in block_fill_results)
                     if proposed_ct:
                         self.state_update_counts[sig] = int(self.state_update_counts.get(sig, 0) or 0) + int(proposed_ct)
@@ -4379,7 +4402,6 @@ class WorkflowRunner:
                         sig=sig,
                         block_result_count=len(block_fill_results),
                         proposed_count=proposed_ct,
-                        observation_path=str(obs_path or ""),
                     )
                     self._emit_llm_result(
                         "blocks_fill",
@@ -4387,7 +4409,8 @@ class WorkflowRunner:
                         {
                             "state_sig": sig,
                             "duration_s": (time.time() - start) if start else None,
-                            "observation_path": str(obs_path or ""),
+                            "matched_block_ids": [block.get("id") for block in matched_blocks],
+                            "router_answers": router_answers,
                             "result": result.model_dump(mode="json") if hasattr(result, "model_dump") else getattr(result, "__dict__", {}),
                         },
                     )

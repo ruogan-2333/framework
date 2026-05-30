@@ -4,15 +4,15 @@ Usage:
   python visualize_run_analysis.py --run-dir traces/<run_id>
 
 Expected input files (auto-exported by WorkflowRunner):
-  <run-dir>/analysis/state_graph_snapshot.json
-  <run-dir>/analysis/dfs_snapshot.json
-  <run-dir>/analysis/state_action_snapshot.json
+  <run-dir>/graph/state_graph_snapshot.json
+  <run-dir>/graph/dfs_snapshot.json
+  <run-dir>/graph/state_action_snapshot.json
   <run-dir>/trace.jsonl
 
 Outputs:
-  <run-dir>/analysis/visual/ui_transition_graph.png
-  <run-dir>/analysis/visual/dfs_stack.png
-  <run-dir>/analysis/visual/report.md
+  <run-dir>/graph/visual/ui_transition_graph.png
+  <run-dir>/graph/visual/dfs_stack.png
+  <run-dir>/graph/visual/report.md
 """
 
 from __future__ import annotations
@@ -560,7 +560,9 @@ def main() -> None:
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
-    analysis_dir = run_dir / "analysis"
+    analysis_dir = run_dir / "graph"
+    if not analysis_dir.exists() and (run_dir / "analysis").exists():
+        analysis_dir = run_dir / "analysis"
     visual_dir = analysis_dir / "visual"
     visual_dir.mkdir(parents=True, exist_ok=True)
 

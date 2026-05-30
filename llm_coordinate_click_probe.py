@@ -30,16 +30,17 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, Field
 
 from appium_android import AndroidAppiumClient
+from env_config import load_project_env
 from gpt_cls import GPTClient, _b64_image_url
 from ui_cls import BaseUI
 
 
-load_dotenv()
+# Load the project environment file as the source of truth for API and proxy settings.
+load_project_env(Path(__file__).resolve().parent / ".env")
 
 logger = logging.getLogger(__name__)
 

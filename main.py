@@ -12,14 +12,16 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from env_config import load_project_env
+
+# Load the project environment file as the source of truth for API and proxy settings.
+load_project_env(Path(__file__).resolve().parent / ".env")
+
 from appium_android import AndroidAppiumClient
 from gpt_cls import GPTClient
 from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 from workflow import BudgetConfig, WorkflowRunner
 from trace_callbacks import InteractiveDebugCallbacks, JsonlTraceCallbacks, NoOpCallbacks
-
-from dotenv import load_dotenv
-load_dotenv()
 
 
 _META_SELECTED_FIELDS = [
@@ -245,7 +247,7 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument(
         "--auto-visualize-interactive",
         action="store_true",
-        help="After run finishes, build analysis/interactive/ui_transition_interactive.html for this trace run.",
+        help="After run finishes, build index.html for this trace run.",
     )
 
     # Logging

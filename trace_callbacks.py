@@ -249,14 +249,15 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         self.run_id = run_id or time.strftime("%Y%m%d_%H%M%S")
         self.root_dir = os.path.abspath(os.path.join(root_dir, self.run_id))
         self.trace_path = os.path.join(self.root_dir, "trace.jsonl")
-        self.debug_pages_dir = os.path.join(self.root_dir, "debug_pages")
+        self.states_dir = os.path.join(self.root_dir, "states")
 
-        os.makedirs(self.debug_pages_dir, exist_ok=True)
+        os.makedirs(self.states_dir, exist_ok=True)
 
         self._lock = threading.Lock()
         self._page_dirs_by_sig: Dict[str, str] = {}
         self._page_prefix_by_sig: Dict[str, str] = {}
         self._snap_cache_by_sig: Dict[str, Dict[str, Any]] = {}
+        self._llm_result_cache_by_sig: Dict[str, Dict[str, Any]] = {}
         self._timeline: List[Dict[str, Any]] = []
         self._pending_actions: Dict[str, Dict[str, Any]] = {}
         self._timeline_logger = logging.getLogger("run_timeline")
@@ -336,26 +337,51 @@ class JsonlTraceCallbacks(NoOpCallbacks):
     def _page_prefix(self, step_id: int, sig: str) -> str:
         """
         Input: workflow step id and state signature.
-        Output: standard page directory prefix such as 000005_phash_abcd.
-        Function: keeps debug_pages naming consistent with historical screenshot names.
+        Output: standard state directory prefix such as UI000005_phash_abcd.
+        Function: keeps per-state artifact folders stable and human-readable.
         """
-        return f"{int(step_id):06d}_{self._safe_filename_token(sig)[:48]}"
+        return f"UI{int(step_id):06d}_{self._safe_filename_token(sig)[:48]}"
 
     def _page_dir_for_sig(self, sig: str, step_id: int, *, create: bool = True) -> str:
         """
         Input: state signature and current step id.
-        Output: existing or newly created debug_pages directory for that state.
+        Output: existing or newly created states directory for that state.
         Function: lets snapshot, LLM, and action artifacts land in one human-readable page folder.
         """
         if sig in self._page_dirs_by_sig:
             return self._page_dirs_by_sig[sig]
         prefix = self._page_prefix(step_id, sig)
-        page_dir = os.path.join(self.debug_pages_dir, prefix)
+        page_dir = os.path.join(self.states_dir, prefix)
         if create:
             os.makedirs(page_dir, exist_ok=True)
         self._page_dirs_by_sig[sig] = page_dir
         self._page_prefix_by_sig[sig] = prefix
         return page_dir
+
+    @staticmethod
+    def _ensure_subdir(page_dir: str, name: str) -> str:
+        """
+        Input: page directory and subdirectory name.
+        Output: absolute path to the ensured subdirectory.
+        Function: keeps overlays and LLM artifacts separated inside each UI folder.
+        """
+        out_dir = os.path.join(page_dir, name)
+        os.makedirs(out_dir, exist_ok=True)
+        return out_dir
+
+    @staticmethod
+    def _llm_filename_for_kind(kind: str, suffix: str) -> str:
+        """
+        Input: LLM callback kind and suffix, either input or result.
+        Output: canonical filename inside states/<UI>/llm.
+        Function: avoids legacy split navigation/router filenames.
+        """
+        normalized = str(kind or "").strip()
+        if normalized == "navigation_router":
+            return f"navigation_router_{suffix}.json"
+        if normalized == "blocks_fill":
+            return f"blocks_fill_{suffix}.json"
+        return f"{normalized}_{suffix}.json"
 
     @staticmethod
     def _json_safe(value: Any) -> Any:
@@ -585,6 +611,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         if base_img is None:
             return {"vidmap_overlay_path": None, "uist_overlay_path": None}
 
+        overlays_dir = self._ensure_subdir(page_dir, "overlays")
         vidmap_path = None
         uist_path = None
 
@@ -596,7 +623,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 id_getter=lambda n: n.get("id", ""),
                 color_getter=lambda n: (220, 50, 47) if bool(n.get("clickable")) else (46, 160, 67),
             )
-            vidmap_path = os.path.join(page_dir, "vid_map_overlay.png")
+            vidmap_path = os.path.join(overlays_dir, "vid_map_overlay.png")
             vid_img.save(vidmap_path)
         except Exception:
             vidmap_path = None
@@ -611,18 +638,75 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 id_getter=lambda n: n.get("id", ""),
                 color_getter=lambda n: (203, 75, 22) if bool(n.get("clickable")) else (133, 153, 0),
             )
-            uist_path = os.path.join(page_dir, "uist_overlay.png")
+            uist_path = os.path.join(overlays_dir, "uist_overlay.png")
             uist_img.save(uist_path)
         except Exception:
             uist_path = None
 
         return {"vidmap_overlay_path": vidmap_path, "uist_overlay_path": uist_path}
 
+    def _write_debug_summary(self, sig: str, page_dir: str) -> Optional[str]:
+        """
+        Input: state signature and UI artifact directory.
+        Output: path to llm/debug_summary.md when written.
+        Function: provides a compact human-readable index of the LLM outputs for one UI.
+        """
+        llm_dir = self._ensure_subdir(page_dir, "llm")
+        out_path = os.path.join(llm_dir, "debug_summary.md")
+        bundle = self._llm_result_cache_by_sig.get(sig) or {}
+        nav_router = bundle.get("navigation_router") or {}
+        blocks_fill = bundle.get("blocks_fill") or {}
+        nav_body = {}
+        router_body = {}
+        if isinstance(nav_router, dict):
+            result = nav_router.get("result") if isinstance(nav_router.get("result"), dict) else nav_router
+            nav_body = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
+            router_body = result.get("router") if isinstance(result.get("router"), dict) else {}
+        block_body = blocks_fill.get("result") if isinstance(blocks_fill.get("result"), dict) else {}
+
+        lines = [
+            "# UI LLM Debug Summary",
+            "",
+            f"- state_sig: `{sig}`",
+            f"- navigation_router: {'yes' if nav_router else 'no'}",
+            f"- blocks_fill: {'yes' if blocks_fill else 'no'}",
+            "",
+            "## Navigation Router",
+            "",
+        ]
+        if nav_body:
+            lines.extend(
+                [
+                    f"- page_summary: {str(nav_body.get('page_summary') or '')}",
+                    f"- overlay_kind: {str(nav_body.get('overlay_kind') or '')}",
+                    f"- candidate_actions: {len(nav_body.get('candidate_actions') or [])}",
+                    f"- page_return_actions: {len(nav_body.get('page_return_actions') or [])}",
+                ]
+            )
+        if router_body:
+            lines.extend(
+                [
+                    f"- router_updates: {len(router_body.get('router_updates') or [])}",
+                    f"- matched_block_ids: {', '.join([str(x) for x in (nav_router.get('matched_block_ids') or [])])}",
+                ]
+            )
+        lines.extend(["", "## Blocks Fill", ""])
+        if block_body:
+            lines.append(f"- block_results: {len(block_body.get('block_results') or [])}")
+        else:
+            lines.append("- block_results: 0")
+        try:
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+            return out_path
+        except Exception:
+            return None
+
     # ------------ event handlers ------------
     def on_snapshot(self, ctx: StepCtx, snap: Dict[str, Any]) -> None:  # type: ignore[override]
         """
         Input: authoritative workflow snapshot.
-        Output: writes one debug_pages/<step_sig>/ folder and a compact trace event.
+        Output: writes one states/<UI...>/ folder and a compact trace event.
         Function: keeps all human-facing snapshot artifacts together for manual debugging.
         """
         sig = str(snap.get("state_sig") or "")
@@ -693,43 +777,20 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         overlay_paths = self._write_snapshot_overlays(page_dir, snap)
 
         meta = snap.get("meta", {}) or {}
-        summary_path = None
+        snap_path = None
         try:
-            summary_path = os.path.join(page_dir, "snap_summary.json")
-            self._write_json(
-                summary_path,
-                {
-                    "state_sig": sig,
-                    "page_dir": page_dir,
-                    "screenshot_hash": screenshot_hash,
-                    "screenshot_raw_hash": screenshot_raw_hash,
-                    "vid_map_count": len(snap.get("vid_map") or {}),
-                    "uist_root_count": len((snap.get("uist") or {}).get("elements") or []),
-                    "xml_reliable": meta.get("xml_reliable"),
-                    "identity_source": meta.get("identity_source"),
-                    "matched_existing": meta.get("matched_existing"),
-                    "matched_similarity": meta.get("matched_similarity"),
-                    "foreground_package": meta.get("foreground_package"),
-                    "foreground_activity": meta.get("foreground_activity"),
-                    "device_info": snap.get("device_info"),
-                    "artifact_paths": {
-                        "screenshot_path": screenshot_path,
-                        "screenshot_raw_path": screenshot_raw_path,
-                        "xml_path": xml_path,
-                        "xml_raw_path": xml_raw_path,
-                        "uist_path": uist_path,
-                        "vid_map_path": vid_map_path,
-                        **overlay_paths,
-                    },
-                },
-            )
+            snap_path = os.path.join(page_dir, "snap.json")
+            self._write_json(snap_path, snap)
         except Exception:
-            summary_path = None
+            snap_path = None
 
         payload = {
             "state_sig": sig,
             "page_dir": page_dir,
+            "page": prefix,
             "page_prefix": prefix,
+            "known": bool(meta.get("cache_hit") or meta.get("matched_existing")),
+            "xml_reliable": meta.get("xml_reliable"),
             "xml_path": xml_path,
             "xml_raw_path": xml_raw_path,
             "screenshot_path": screenshot_path,
@@ -738,7 +799,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             "screenshot_raw_hash": screenshot_raw_hash,
             "uist_path": uist_path,
             "vid_map_path": vid_map_path,
-            "snap_summary_path": summary_path,
+            "snap_path": snap_path,
             **overlay_paths,
             "vid_map_summary": self._vid_map_summary(snap.get("vid_map", {})),
             "device_info": snap.get("device_info"),
@@ -769,7 +830,8 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         """
         sig = str(payload.get("state_sig") or ctx.cur_sig or "")
         page_dir = self._page_dir_for_sig(sig, ctx.step_id, create=True)
-        input_path = os.path.join(page_dir, f"llm_{kind}_input.json")
+        llm_dir = self._ensure_subdir(page_dir, "llm")
+        input_path = os.path.join(llm_dir, self._llm_filename_for_kind(kind, "input"))
         try:
             self._write_json(input_path, payload)
         except Exception:
@@ -800,19 +862,30 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         """
         sig = str(result.get("state_sig") or ctx.cur_sig or "")
         page_dir = self._page_dir_for_sig(sig, ctx.step_id, create=True)
-        result_path = os.path.join(page_dir, f"llm_{kind}_result.json")
+        llm_dir = self._ensure_subdir(page_dir, "llm")
+        result_path = os.path.join(llm_dir, self._llm_filename_for_kind(kind, "result"))
         overlay_path = ""
         try:
             self._write_json(result_path, result)
         except Exception:
             result_path = ""
         try:
-            nav_result = result.get("result") if isinstance(result.get("result"), dict) else {}
-            if kind == "nav" and nav_result:
-                overlay_path = self._write_llm_actions_overlay(sig, nav_result, os.path.join(page_dir, "llm_navigation_actions_overlay.png")) or ""
+            result_body_for_overlay = result.get("result") if isinstance(result.get("result"), dict) else {}
+            nav_result = result_body_for_overlay.get("navigation") if isinstance(result_body_for_overlay.get("navigation"), dict) else result_body_for_overlay
+            if kind in {"navigation_router", "nav"} and nav_result:
+                overlay_path = self._write_llm_actions_overlay(
+                    sig,
+                    nav_result,
+                    os.path.join(self._ensure_subdir(page_dir, "overlays"), "llm_actions_overlay.png"),
+                ) or ""
         except Exception:
             overlay_path = ""
         result_body = result.get("result") if isinstance(result.get("result"), dict) else {}
+        if kind == "navigation_router" and isinstance(result_body.get("navigation"), dict):
+            result_body = result_body.get("navigation") or {}
+        if result_path:
+            self._llm_result_cache_by_sig.setdefault(sig, {})[kind] = result
+            self._write_debug_summary(sig, page_dir)
         cand_count = len((result_body or {}).get("candidate_actions") or [])
         return_count = len((result_body or {}).get("page_return_actions") or [])
         overlay_kind = (result_body or {}).get("overlay_kind") or "-"
@@ -946,14 +1019,12 @@ class JsonlTraceCallbacks(NoOpCallbacks):
     def export_timeline(self, *, stop_reason: str = "run_exit") -> Dict[str, str]:
         """
         Input: final stop reason.
-        Output: paths to timeline.json and timeline.md.
+        Output: path to timeline.md.
         Function: writes the complete human-readable run timeline after workflow completion.
         """
-        timeline_json = os.path.join(self.root_dir, "timeline.json")
         timeline_md = os.path.join(self.root_dir, "timeline.md")
         with self._lock:
             rows = list(self._timeline)
-        self._write_json(timeline_json, {"run_id": self.run_id, "stop_reason": stop_reason, "events": rows})
         lines = [f"# Run Timeline", "", f"- run_id: `{self.run_id}`", f"- stop_reason: `{stop_reason}`", ""]
         for idx, row in enumerate(rows, start=1):
             typ = row.get("type") or "event"
@@ -976,8 +1047,8 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 lines.append(f"{idx}. {str(typ).upper()} step={step_id}")
         with open(timeline_md, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
-        self._timeline_logger.info("[TRACE] timeline saved json=%s md=%s", timeline_json, timeline_md)
-        return {"timeline_json": timeline_json, "timeline_md": timeline_md}
+        self._timeline_logger.info("[TRACE] timeline saved md=%s", timeline_md)
+        return {"timeline_md": timeline_md}
 
 
 __all__ = [

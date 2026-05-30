@@ -325,7 +325,9 @@ def load_trace_analysis(trace_dir: Path) -> Dict[str, Any]:
     输出：analysis/run_analysis_summary.json 的关键字段。
     功能：读取停止原因、UI 图节点数、边数、动作数等主流程统计。
     """
-    summary = read_json(trace_dir / "analysis" / "run_analysis_summary.json", {})
+    summary = read_json(trace_dir / "graph" / "run_analysis_summary.json", {})
+    if not summary:
+        summary = read_json(trace_dir / "analysis" / "run_analysis_summary.json", {})
     if not isinstance(summary, dict):
         summary = {}
     return {
@@ -367,6 +369,18 @@ def iter_observation_files(trace_dir: Path, stage: str) -> Iterable[Path]:
     return sorted(root.glob("*.json"))
 
 
+def iter_state_llm_files(trace_dir: Path, filename: str) -> Iterable[Path]:
+    """
+    输入：trace 目录和 states/<UI>/llm 下的文件名。
+    输出：匹配到的 LLM JSON 文件迭代器。
+    功能：读取新结构里按 UI 聚合的大模型调试结果。
+    """
+    root = trace_dir / "states"
+    if not root.exists():
+        return []
+    return sorted(root.glob(f"UI*/llm/{filename}"))
+
+
 def count_router_states_from_trace(trace_dir: Path) -> set[str]:
     """
     输入：单个 APP trace 目录。
@@ -385,7 +399,7 @@ def count_router_states_from_trace(trace_dir: Path) -> set[str]:
                 except Exception:
                     continue
                 data = obj.get("data") or {}
-                if obj.get("event") == "llm_result" and data.get("kind") == "block_router" and not data.get("error"):
+                if obj.get("event") == "llm_result" and data.get("kind") in {"block_router", "navigation_router"} and not data.get("error"):
                     sig = str(data.get("state_sig") or "")
                     if sig:
                         states.add(sig)
@@ -406,6 +420,38 @@ def summarize_router_block_observations(trace_dir: Path) -> Tuple[Dict[str, Any]
     block_fill_obs_count = 0
     router_hit_counter: Counter = Counter()
     block_hit_counter: Counter = Counter()
+
+    for path in iter_state_llm_files(trace_dir, "navigation_router_result.json"):
+        payload = read_json(path, {})
+        if not isinstance(payload, dict):
+            continue
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        router = result.get("router") if isinstance(result.get("router"), dict) else {}
+        router_answers = list(router.get("router_updates") or [])
+        router_obs_count += 1
+        state_sig = str(payload.get("state_sig") or result.get("state_sig") or "")
+        if state_sig:
+            router_states.add(state_sig)
+        for item in router_answers:
+            if not isinstance(item, dict):
+                continue
+            qid = str(item.get("question_id") or item.get("id") or "").strip()
+            if qid and answer_is_nonempty(item.get("new_answer")):
+                router_hit_counter[qid] += 1
+        for block_id in list(payload.get("matched_block_ids") or []):
+            bid = str(block_id or "").strip()
+            if bid:
+                block_hit_counter[bid] += 1
+
+    for path in iter_state_llm_files(trace_dir, "blocks_fill_result.json"):
+        payload = read_json(path, {})
+        if not isinstance(payload, dict):
+            continue
+        block_fill_obs_count += 1
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        state_sig = str(payload.get("state_sig") or result.get("state_sig") or "")
+        if state_sig:
+            block_fill_states.add(state_sig)
 
     for path in iter_observation_files(trace_dir, "router"):
         payload = read_json(path, {})
@@ -691,16 +737,38 @@ def find_state_screenshot_raw(trace_dir: Path, state_sig: str) -> Optional[Path]
     输出：该 state 对应的 screenshot_raw.png 路径；找不到返回 None。
     功能：根据 state_sig 反查 debug_pages 中的原始截图。
     """
-    debug_root = trace_dir / "debug_pages"
-    if not debug_root.exists():
-        return None
     suffix = state_sig_to_debug_suffix(state_sig)
-    candidates = sorted(debug_root.glob(f"*_{suffix}"))
+    roots = [trace_dir / "states", trace_dir / "debug_pages"]
+    candidates = []
+    for root in roots:
+        if root.exists():
+            candidates.extend(sorted(root.glob(f"*_{suffix}")))
     for page_dir in candidates:
         shot = page_dir / "screenshot_raw.png"
         if shot.exists():
             return shot
     return None
+
+
+def iter_router_hit_payloads(trace_dir: Path) -> Iterable[Tuple[Path, Dict[str, Any]]]:
+    """
+    输入：单个 APP trace 目录。
+    输出：包含 state_sig 和 matched_block_ids 的 router 命中记录。
+    功能：同时支持新 states/<UI>/llm 和旧 observations/router 结构。
+    """
+    for path in iter_state_llm_files(trace_dir, "navigation_router_result.json"):
+        payload = read_json(path, {})
+        if not isinstance(payload, dict):
+            continue
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        yield path, {
+            "state_sig": str(payload.get("state_sig") or result.get("state_sig") or ""),
+            "matched_block_ids": list(payload.get("matched_block_ids") or []),
+        }
+    for path in iter_observation_files(trace_dir, "router"):
+        payload = read_json(path, {})
+        if isinstance(payload, dict):
+            yield path, payload
 
 
 def collect_block_hit_images(output_dir: Path, app_rows: Sequence[Dict[str, Any]], questionnaire_root: Path) -> Dict[str, Any]:
@@ -719,10 +787,7 @@ def collect_block_hit_images(output_dir: Path, app_rows: Sequence[Dict[str, Any]
         trace_dir = Path(str(app.get("trace_dir") or ""))
         if not trace_dir.exists():
             continue
-        for obs_path in iter_observation_files(trace_dir, "router"):
-            payload = read_json(obs_path, {})
-            if not isinstance(payload, dict):
-                continue
+        for obs_path, payload in iter_router_hit_payloads(trace_dir):
             state_sig = str(payload.get("state_sig") or "")
             block_ids = [str(x or "").strip() for x in list(payload.get("matched_block_ids") or []) if str(x or "").strip()]
             if not state_sig or not block_ids:

@@ -11,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 
-from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,13 +18,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from appium_android import AndroidAppiumClient
+from env_config import load_project_env
 from gpt_cls import GPTClient
 from questionnaire_state import QuestionnaireState
 from trace_callbacks import NoOpCallbacks
 from workflow import BudgetConfig, RecoveryReason, WorkflowRunner
 
 
-load_dotenv()
+# Load the project environment file as the source of truth for API and proxy settings.
+load_project_env(Path(__file__).resolve().parent / ".env")
 logger = logging.getLogger(__name__)
 OUTPUT_ROOT = PROJECT_ROOT / "mytest2" / "outputs"
 

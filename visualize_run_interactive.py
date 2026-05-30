@@ -4,7 +4,7 @@ Usage:
   python visualize_run_interactive.py --run-dir traces/<run_id>
 
 Output:
-  <run-dir>/analysis/interactive/ui_transition_interactive.html
+  <run-dir>/index.html
 """
 
 from __future__ import annotations
@@ -103,6 +103,7 @@ def _load_trace_data(
             except Exception:
                 continue
             event = str(row.get("event") or "")
+            ctx = row.get("ctx") or {}
             data = row.get("data") or {}
 
             if event == "snapshot":
@@ -260,6 +261,65 @@ def _load_latest_observations(obs_dir: Path) -> Dict[str, Dict[str, Any]]:
             continue
         out[sig] = obj
     return out
+
+
+def _load_state_llm_artifacts(run_dir: Path) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    """Load per-UI LLM artifacts from states/<UI>/llm.
+
+    Input:
+      run_dir: one trace run directory.
+
+    Output:
+      nav_obs, router_obs, and blocks_obs maps keyed by state_sig.
+
+    Function:
+      Presents the new consolidated navigation_router_result.json files through
+      the same shape that the existing HTML builder already consumes.
+    """
+    nav_obs: Dict[str, Dict[str, Any]] = {}
+    router_obs: Dict[str, Dict[str, Any]] = {}
+    blocks_obs: Dict[str, Dict[str, Any]] = {}
+    for state_dir in sorted((run_dir / "states").glob("UI*")):
+        llm_dir = state_dir / "llm"
+        nav_router_path = llm_dir / "navigation_router_result.json"
+        if nav_router_path.exists():
+            try:
+                payload = _read_json(nav_router_path)
+            except Exception:
+                payload = {}
+            result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+            sig = str(payload.get("state_sig") or result.get("state_sig") or "").strip()
+            navigation = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
+            router = result.get("router") if isinstance(result.get("router"), dict) else {}
+            if sig:
+                nav_obs[sig] = {
+                    "state_sig": sig,
+                    "nav_result": navigation,
+                    "navigation_router_result_path": str(nav_router_path),
+                }
+                router_obs[sig] = {
+                    "state_sig": sig,
+                    "router_answers": router.get("router_updates") or [],
+                    "matched_block_ids": payload.get("matched_block_ids") or [],
+                    "navigation_router_result_path": str(nav_router_path),
+                }
+        blocks_path = llm_dir / "blocks_fill_result.json"
+        if blocks_path.exists():
+            try:
+                payload = _read_json(blocks_path)
+            except Exception:
+                payload = {}
+            result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+            sig = str(payload.get("state_sig") or result.get("state_sig") or "").strip()
+            if sig:
+                blocks_obs[sig] = {
+                    "state_sig": sig,
+                    "router_answers": payload.get("router_answers") or [],
+                    "matched_block_ids": payload.get("matched_block_ids") or [],
+                    "block_fill_results": result.get("block_results") or [],
+                    "blocks_fill_result_path": str(blocks_path),
+                }
+    return nav_obs, router_obs, blocks_obs
 
 
 def _relpath_or_raw(path_str: str, anchor_dir: Path) -> str:
@@ -478,25 +538,35 @@ def _write_action_timeline_md(out_path: Path, payload: Dict[str, Any]) -> None:
 
 
 def build_interactive_html(run_dir: Path) -> Path:
-    analysis_dir = run_dir / "analysis"
-    graph_path = analysis_dir / "state_graph_snapshot.json"
-    actions_path = analysis_dir / "state_action_snapshot.json"
+    graph_dir = run_dir / "graph"
+    graph_path = graph_dir / "state_graph_snapshot.json"
+    actions_path = graph_dir / "state_action_snapshot.json"
     trace_path = run_dir / "trace.jsonl"
 
     if not graph_path.exists():
-        raise FileNotFoundError(f"Missing graph snapshot: {graph_path}")
+        legacy_graph_path = run_dir / "analysis" / "state_graph_snapshot.json"
+        if legacy_graph_path.exists():
+            graph_path = legacy_graph_path
+            actions_path = legacy_graph_path.parent / "state_action_snapshot.json"
+        else:
+            raise FileNotFoundError(f"Missing graph snapshot: {graph_path}")
     graph = _read_json(graph_path)
     actions = _read_json(actions_path) if actions_path.exists() else {"per_state": {}, "unfinished_states": []}
 
     per_state_trace, edge_occurs, flow_rows = _load_trace_data(trace_path)
-    nav_obs = _load_latest_observations(run_dir / "observations" / "nav")
-    router_obs = _load_latest_observations(run_dir / "observations" / "router")
-    blocks_obs = _load_latest_observations(run_dir / "observations" / "blocks_fill")
+    nav_obs, router_obs, blocks_obs = _load_state_llm_artifacts(run_dir)
+    if not nav_obs:
+        nav_obs = _load_latest_observations(run_dir / "observations" / "nav")
+    if not router_obs:
+        router_obs = _load_latest_observations(run_dir / "observations" / "router")
+    if not blocks_obs:
+        blocks_obs = _load_latest_observations(run_dir / "observations" / "blocks_fill")
 
-    interactive_dir = analysis_dir / "interactive"
+    interactive_dir = run_dir
     interactive_dir.mkdir(parents=True, exist_ok=True)
-    out_html = interactive_dir / "ui_transition_interactive.html"
-    local_vis_js = _ensure_vis_network_vendor(interactive_dir)
+    out_html = interactive_dir / "index.html"
+    local_vis_js = ""
+    local_script_tag = f'<script src="{local_vis_js}"></script>' if local_vis_js else ""
 
     nodes_raw: Dict[str, Any] = graph.get("nodes") or {}
     edges_raw: List[Dict[str, Any]] = list(graph.get("edges") or [])
@@ -577,6 +647,8 @@ def build_interactive_html(run_dir: Path) -> Path:
                 "uist_path": _relpath_or_raw(str(snap_paths.get("uist_path") or ""), interactive_dir),
                 "uist_overlay_path": _relpath_or_raw(str(snap_paths.get("uist_overlay_path") or ""), interactive_dir),
                 "vidmap_overlay_path": _relpath_or_raw(str(snap_paths.get("vidmap_overlay_path") or ""), interactive_dir),
+                "navigation_router_result_path": _relpath_or_raw(str((nav.get("navigation_router_result_path") or "")), interactive_dir),
+                "blocks_fill_result_path": _relpath_or_raw(str((blocks_obs.get(sig) or {}).get("blocks_fill_result_path") or ""), interactive_dir),
             },
             "vid_map_summary": trace_state.get("vid_map_summary") or {},
             "snapshot_meta": trace_state.get("snapshot_meta") or {},
@@ -652,15 +724,13 @@ def build_interactive_html(run_dir: Path) -> Path:
         "alias_map": alias,
     }
 
-    _write_action_timeline_md(interactive_dir / "action_timeline.md", page_payload)
-
     html = f"""<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UI Transition Interactive - {page_payload['run_id']}</title>
-  <script src="{local_vis_js}"></script>
+  {local_script_tag}
   <script>
     if (!window.vis) {{
       document.write('<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"><\\/script>');
@@ -801,6 +871,8 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += renderPathLink('uist', sp.uist_path);
       html += renderPathLink('uist_overlay', sp.uist_overlay_path);
       html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
+      html += renderPathLink('navigation_router_result', sp.navigation_router_result_path);
+      html += renderPathLink('blocks_fill_result', sp.blocks_fill_result_path);
       html += `</div>`;
 
       html += `<div class="card"><div class="k">LLM NAV 结果</div>`;

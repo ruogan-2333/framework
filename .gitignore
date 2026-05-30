@@ -8,6 +8,14 @@ traces
 *.pyc
 # Debug / generated outputs
 app.log
+APK/
+test_debug/batch_runs/
+test_debug/env_reports/
+test_debug/intermediate/
+test_debug/output/
+test_debug/llm_navigation_output/
+test_debug/llm_navigation_router_output/
+test_debug/analysis_outputs/
 mytest2/llm1_debug/
 mytest2/preflight_refresh_test/
 mytest2/questionnaire_handler/chain_debug/
