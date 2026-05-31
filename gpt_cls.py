@@ -147,6 +147,18 @@ class ActionCandidate(BaseModel):
         le=1.0,
         description="LLM priority score for this exploration candidate in [-1, 1].",
     )
+    action_role: Literal["continue_current_task", "start_child_task"] = Field(
+        "continue_current_task",
+        description="Whether this action continues the active task or starts a proposed child task.",
+    )
+    starts_task_type: str = Field(
+        "",
+        description="When action_role is start_child_task, the coarse child task type this action enters.",
+    )
+    starts_task_depth: str = Field(
+        "",
+        description="When action_role is start_child_task, the proposed child task exploration depth.",
+    )
 
 
 class NavigationProposal(BaseModel):
@@ -281,13 +293,66 @@ class RouterResult(BaseModel):
     )
 
 
+class TaskDecision(BaseModel):
+    """
+    LLM decision about the active exploration task.
+
+    Input:
+    - Current UI, current task, and router findings.
+
+    Output:
+    - Whether the current task should end or return.
+
+    Function:
+    - Lets workflow keep task-stack state separate from navigation candidates.
+    """
+
+    current_task_done: bool = Field(False, description="True when the current task is complete")
+    current_task_failed: bool = Field(False, description="True when the current task cannot be usefully advanced")
+    should_return: bool = Field(False, description="True when workflow should try to return to the parent task context")
+    reason: str = Field("", description="Short natural-language reason for this task decision")
+
+
+class ProposedTask(BaseModel):
+    """
+    LLM-proposed child exploration task.
+
+    Input:
+    - Router/navigation analysis of the current UI.
+
+    Output:
+    - A child task plus the entry action that opens it.
+
+    Function:
+    - Represents valuable side branches such as policy, payment, settings, or account pages.
+    """
+
+    prompt: str = Field("", description="Natural-language child task prompt")
+    task_type: str = Field("generic", description="Coarse task type such as explore_policy or explore_payment")
+    priority: float = Field(0.5, ge=0.0, le=1.0, description="Task importance in [0, 1]; first version records it but does not sort by it")
+    exploration_depth: Literal["shallow", "normal", "deep"] = Field(
+        "normal",
+        description="How deeply this task should be explored: shallow overview, normal key paths, or deep questionnaire-focused exploration.",
+    )
+    initial_steps: int = Field(4, ge=1, le=20, description="Initial action-step budget for this child task")
+    entry_action: Optional[ActionStep] = Field(
+        None,
+        description="Action from the current UI that enters this task. Required for workflow execution.",
+    )
+    reason: str = Field("", description="Why this task is worth exploring")
+    related_router_questions: List[str] = Field(default_factory=list, description="Router question ids related to this task")
+
+
 class NavigationRouterResult(BaseModel):
     """
     Combined LLM output for navigation planning and router answering.
     """
     state_sig: str = Field(..., description="Echo input state_sig for staleness/debug")
+    task_id: str = Field("", description="Echo current_task.task_id when provided")
     navigation: NavigationProposal = Field(..., description="LLM1-compatible navigation proposal")
     router: RouterResult = Field(..., description="LLM2-1-compatible router answer result")
+    task_decision: TaskDecision = Field(default_factory=TaskDecision, description="Decision about the active task")
+    proposed_tasks: List[ProposedTask] = Field(default_factory=list, description="Child tasks discovered on this UI")
 
 
 class AppMetadataSummary(BaseModel):
@@ -532,6 +597,9 @@ GOAL:
 INPUTS:
 - state_sig: UI signature for staleness/debug.
 - task: current exploration goal.
+- current_task: structured active task context. Its task_id should be echoed as task_id.
+- task_stack: compact depth-first task stack. The last item is the active task.
+- utg_context: reserved UI transition graph context; may be empty in the first version.
 - app_intro/focus_hints: weak app-level priors; current-screen evidence has priority.
 - history: recent action/context strings.
 - block_status: existing block runtime status for navigation context.
@@ -542,13 +610,30 @@ INPUTS:
 
 OUTPUT (strict JSON matching NavigationRouterResult):
 - state_sig
+- task_id: echo current_task.task_id when present.
 - navigation: strict JSON matching NavigationProposal.
 - router: strict JSON matching RouterResult.
+- task_decision: whether the active task is done/failed/should return, with a short reason.
+- proposed_tasks: child tasks discovered on this UI. Each executable task needs an entry_action and exploration_depth.
+
+DECISION ORDER:
+1. First perform router analysis: identify direct evidence for router questions and visible entries that may lead to relevant evidence.
+2. Then decide whether any visible entry should become a proposed child task.
+3. Then choose navigation actions for the current UI action pool. Each candidate must have action_role:
+   - continue_current_task: the action advances the active task.
+   - start_child_task: the action enters a newly proposed child task.
+4. If the page is unrelated to the active task, prefer closing, returning, skipping, or waiting rather than exploring unrelated controls.
+5. If the current page already satisfies the active task, set task_decision.current_task_done=true and explain why.
+6. If current_task.task_type is enter_main_page and this is already a stable main/home/menu page, the enter_main_page task is complete; do not mark ordinary main-page feature buttons as continue_current_task.
+7. Use current_task.step_budget and current_task.used_steps to judge whether to continue. If many steps have already been used, prefer finishing the task unless a questionnaire-relevant path clearly needs more evidence.
 
 NAVIGATION RULES:
 - If navigation.overlay_kind=dismiss, put all close/deny/not-now/OK/skip/continue-past-popup actions in navigation.overlay_dismiss_actions and set navigation.candidate_actions=[].
 - If navigation.overlay_kind=dismiss, do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
-- navigation.candidate_actions are exploration actions only.
+- navigation.candidate_actions are the current UI action pool. They may continue the active task or start child tasks.
+- For actions that continue the active task, set action_role=continue_current_task and starts_task_type="".
+- For actions that enter proposed_tasks, set action_role=start_child_task, starts_task_type to that proposed task's task_type, and starts_task_depth to that proposed task's exploration_depth.
+- If task_decision.current_task_done=true, do not output continue_current_task candidate_actions unless a necessary final close/return action is required.
 - Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
 - Do not include login/sign-in/social-login actions unless the task explicitly requires account login or no other useful non-auth exploration exists.
 - Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
@@ -564,6 +649,23 @@ ROUTER RULES:
 - Router question_id values MUST come from router_questions; prefer full_id when present.
 - Answer router questions only when the current screen provides clear evidence.
 - If unsure, omit rather than hallucinate.
+
+TASK RULES:
+- For proposed_tasks, create child tasks only for visible entries that are relevant to questionnaire evidence or the active task.
+- First-version executable proposed tasks require entry_action. If no entry action is visible, do not propose that task.
+- If proposed_tasks includes an entry_action, include the same action in navigation.candidate_actions with action_role=start_child_task.
+- Do not use internal task ids in candidate actions. Workflow creates ids like task_0002 after your response.
+- Useful task_type values include enter_main_page, explore_policy, explore_payment, explore_settings, explore_account, explore_core_feature, dismiss_overlay, and generic.
+- Use explore_core_feature for ordinary important app/game features such as play, online mode, statistics, feature pages, content browsing, or other primary app functions.
+- proposed_tasks.priority is a 0-1 importance score. Use values near 1.0 for core app features and strong questionnaire-relevant entries; use lower values for minor or weakly relevant entries.
+- proposed_tasks.exploration_depth controls detail level only. It does not change the numeric step budget.
+- Use exploration_depth=deep for questionnaire/router-relevant tasks that need enough evidence to answer questions, such as privacy, permissions, payment/subscription, account, data, ads, or safety.
+- Use exploration_depth=normal for important settings/account/store/core paths where one or two key subpages may be useful.
+- Use exploration_depth=shallow for broad app-feature overview, share flows, theme/appearance, leaderboard, tutorials, content browsing, or weakly relevant branches. For shallow tasks, identify the feature and avoid drilling into every sub-option or external share channel.
+- If current_task.exploration_depth=shallow and the page already reveals the feature's purpose, set current_task_done=true instead of continuing deeper.
+- If current_task.exploration_depth=normal, inspect only key branches and stop when the page gives enough useful context.
+- If current_task.exploration_depth=deep, continue while evidence is still needed for router/questionnaire questions, but avoid real purchases, irreversible submissions, or credential entry.
+- Do not artificially limit proposed_tasks to only the top three. Include visible valuable child tasks and use priority to rank their importance.
 """
 
 _APP_METADATA_SYSTEM = """You are an assistant that summarizes Android app metadata for downstream UI analysis.
@@ -1063,6 +1165,10 @@ class GPTClient:
         app_intro: Optional[str] = None,
         focus_hints: Optional[str] = None,
         history: Optional[List[str]] = None,
+        current_task: Optional[Dict[str, Any]] = None,
+        task_stack: Optional[List[Dict[str, Any]]] = None,
+        utg_context: Optional[Dict[str, Any]] = None,
+        max_proposed_tasks: int = 10,
         state_sig: str = "",
         xml_reliable: Optional[bool] = None,
         debug_payload_path: str = "",
@@ -1076,16 +1182,23 @@ class GPTClient:
         - router_questions: executable router questions loaded from the selected questionnaire.
         - block_status: current block runtime status, used only as navigation context.
         - task/history/state_sig: exploration goal, recent context, and current state id.
+        - current_task/task_stack/utg_context: task-stack context that constrains navigation.
+        - max_proposed_tasks: upper bound for retained proposed child tasks.
 
         Output:
         - NavigationRouterResult containing:
           navigation: NavigationProposal-compatible result.
           router: RouterResult-compatible result.
+          task_decision/proposed_tasks: task-stack updates for workflow.
         """
         ui_digest = _compact_digest(ui_json, limit=260)
         payload = {
             "state_sig": state_sig,
             "task": task,
+            "current_task": current_task or {},
+            "task_stack": task_stack or [],
+            "utg_context": utg_context or {},
+            "max_proposed_tasks": int(max_proposed_tasks),
             "app_intro": app_intro,
             "focus_hints": focus_hints,
             "history": (history or [])[-12:],
@@ -1116,6 +1229,8 @@ class GPTClient:
 
         out = self._call_structured(messages, NavigationRouterResult, opname="propose_navigation_and_router")
         out.state_sig = state_sig or out.state_sig
+        if not out.task_id and isinstance(current_task, dict):
+            out.task_id = str(current_task.get("task_id") or "")
         out.navigation.state_sig = state_sig or out.navigation.state_sig
         out.router.state_sig = state_sig or out.router.state_sig
 
@@ -1125,6 +1240,27 @@ class GPTClient:
             candidate.actions = list(candidate.actions or [])[:3]
         out.navigation.page_return_actions = list(out.navigation.page_return_actions or [])[:3]
         out.router.router_updates = list(out.router.router_updates or [])[:12]
+        proposed_limit = max(0, int(max_proposed_tasks))
+        out.proposed_tasks = list(out.proposed_tasks or [])[:proposed_limit]
+        depth_by_type: Dict[str, str] = {}
+        for task_item in out.proposed_tasks:
+            depth = str(getattr(task_item, "exploration_depth", "") or "normal")
+            if depth not in {"shallow", "normal", "deep"}:
+                task_item.exploration_depth = "normal"
+                depth = "normal"
+            task_type = str(getattr(task_item, "task_type", "") or "")
+            if task_type and task_type not in depth_by_type:
+                depth_by_type[task_type] = depth
+        for candidate in out.navigation.candidate_actions:
+            role = str(getattr(candidate, "action_role", "") or "")
+            starts_type = str(getattr(candidate, "starts_task_type", "") or "")
+            if role != "start_child_task":
+                candidate.starts_task_type = ""
+                candidate.starts_task_depth = ""
+                continue
+            depth = str(getattr(candidate, "starts_task_depth", "") or "")
+            if depth not in {"shallow", "normal", "deep"}:
+                candidate.starts_task_depth = depth_by_type.get(starts_type, "normal")
         return out
 
     @time_consumed
@@ -1602,6 +1738,8 @@ __all__ = [
     "OverlayKind",
     "NavigationProposal",
     "NavigationRouterResult",
+    "TaskDecision",
+    "ProposedTask",
     "RecoveryProposal",
     "QuestionnaireUpdate",
     "TopicRouteResult",

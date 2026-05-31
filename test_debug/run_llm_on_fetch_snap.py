@@ -47,6 +47,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from env_config import load_project_env
 from gpt_cls import GPTClient, _compact_digest
 from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
+from task_manager import INITIAL_TASK_PROMPT
 
 
 # ====================== Config ======================
@@ -63,13 +64,19 @@ SOURCE_SESSION_ID = ""
 CAPTURE_NAME = ""
 
 # Supported values: "navigation" or "navigation_router".
-LLM_MODE = "navigation"
+LLM_MODE = "navigation_router"
 
 TASK = "Explore the app UI and propose useful navigation actions for questionnaire evidence collection."
 APP_INTRO = None
 FOCUS_HINTS = None
 BLOCK_STATUS: Dict[str, Any] = {}
 HISTORY: List[str] = []
+CURRENT_TASK_ID = "task_0001"
+CURRENT_TASK_TYPE = "enter_main_page"
+CURRENT_TASK_PROMPT = INITIAL_TASK_PROMPT
+CURRENT_TASK_EXPLORATION_DEPTH = "normal"
+CURRENT_TASK_STEP_BUDGET = 8
+MAX_PROPOSED_TASKS = 10
 
 # MODEL = "gpt-4o"
 MODEL = "gemini-2.5-flash"
@@ -209,11 +216,14 @@ def draw_labeled_box(draw: ImageDraw.ImageDraw, frame: Dict[str, int], label: st
     draw.text((label_x + 5, label_y + 4), label, fill=(255, 255, 255))
 
 
-def iter_action_steps_for_overlay(navigation: Dict[str, Any]) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
+def iter_action_steps_for_overlay(
+    navigation: Dict[str, Any],
+    proposed_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
     """
-    Input: NavigationProposal JSON payload.
+    Input: NavigationProposal JSON payload and optional proposed task payloads.
     Output: labeled overlay/candidate/page-return action steps with colors.
-    Function: converts LLM action lists into drawable items.
+    Function: converts LLM action lists and task entry actions into drawable items.
     """
     items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
     for idx, step in enumerate(navigation.get("overlay_dismiss_actions") or [], start=1):
@@ -223,19 +233,34 @@ def iter_action_steps_for_overlay(navigation: Dict[str, Any]) -> List[tuple[str,
     for cand_idx, candidate in enumerate(navigation.get("candidate_actions") or [], start=1):
         if not isinstance(candidate, dict):
             continue
+        role = str(candidate.get("action_role") or "")
+        color = (109, 40, 217) if role == "start_child_task" else (30, 102, 245)
         for step_idx, step in enumerate(candidate.get("actions") or [], start=1):
             if isinstance(step, dict):
-                items.append((f"C{cand_idx}.{step_idx}", step, (30, 102, 245)))
+                prefix = "SC" if role == "start_child_task" else "C"
+                items.append((f"{prefix}{cand_idx}.{step_idx}", step, color))
 
     for idx, step in enumerate(navigation.get("page_return_actions") or [], start=1):
         if isinstance(step, dict):
             items.append((f"PR{idx}", step, (191, 97, 0)))
+
+    for idx, task in enumerate(proposed_tasks or [], start=1):
+        if not isinstance(task, dict):
+            continue
+        step = task.get("entry_action")
+        if isinstance(step, dict):
+            items.append((f"T{idx}", step, (109, 40, 217)))
     return items
 
 
-def draw_llm_actions_overlay(snap: Dict[str, Any], navigation: Dict[str, Any], out_path: Path) -> None:
+def draw_llm_actions_overlay(
+    snap: Dict[str, Any],
+    navigation: Dict[str, Any],
+    out_path: Path,
+    proposed_tasks: Optional[List[Dict[str, Any]]] = None,
+) -> None:
     """
-    Input: source snap, NavigationProposal JSON payload, and output path.
+    Input: source snap, NavigationProposal JSON payload, optional proposed tasks, and output path.
     Output: writes one PNG with LLM action targets overlaid.
     Function: draws only element_id-resolved actions; bbox and coordinate fallbacks are intentionally unsupported.
     """
@@ -246,7 +271,7 @@ def draw_llm_actions_overlay(snap: Dict[str, Any], navigation: Dict[str, Any], o
     image = decode_screenshot_b64(screenshot_b64)
     draw = ImageDraw.Draw(image)
 
-    for label, step, color in iter_action_steps_for_overlay(navigation):
+    for label, step, color in iter_action_steps_for_overlay(navigation, proposed_tasks=proposed_tasks):
         frame = frame_from_step(step, vid_map)
         if frame is not None:
             draw_labeled_box(draw, frame, label, color)
@@ -383,9 +408,10 @@ def build_router_input_record(
     snap: Dict[str, Any],
     router_count: int,
     block_status: Dict[str, Any],
+    task_context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Input: one snap, router count, and questionnaire block status.
+    Input: one snap, router count, questionnaire block status, and task context.
     Output: compact combined Navigation+Router input summary without screenshot base64.
     Function: documents the effective parameters used by propose_navigation_and_router.
     """
@@ -398,6 +424,10 @@ def build_router_input_record(
         "questionnaire_dir": str(QUESTIONNAIRE_DIR),
         "state_sig": str(snap.get("state_sig") or ""),
         "task": TASK,
+        "current_task": task_context.get("current_task") or {},
+        "task_stack": task_context.get("task_stack") or [],
+        "utg_context": task_context.get("utg_context") or {},
+        "max_proposed_tasks": int(MAX_PROPOSED_TASKS),
         "router_question_count": int(router_count),
         "block_status_count": len(block_status or {}),
         "app_intro": APP_INTRO,
@@ -408,6 +438,48 @@ def build_router_input_record(
         "ui_digest_limit": NAV_ROUTER_UI_DIGEST_LIMIT,
         "xml_reliable": xml_reliable,
         "postprocess_mode": "xml_only" if xml_reliable is True else ("three_tools" if xml_reliable is False else "unknown"),
+    }
+
+
+def build_task_context(state_sig: str) -> Dict[str, Any]:
+    """
+    Input: current snap state signature.
+    Output: task-aware LLM context matching the first-version workflow contract.
+    Function: lets single-snap replay test task_decision and proposed_tasks without running workflow actions.
+    """
+    current_task = {
+        "task_id": CURRENT_TASK_ID,
+        "prompt": CURRENT_TASK_PROMPT,
+        "task_type": CURRENT_TASK_TYPE,
+        "status": "running",
+        "priority": 1.0,
+        "exploration_depth": CURRENT_TASK_EXPLORATION_DEPTH,
+        "parent_task_id": "",
+        "origin_state_sig": state_sig,
+        "entry_action": {},
+        "step_budget": int(CURRENT_TASK_STEP_BUDGET),
+        "used_steps": 0,
+        "created_by": "single_snap_replay",
+        "created_at_ms": int(time.time() * 1000),
+        "finish_reason": "",
+        "notes": "Synthetic task context for run_llm_on_fetch_snap.py",
+    }
+    stack_item = {
+        "task_id": current_task["task_id"],
+        "prompt": current_task["prompt"],
+        "task_type": current_task["task_type"],
+        "status": current_task["status"],
+        "priority": current_task["priority"],
+        "exploration_depth": current_task["exploration_depth"],
+        "step_budget": current_task["step_budget"],
+        "used_steps": current_task["used_steps"],
+        "parent_task_id": "",
+        "origin_state_sig": state_sig,
+    }
+    return {
+        "current_task": current_task,
+        "task_stack": [stack_item],
+        "utg_context": {},
     }
 
 
@@ -511,14 +583,15 @@ def process_one_navigation_router(
     snap = read_json(snap_path)
     router_questions = list(getattr(questionnaires, "routers", []) or [])
     block_status = dict(getattr(questionnaires, "block_status", {}) or {})
-    input_record = build_router_input_record(snap_path, snap, len(router_questions), block_status)
-    write_json(out_dir / "llm_navigation_router_input.json", input_record)
-
     screenshot_b64 = str(snap.get("screenshot") or "")
     ui_json = snap.get("uist") or {}
     state_sig = str(snap.get("state_sig") or "")
     meta = snap.get("meta") or {}
     xml_reliable = snap.get("xml_reliable", meta.get("xml_reliable"))
+    task_context = build_task_context(state_sig)
+    input_record = build_router_input_record(snap_path, snap, len(router_questions), block_status, task_context)
+    write_json(out_dir / "task_context.json", task_context)
+    write_json(out_dir / "llm_navigation_router_input.json", input_record)
     if not screenshot_b64 or not ui_json:
         write_json(
             out_dir / "llm_navigation_router_failure.json",
@@ -540,6 +613,10 @@ def process_one_navigation_router(
             app_intro=APP_INTRO,
             focus_hints=FOCUS_HINTS,
             history=list(HISTORY),
+            current_task=task_context["current_task"],
+            task_stack=task_context["task_stack"],
+            utg_context=task_context["utg_context"],
+            max_proposed_tasks=int(MAX_PROPOSED_TASKS),
             state_sig=state_sig,
             xml_reliable=xml_reliable if isinstance(xml_reliable, bool) else None,
         )
@@ -574,14 +651,25 @@ def process_one_navigation_router(
 
     navigation = (result_payload or {}).get("navigation") if isinstance(result_payload, dict) else {}
     router = (result_payload or {}).get("router") if isinstance(result_payload, dict) else {}
-    draw_llm_actions_overlay(snap, navigation or {}, out_dir / "llm_navigation_router_actions_overlay.png")
+    task_decision = (result_payload or {}).get("task_decision") if isinstance(result_payload, dict) else {}
+    proposed_tasks = (result_payload or {}).get("proposed_tasks") if isinstance(result_payload, dict) else []
+    proposed_tasks = proposed_tasks if isinstance(proposed_tasks, list) else []
+    draw_llm_actions_overlay(
+        snap,
+        navigation or {},
+        out_dir / "llm_navigation_router_actions_overlay.png",
+        proposed_tasks=proposed_tasks,
+    )
     candidate_count = len((navigation or {}).get("candidate_actions") or [])
     return_count = len((navigation or {}).get("page_return_actions") or [])
     router_update_count = len((router or {}).get("router_updates") or [])
+    proposed_task_count = len(proposed_tasks)
+    task_done = bool((task_decision or {}).get("current_task_done")) if isinstance(task_decision, dict) else False
     print(
         f"[OK] {snap_path.parent.name} mode=navigation_router elapsed_s={elapsed_s:.3f} "
         f"candidates={candidate_count} page_return={return_count} "
-        f"router_updates={router_update_count} matched_blocks={len(matched_blocks)}"
+        f"router_updates={router_update_count} matched_blocks={len(matched_blocks)} "
+        f"proposed_tasks={proposed_task_count} task_done={task_done}"
     )
     return True
 

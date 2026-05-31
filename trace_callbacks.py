@@ -26,6 +26,20 @@ from PIL import Image, ImageDraw
 
 @dataclass
 class StepCtx:
+    """
+    Trace context passed to callback events.
+
+    Input:
+    - Workflow state at the moment an event is emitted.
+
+    Output:
+    - A JSON-friendly context object embedded in trace.jsonl records.
+
+    Function:
+    - Carries run, DFS, questionnaire, and task-stack summaries without forcing
+      callbacks to know about WorkflowRunner internals.
+    """
+
     run_id: str
     step_id: int
     ts: float
@@ -34,6 +48,7 @@ class StepCtx:
     block_status: Dict[str, Any]
     open_gaps: List[str]
     answered_ratio: float
+    task_context: Optional[Dict[str, Any]] = None
 
 
 class Callbacks(Protocol):
@@ -301,6 +316,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 "block_status_summary": self._block_status_summary(ctx.block_status),
                 "open_gaps": ctx.open_gaps,
                 "answered_ratio": ctx.answered_ratio,
+                "task": ctx.task_context or {},
             },
             "data": payload,
         }
@@ -658,10 +674,14 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         blocks_fill = bundle.get("blocks_fill") or {}
         nav_body = {}
         router_body = {}
+        task_decision_body = {}
+        proposed_tasks_body = []
         if isinstance(nav_router, dict):
             result = nav_router.get("result") if isinstance(nav_router.get("result"), dict) else nav_router
             nav_body = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
             router_body = result.get("router") if isinstance(result.get("router"), dict) else {}
+            task_decision_body = result.get("task_decision") if isinstance(result.get("task_decision"), dict) else {}
+            proposed_tasks_body = result.get("proposed_tasks") if isinstance(result.get("proposed_tasks"), list) else []
         block_body = blocks_fill.get("result") if isinstance(blocks_fill.get("result"), dict) else {}
 
         lines = [
@@ -683,6 +703,24 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     f"- page_return_actions: {len(nav_body.get('page_return_actions') or [])}",
                 ]
             )
+            candidates = list(nav_body.get("candidate_actions") or [])
+            if candidates:
+                lines.extend(["", "### Candidate Actions", ""])
+                for idx, cand in enumerate(candidates, start=1):
+                    if not isinstance(cand, dict):
+                        continue
+                    step = {}
+                    steps = cand.get("actions") if isinstance(cand.get("actions"), list) else []
+                    if steps and isinstance(steps[0], dict):
+                        step = steps[0]
+                    role = str(cand.get("action_role") or "")
+                    starts = str(cand.get("starts_task_type") or "")
+                    starts_depth = str(cand.get("starts_task_depth") or "")
+                    label = str(step.get("anchor_label") or step.get("text") or step.get("reasoning") or "")
+                    lines.append(
+                        f"- C{idx}: role={role}, starts_task_type={starts}, starts_task_depth={starts_depth}, score={cand.get('score')}, "
+                        f"action={step.get('action')}:{step.get('element_id')} {label}"
+                    )
         if router_body:
             lines.extend(
                 [
@@ -690,6 +728,32 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     f"- matched_block_ids: {', '.join([str(x) for x in (nav_router.get('matched_block_ids') or [])])}",
                 ]
             )
+        lines.extend(["", "## Task", ""])
+        if task_decision_body:
+            lines.extend(
+                [
+                    f"- task_id: {str((nav_router.get('result') or {}).get('task_id') or '')}",
+                    f"- current_task_done: {bool(task_decision_body.get('current_task_done'))}",
+                    f"- current_task_failed: {bool(task_decision_body.get('current_task_failed'))}",
+                    f"- should_return: {bool(task_decision_body.get('should_return'))}",
+                    f"- reason: {str(task_decision_body.get('reason') or '')}",
+                    f"- proposed_tasks: {len(proposed_tasks_body)}",
+                ]
+            )
+            if proposed_tasks_body:
+                lines.extend(["", "### Proposed Tasks", ""])
+                for idx, task in enumerate(proposed_tasks_body, start=1):
+                    if not isinstance(task, dict):
+                        continue
+                    entry = task.get("entry_action") if isinstance(task.get("entry_action"), dict) else {}
+                    label = str(entry.get("anchor_label") or entry.get("text") or entry.get("reasoning") or "")
+                    lines.append(
+                        f"- T{idx}: priority={task.get('priority')}, depth={task.get('exploration_depth')}, type={task.get('task_type')}, "
+                        f"entry={entry.get('action')}:{entry.get('element_id')} {label}, "
+                        f"prompt={str(task.get('prompt') or '')}"
+                    )
+        else:
+            lines.append("- task_decision: no")
         lines.extend(["", "## Blocks Fill", ""])
         if block_body:
             lines.append(f"- block_results: {len(block_body.get('block_results') or [])}")

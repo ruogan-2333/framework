@@ -235,7 +235,7 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument("--probe-cap", type=int, default=10, help="Max candidate probes per page")
     run.add_argument("--disable-probe-return", action="store_true", help="Skip probe-return exploration and commit forward directly")
     run.add_argument("--min-candidate-score", type=float, default=-1.0, help="Filter out LLM1 candidates with score below this threshold before probe/forward")
-    run.add_argument("--workers", type=int, default=4, help="Thread pool workers (LLM overlap)")
+    run.add_argument("--workers", type=int, default=1, help="Thread pool workers (LLM overlap)")
 
     # Model
     run.add_argument("--model", type=str, default="gemini-2.5-flash", help="OpenAI-compatible model name")

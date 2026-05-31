@@ -105,6 +105,7 @@ def _load_trace_data(
             event = str(row.get("event") or "")
             ctx = row.get("ctx") or {}
             data = row.get("data") or {}
+            task_ctx = ctx.get("task") if isinstance(ctx.get("task"), dict) else {}
 
             if event == "snapshot":
                 sig = str(data.get("state_sig") or "").strip()
@@ -130,6 +131,7 @@ def _load_trace_data(
                             "known": bool(data.get("known")),
                             "xml_reliable": data.get("xml_reliable"),
                             "action_key": "",
+                            "task": _normalize_task_context(task_ctx),
                         }
                     )
                 if sig not in per_state:
@@ -148,9 +150,12 @@ def _load_trace_data(
                         },
                         "vid_map_summary": data.get("vid_map_summary") or {},
                         "snapshot_meta": meta,
+                        "task_context": _normalize_task_context(task_ctx),
                     }
                 else:
                     per_state[sig]["last_snapshot_ts"] = float(row.get("ts") or 0.0)
+                    if task_ctx:
+                        per_state[sig]["task_context"] = _normalize_task_context(task_ctx)
 
             if event == "transition" and str(data.get("kind") or "") == "transition":
                 src = str(data.get("src") or "")
@@ -199,6 +204,7 @@ def _load_trace_data(
                         "known": None,
                         "xml_reliable": None,
                         "action_key": action_key,
+                        "task": _normalize_task_context(task_ctx),
                     }
                 )
 
@@ -231,6 +237,7 @@ def _load_trace_data(
                         "known": None,
                         "xml_reliable": None,
                         "action_key": str(data.get("action_key") or ""),
+                        "task": _normalize_task_context(task_ctx),
                     }
                 )
     return per_state, per_edge_occurs, flow_rows
@@ -291,10 +298,15 @@ def _load_state_llm_artifacts(run_dir: Path) -> Tuple[Dict[str, Dict[str, Any]],
             sig = str(payload.get("state_sig") or result.get("state_sig") or "").strip()
             navigation = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
             router = result.get("router") if isinstance(result.get("router"), dict) else {}
+            task_decision = result.get("task_decision") if isinstance(result.get("task_decision"), dict) else {}
+            proposed_tasks = result.get("proposed_tasks") if isinstance(result.get("proposed_tasks"), list) else []
             if sig:
                 nav_obs[sig] = {
                     "state_sig": sig,
                     "nav_result": navigation,
+                    "task_id": str(result.get("task_id") or ""),
+                    "task_decision": task_decision,
+                    "proposed_tasks": proposed_tasks,
                     "navigation_router_result_path": str(nav_router_path),
                 }
                 router_obs[sig] = {
@@ -436,6 +448,9 @@ def _match_action_candidate(
             "candidate_key": cand.get("candidate_key"),
             "score": cand.get("score"),
             "tags": cand.get("tags") or [],
+            "action_role": cand.get("action_role") or "",
+            "starts_task_type": cand.get("starts_task_type") or "",
+            "starts_task_depth": cand.get("starts_task_depth") or "",
             "reasoning": c0.get("reasoning"),
         }
         break
@@ -456,11 +471,158 @@ def _match_action_candidate(
         out["nav_candidate_match"] = {
             "score": cand.get("score"),
             "tags": cand.get("tags") or [],
+            "action_role": cand.get("action_role") or "",
+            "starts_task_type": cand.get("starts_task_type") or "",
+            "starts_task_depth": cand.get("starts_task_depth") or "",
             "reasoning": c0.get("reasoning"),
             "return_method": cand.get("return_method"),
         }
         break
     return out
+
+
+def _candidate_step_tuple(candidate: Dict[str, Any]) -> Tuple[str, Any, str]:
+    """Build a loose matching tuple from a candidate's first action step.
+
+    Input:
+      candidate: candidate row from LLM navigation output or state_action_snapshot.
+
+    Output:
+      (action, element_id, text) tuple with normalized action spelling.
+
+    Function:
+      Lets the HTML merge task-aware LLM fields with execution status from the
+      analysis snapshot even when candidate_key strings differ slightly.
+    """
+    steps = list((candidate or {}).get("actions") or [])
+    step = steps[0] if steps and isinstance(steps[0], dict) else {}
+    action = str(step.get("action") or "").split(".")[-1].lower()
+    text = str(step.get("text") or step.get("anchor_label") or "").strip()
+    return action, step.get("element_id"), text
+
+
+def _candidate_status(candidate_key: str, row_action: Dict[str, Any]) -> str:
+    """Return explored/attempted/remaining status for one candidate key.
+
+    Input:
+      candidate_key: key from state_action_snapshot.
+      row_action: one per-state action snapshot row.
+
+    Output:
+      Human-readable execution status, or empty string when unknown.
+
+    Function:
+      Keeps status presentation centralized for node and edge details.
+    """
+    if not candidate_key:
+        return ""
+    if candidate_key in set(row_action.get("explored_keys") or []):
+        return "explored"
+    if candidate_key in set(row_action.get("attempted_keys") or []):
+        return "attempted"
+    if candidate_key in set(row_action.get("remaining_candidate_keys") or []):
+        return "remaining"
+    return ""
+
+
+def _candidate_display_rows(row_action: Dict[str, Any], nav_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Merge LLM candidate details and state-action execution status for HTML.
+
+    Input:
+      row_action: state_action_snapshot row for one state.
+      nav_result: NavigationProposal JSON for the same state.
+
+    Output:
+      Candidate rows containing task role fields plus execution status where available.
+
+    Function:
+      Fixes the historical visualization gap where candidate rows came only from
+      state_action_snapshot and therefore missed action_role/starts_task_type.
+    """
+    state_candidates = [c for c in list(row_action.get("candidates") or []) if isinstance(c, dict)]
+    state_by_tuple = {_candidate_step_tuple(c): c for c in state_candidates}
+    used_state_keys: set[str] = set()
+    rows: List[Dict[str, Any]] = []
+
+    for nav_cand in [c for c in list(nav_result.get("candidate_actions") or []) if isinstance(c, dict)]:
+        row = dict(nav_cand)
+        state_cand = state_by_tuple.get(_candidate_step_tuple(nav_cand)) or {}
+        candidate_key = str(state_cand.get("candidate_key") or nav_cand.get("candidate_key") or "")
+        if candidate_key:
+            used_state_keys.add(candidate_key)
+        row["candidate_key"] = candidate_key
+        row["status"] = _candidate_status(candidate_key, row_action)
+        row["state_score"] = state_cand.get("score")
+        rows.append(row)
+
+    for state_cand in state_candidates:
+        candidate_key = str(state_cand.get("candidate_key") or "")
+        if candidate_key in used_state_keys:
+            continue
+        row = dict(state_cand)
+        row["status"] = _candidate_status(candidate_key, row_action)
+        rows.append(row)
+    return rows
+
+
+def _normalize_task_progress(task_obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize task progress for new and legacy trace payloads.
+
+    Input:
+      task_obj: task dictionary from trace ctx, tasks.json, or older HTML payloads.
+
+    Output:
+      Copy of the task with step_budget and used_steps populated when possible.
+
+    Function:
+      Lets the visualization display old runs that only contain remaining_steps
+      while new runs use step_budget + used_steps as the canonical fields.
+    """
+    task = dict(task_obj or {})
+    try:
+        budget = int(task.get("step_budget"))
+    except Exception:
+        budget = 0
+    try:
+        used = int(task.get("used_steps"))
+    except Exception:
+        used = 0
+    try:
+        remaining = int(task.get("remaining_steps"))
+    except Exception:
+        remaining = -1
+    if budget <= 0 and remaining >= 0:
+        budget = used + remaining
+    if used <= 0 and budget > 0 and remaining >= 0:
+        used = max(0, budget - remaining)
+    if budget > 0:
+        task["step_budget"] = budget
+        task["used_steps"] = max(0, used)
+    task.pop("remaining_steps", None)
+    return task
+
+
+def _normalize_task_context(task_ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize task context progress fields for HTML rendering.
+
+    Input:
+      task_ctx: trace context containing current_task and task_stack.
+
+    Output:
+      Copy whose task objects use step_budget + used_steps.
+
+    Function:
+      Keeps generated HTML compatible with both current and earlier trace formats.
+    """
+    ctx = dict(task_ctx or {})
+    if isinstance(ctx.get("current_task"), dict):
+        ctx["current_task"] = _normalize_task_progress(ctx.get("current_task") or {})
+    stack_rows: List[Dict[str, Any]] = []
+    for row in list(ctx.get("task_stack") or []):
+        if isinstance(row, dict):
+            stack_rows.append(_normalize_task_progress(row))
+    ctx["task_stack"] = stack_rows
+    return ctx
 
 
 def _enrich_flow_rows(flow_rows: List[Dict[str, Any]], alias: Dict[str, str]) -> List[Dict[str, Any]]:
@@ -592,6 +754,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         nav_result = nav_result or {}
 
         row_action = per_state_action.get(sig) or {}
+        candidate_rows = _candidate_display_rows(row_action, nav_result)
         cand_ct = int(row_action.get("candidate_count", 0) or 0)
         rem_ct = int(row_action.get("remaining_count", 0) or 0)
         visit = int(node.get("visit_count", 0) or 0)
@@ -652,7 +815,12 @@ def build_interactive_html(run_dir: Path) -> Path:
             },
             "vid_map_summary": trace_state.get("vid_map_summary") or {},
             "snapshot_meta": trace_state.get("snapshot_meta") or {},
+            "task_context": trace_state.get("task_context") or {},
+            "task_decision": nav.get("task_decision") or {},
+            "proposed_tasks": nav.get("proposed_tasks") or [],
+            "task_id": nav.get("task_id") or "",
             "nav_result": nav_result,
+            "candidate_rows": candidate_rows,
             "router_observation": router_obs.get(sig) or {},
             "blocks_observation": blocks_obs.get(sig) or {},
             "graph_meta": meta,
@@ -845,7 +1013,12 @@ def build_interactive_html(run_dir: Path) -> Path:
       const router = d.router_observation || {{}};
       const blocks = d.blocks_observation || {{}};
       const cand = d.state_action || {{}};
-      const cands = cand.candidates || [];
+      const cands = d.candidate_rows || cand.candidates || [];
+      const taskCtx = d.task_context || {{}};
+      const currentTask = taskCtx.current_task || {{}};
+      const taskStack = taskCtx.task_stack || [];
+      const taskDecision = d.task_decision || {{}};
+      const proposedTasks = d.proposed_tasks || [];
 
       const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
         ? `<span class="pill bad">外部包: ${{esc(d.foreground_package)}}</span>`
@@ -857,7 +1030,38 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<span class="pill warn">overlay=${{esc(d.overlay_kind)}}</span>`;
       html += `<span class="pill warn">visit=${{esc(d.visit_count)}}</span>`;
       html += `<span class="pill warn">remaining=${{esc((d.candidate_summary || {{}}).remaining_count)}}</span>`;
+      if (currentTask.task_id) {{
+        html += `<span class="pill ok">task=${{esc(currentTask.task_id)}}/${{esc(currentTask.task_type || '')}}</span>`;
+        html += `<span class="pill warn">depth=${{esc(currentTask.exploration_depth || '-')}}</span>`;
+        html += `<span class="pill warn">steps=${{esc(currentTask.used_steps ?? '')}}/${{esc(currentTask.step_budget ?? '')}}</span>`;
+      }}
       html += `</div></div>`;
+
+      html += `<div class="card"><div class="k">Task 状态</div>`;
+      if (currentTask.task_id) {{
+        html += `<div>current_task: <span class="mono">${{esc(currentTask.task_id)}} / ${{esc(currentTask.task_type || '')}}</span></div>`;
+        html += `<div>exploration_depth: <span class="mono">${{esc(currentTask.exploration_depth || '-')}}</span></div>`;
+        html += `<div>step_budget: <span class="mono">${{esc(currentTask.step_budget ?? '')}}</span>, used_steps: <span class="mono">${{esc(currentTask.used_steps ?? '')}}</span></div>`;
+        html += `<div>prompt: <span class="mono">${{esc(currentTask.prompt || '')}}</span></div>`;
+      }} else {{
+        html += `<div class="meta">trace ctx 中没有 current_task。</div>`;
+      }}
+      html += `<div>task_stack_depth: <span class="mono">${{esc(taskStack.length)}}</span></div>`;
+      html += `<div>llm_task_id: <span class="mono">${{esc(d.task_id || '')}}</span></div>`;
+      if (Object.keys(taskDecision).length) {{
+        html += `<div>done=<span class="mono">${{esc(taskDecision.current_task_done)}}</span>, failed=<span class="mono">${{esc(taskDecision.current_task_failed)}}</span>, should_return=<span class="mono">${{esc(taskDecision.should_return)}}</span></div>`;
+        html += `<div>reason: <span class="mono">${{esc(taskDecision.reason || '')}}</span></div>`;
+      }}
+      if (proposedTasks.length) {{
+        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>depth</th><th>type</th><th>entry</th><th>prompt</th></tr></thead><tbody>`;
+        proposedTasks.forEach((t, idx) => {{
+          const a = t.entry_action || {{}};
+          const entry = `${{a.action || ''}}:${{a.element_id ?? 'None'}} ${{a.anchor_label || a.text || ''}}`;
+          html += `<tr><td>T${{idx + 1}}</td><td>${{esc(t.priority ?? '')}}</td><td>${{esc(t.exploration_depth || '-')}}</td><td class="mono">${{esc(t.task_type || '')}}</td><td class="mono">${{esc(entry)}}</td><td>${{esc(t.prompt || '')}}</td></tr>`;
+        }});
+        html += `</tbody></table></details>`;
+      }}
+      html += `</div>`;
 
       const sp = d.snapshot_paths || {{}};
       html += `<div class="card"><div class="k">快照文件</div>`;
@@ -882,10 +1086,18 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div>exhausted: <span class="mono">${{esc(nav.exhausted)}}</span>, confidence: <span class="mono">${{esc(nav.exhausted_confidence)}}</span></div>`;
       html += `<div>why_these_actions: <span class="mono">${{esc(nav.why_these_actions ?? '')}}</span></div>`;
       if (cands.length) {{
-        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px" open><summary>Candidate Actions (LLM + state_action_snapshot)</summary><table><thead><tr><th>status</th><th>key</th><th>role</th><th>starts</th><th>depth</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
         for (const c of cands) {{
           const a = (c.actions || [])[0] || {{}};
-          html += `<tr><td class="mono">${{esc(c.candidate_key)}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
+          html += `<tr><td>${{esc(c.status || '-')}}</td><td class="mono">${{esc(c.candidate_key || '-')}}</td><td>${{esc(c.action_role || '-')}}</td><td>${{esc(c.starts_task_type || '-')}}</td><td>${{esc(c.starts_task_depth || '-')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
+        }}
+        html += `</tbody></table></details>`;
+      }}
+      if (false && cands.length) {{
+        html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>role</th><th>starts</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        for (const c of cands) {{
+          const a = (c.actions || [])[0] || {{}};
+          html += `<tr><td class="mono">${{esc(c.candidate_key)}}</td><td>${{esc(c.action_role || '')}}</td><td>${{esc(c.starts_task_type || '')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
         }}
         html += `</tbody></table></details>`;
       }}
@@ -927,6 +1139,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         html += `<div><span class="k">state_action match</span></div>`;
         html += `<div>candidate_key: <span class="mono">${{esc(sm.candidate_key)}}</span></div>`;
         html += `<div>score: <span class="mono">${{esc(sm.score)}}</span></div>`;
+        html += `<div>role: <span class="mono">${{esc(sm.action_role || '-')}}</span>, starts: <span class="mono">${{esc(sm.starts_task_type || '-')}}</span>, depth: <span class="mono">${{esc(sm.starts_task_depth || '-')}}</span></div>`;
         html += `<div>reasoning: <span class="mono">${{esc(sm.reasoning || '-')}}</span></div>`;
       }} else {{
         html += `<div class="meta">state_action_snapshot 中未匹配到对应候选。</div>`;
@@ -934,6 +1147,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       if (Object.keys(nm).length) {{
         html += `<div style="margin-top:6px"><span class="k">nav candidate match</span></div>`;
         html += `<div>score: <span class="mono">${{esc(nm.score)}}</span>, return_method: <span class="mono">${{esc(nm.return_method || '-')}}</span></div>`;
+        html += `<div>role: <span class="mono">${{esc(nm.action_role || '-')}}</span>, starts: <span class="mono">${{esc(nm.starts_task_type || '-')}}</span>, depth: <span class="mono">${{esc(nm.starts_task_depth || '-')}}</span></div>`;
         html += `<div>reasoning: <span class="mono">${{esc(nm.reasoning || '-')}}</span></div>`;
       }} else {{
         html += `<div class="meta">observations/nav 中未匹配到对应候选。</div>`;
@@ -958,12 +1172,15 @@ def build_interactive_html(run_dir: Path) -> Path:
     function renderTimeline() {{
       let html = '<div class="card"><div class="k">Global Action Timeline</div>';
       if (!timeline.length) return html + '<div class="meta">No timeline data.</div></div>';
-      html += '<table><thead><tr><th>#</th><th>Source</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>#</th><th>Source</th><th>Task</th><th>Action</th><th>Result</th><th>Confidence</th></tr></thead><tbody>';
       for (const x of timeline) {{
         const conf = (x.confidence === null || x.confidence === undefined) ? '' : x.confidence;
+        const t = ((x.task || {{}}).current_task || {{}});
+        const taskText = t.task_id ? `${{t.task_id}}/${{t.task_type || ''}} depth=${{t.exploration_depth || '-'}} steps=${{t.used_steps ?? ''}}/${{t.step_budget ?? ''}}` : '';
         html += `<tr>
           <td>${{esc(x.flow_seq)}}</td>
           <td class="mono">${{esc(x.src_alias || '-')}}</td>
+          <td class="mono">${{esc(taskText)}}</td>
           <td><span class="mono">${{esc(x.action_display || x.action || '')}}</span></td>
           <td>${{esc(x.result_display || x.result || x.change_type || '')}}</td>
           <td>${{esc(conf)}}</td>

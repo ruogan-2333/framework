@@ -83,11 +83,12 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--questionnaire-root", default=str(DEFAULT_QUESTIONNAIRE_ROOT), help="Questionnaire root containing games/social_apps/others and optional addition.")
     parser.add_argument("--trace-root", default=str(DEFAULT_TRACE_ROOT), help="Workflow trace root.")
     parser.add_argument("--batch-root", default=str(DEFAULT_BATCH_ROOT), help="Batch summary output root.")
+    parser.add_argument("--batch-id", default="", help="Optional fixed batch output directory name.")
     parser.add_argument("--main-path", default=str(PROJECT_ROOT / "main.py"), help="Path to main.py.")
     parser.add_argument("--python", default=sys.executable, help="Python executable used to invoke main.py.")
     parser.add_argument("--min-candidate-score", type=float, default=0.0, help="Forwarded to main.py.")
     parser.add_argument("--probe-cap", type=int, default=10, help="Forwarded to main.py.")
-    parser.add_argument("--workers", type=int, default=4, help="Forwarded to main.py.")
+    parser.add_argument("--workers", type=int, default=1, help="Forwarded to main.py.")
     parser.add_argument("--model", default="", help="Optional model name forwarded to main.py when set.")
     parser.add_argument("--timeout", type=int, default=60, help="LLM request timeout forwarded to main.py.")
     parser.add_argument("--no-relaunch", action="store_true", help="Do not pass --relaunch to main.py.")
@@ -125,7 +126,7 @@ def load_app_rows(csv_path: Path) -> List[AppRow]:
 
     out: List[AppRow] = []
     for row in rows:
-        package = str(row.get("APID") or "").strip()
+        package = str(row.get("APID") or row.get("package") or "").strip()
         if not package:
             continue
         category = str(row.get("category") or "").strip()
@@ -342,7 +343,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     csv_path = Path(args.csv_path).resolve()
     questionnaire_root = Path(args.questionnaire_root).resolve()
-    batch_id = time.strftime("%Y%m%d_%H%M%S") + f"_sample{int(args.sample_size)}_seed{int(args.seed)}"
+    batch_id = str(args.batch_id or "").strip() or time.strftime("%Y%m%d_%H%M%S") + f"_sample{int(args.sample_size)}_seed{int(args.seed)}"
     batch_dir = Path(args.batch_root).resolve() / batch_id
     batch_dir.mkdir(parents=True, exist_ok=True)
 

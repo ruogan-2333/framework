@@ -78,6 +78,7 @@ from gpt_cls import (
 )
 from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 from state_graph import StateGraph
+from task_manager import TaskManager
 from ui_cls import BaseUI
 from trace_callbacks import Callbacks, StepCtx, NoOpCallbacks
 
@@ -146,7 +147,7 @@ class BudgetConfig:
     backtrace_max_steps: int = 6
 
     # Concurrency
-    max_workers: int = 4
+    max_workers: int = 1
 
     # Foreground package gate
     foreground_mismatch_limit: int = 3
@@ -549,6 +550,7 @@ class WorkflowRunner:
     run_id: str = ""
 
     graph: StateGraph = field(default_factory=StateGraph, init=False)
+    task_manager: TaskManager = field(default_factory=TaskManager, init=False)
 
     # Thread pool for LLM calls
     _pool: Optional[ThreadPoolExecutor] = field(default=None, init=False)
@@ -556,6 +558,7 @@ class WorkflowRunner:
     # Futures keyed by state_sig (stale-safe). _nav_futures carries the combined
     # navigation/router LLM result because the main loop still waits on nav_cache.
     _nav_futures: Dict[str, Future] = field(default_factory=dict, init=False)
+    _nav_task_ids: Dict[str, str] = field(default_factory=dict, init=False)
     # _topic_route_futures: Dict[str, Future] = field(default_factory=dict, init=False)
     # _topic_fill_futures: Dict[Tuple[str, str, str], Future] = field(default_factory=dict, init=False)
     _block_router_futures: Dict[str, Future] = field(default_factory=dict, init=False)
@@ -669,6 +672,7 @@ class WorkflowRunner:
 
     # Questionnaire yield tracking per state_sig (used by beam/global scoring)
     state_update_counts: Dict[str, int] = field(default_factory=dict, init=False)
+    max_proposed_tasks: int = 10
 
     # Replay path cache for beam cost estimation: (src,dst) -> (steps, ts, unverified_edges, stale_edges)
     replay_distance_cache: Dict[Tuple[str, str], Tuple[int, float, int, int]] = field(default_factory=dict, init=False)
@@ -742,6 +746,7 @@ class WorkflowRunner:
             logger.debug("QuestionnaireState2 summary failed", exc_info=True)
         self._write_run_json(stop_reason="")
         self._save_app_metadata_context()
+        self._save_tasks_snapshot(reason="runner_initialized")
 
     # ---------------------------
     # Trace helpers
@@ -753,6 +758,11 @@ class WorkflowRunner:
             block_status = copy.deepcopy(getattr(self.questionnaires, "block_status", {}) or {})
         except Exception:
             block_status = {}
+        current_task = self.task_manager.current_task()
+        task_context = {
+            "current_task": current_task.to_dict() if current_task else {},
+            "task_stack": self.task_manager.stack_summary(),
+        }
         return StepCtx(
             run_id=self.run_id,
             step_id=self._step_seq,
@@ -762,6 +772,7 @@ class WorkflowRunner:
             block_status=block_status,
             open_gaps=[],
             answered_ratio=0.0,
+            task_context=task_context,
         )
 
     def _emit_snapshot(self, snap: Dict[str, Any]) -> None:
@@ -842,6 +853,25 @@ class WorkflowRunner:
             return Path(cb_root)
         run_token = self.run_id or time.strftime("%Y%m%d_%H%M%S")
         return Path("mytest2") / "questionnaire_handler" / "chain_debug" / "workflow_observations" / run_token
+
+    def _save_tasks_snapshot(self, *, reason: str = "") -> Optional[Path]:
+        """
+        Input: current TaskManager state and optional reason label.
+        Output: path to tasks.json when writing succeeds.
+        Function: persists the run-level task stack for offline debugging.
+        """
+        try:
+            out_path = self._run_output_root() / "tasks.json"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = self.task_manager.snapshot()
+            payload["reason"] = reason
+            payload["run_id"] = self.run_id
+            payload["updated_at_ms"] = int(time.time() * 1000)
+            out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+            return out_path
+        except Exception:
+            logger.debug("failed to save tasks snapshot", exc_info=True)
+            return None
 
     def _debug_page_artifact_path(self, sig: str, filename: str) -> Path:
         """
@@ -1032,6 +1062,8 @@ class WorkflowRunner:
                             "action": str(getattr(step, "action", "") or ""),
                             "element_id": getattr(step, "element_id", None),
                             "text": str(getattr(step, "text", "") or ""),
+                            "anchor_label": str(getattr(step, "anchor_label", "") or ""),
+                            "anchor_class": str(getattr(step, "anchor_class", "") or ""),
                             "reasoning": str(getattr(step, "reasoning", "") or ""),
                         }
                     )
@@ -1043,6 +1075,9 @@ class WorkflowRunner:
             "candidate_key": self._candidate_key(cand),
             "score": score,
             "tags": tags,
+            "action_role": str(getattr(cand, "action_role", "") or ""),
+            "starts_task_type": str(getattr(cand, "starts_task_type", "") or ""),
+            "starts_task_depth": str(getattr(cand, "starts_task_depth", "") or ""),
             "actions": actions,
         }
 
@@ -2098,6 +2133,8 @@ class WorkflowRunner:
 
         # 当前状态签名，后面所有调度、缓存、图记录都围绕这个 sig 展开。
         cur_sig: str = snap["state_sig"]
+        self.task_manager.ensure_initial_task(origin_state_sig=cur_sig)
+        self._save_tasks_snapshot(reason="entry_task_initialized")
         # 记录首次进入 app 时的入口状态，用于后续 replay / restart 的基准。
         self.entry_sig = cur_sig
         # restart 后的回放也默认从这个入口状态重新出发。
@@ -4006,18 +4043,25 @@ class WorkflowRunner:
                 block_status = copy.deepcopy(getattr(self.questionnaires, "block_status", {}) or {})
                 q2 = self.questionnaires
                 router_questions = list(getattr(q2, "routers", []) or [])
+                current_task = self.task_manager.current_task()
+                current_task_payload = current_task.to_dict() if current_task else {}
+                task_stack_payload = self.task_manager.stack_summary()
+                task_id = str(current_task_payload.get("task_id") or "")
                 logger.debug(
-                    "Schedule NavigationRouter for sig=%s blocks=%d routers=%d",
+                    "Schedule NavigationRouter for sig=%s blocks=%d routers=%d task_id=%s",
                     sig[:8],
                     len(block_status),
                     len(router_questions),
+                    task_id,
                 )
                 self._nav_enqueue_ts[sig] = time.time()
+                self._nav_task_ids[sig] = task_id
                 self._log_event(
                     "navigation_router_scheduled",
                     sig=sig,
                     blocks=len(block_status),
                     router_questions=len(router_questions),
+                    task_id=task_id,
                     enqueue_ts=self._nav_enqueue_ts[sig],
                 )
                 self._emit_llm_enqueued(
@@ -4030,6 +4074,11 @@ class WorkflowRunner:
                         "app_intro": self.app_intro,
                         "focus_hints": self.focus_hints,
                         "task": task,
+                        "current_task": current_task_payload,
+                        "task_stack": task_stack_payload,
+                        "utg_context": {},
+                        "max_proposed_tasks": int(self.max_proposed_tasks),
+                        "task_id": task_id,
                         "history": list(self.history),
                         "xml_reliable": snap.get("xml_reliable"),
                         "enqueue_ts": self._nav_enqueue_ts[sig],
@@ -4045,6 +4094,10 @@ class WorkflowRunner:
                     app_intro=self.app_intro,
                     focus_hints=self.focus_hints,
                     history=list(self.history),
+                    current_task=current_task_payload,
+                    task_stack=task_stack_payload,
+                    utg_context={},
+                    max_proposed_tasks=int(self.max_proposed_tasks),
                     state_sig=sig,
                     xml_reliable=snap.get("xml_reliable"),
                     debug_payload_path=str(self._debug_page_artifact_path(sig, "llm/navigation_router_input.json")),
@@ -4173,6 +4226,137 @@ class WorkflowRunner:
             debug_payload_path=str(self._debug_page_artifact_path(sig, "llm/blocks_fill_input.json")),
         )
 
+    def _model_to_json_dict(self, value: Any) -> Dict[str, Any]:
+        """
+        Input: pydantic model, dataclass-like object, or dictionary.
+        Output: JSON-safe dictionary.
+        Function: normalizes LLM schema objects before trace/task handling.
+        """
+        try:
+            if hasattr(value, "model_dump"):
+                return value.model_dump(mode="json")
+            if isinstance(value, dict):
+                return dict(value)
+            return dict(getattr(value, "__dict__", {}) or {})
+        except Exception:
+            return {}
+
+    def _apply_task_decision(self, sig: str, combined: NavigationRouterResult, requested_task_id: str) -> None:
+        """
+        Input: state signature, combined LLM result, and task id captured at enqueue time.
+        Output: updates TaskManager and writes tasks.json.
+        Function: applies task_decision/proposed_tasks while rejecting stale task-stack updates.
+        """
+        current_task = self.task_manager.current_task()
+        current_task_id = current_task.task_id if current_task else ""
+        result_task_id = str(getattr(combined, "task_id", "") or "")
+        expected_task_id = str(requested_task_id or result_task_id or "")
+
+        if expected_task_id and current_task_id and expected_task_id != current_task_id:
+            self._log_event(
+                "task_decision_stale",
+                sig=sig,
+                requested_task_id=expected_task_id,
+                current_task_id=current_task_id,
+                result_task_id=result_task_id,
+            )
+            self._save_tasks_snapshot(reason="task_decision_stale")
+            return
+
+        def candidate_key_from_step_dict(step_dict: Dict[str, Any]) -> str:
+            """
+            Input: ActionStep-like dictionary from LLM JSON.
+            Output: stable lightweight key for matching candidate and proposed-task entry actions.
+            Function: prevents duplicate execution entries for the same UI action.
+            """
+            return "|".join(
+                [
+                    str(step_dict.get("action") or ""),
+                    str(step_dict.get("element_id") or ""),
+                    str(step_dict.get("text") or ""),
+                    str(step_dict.get("anchor_label") or ""),
+                ]
+            )
+
+        proposed = list(getattr(combined, "proposed_tasks", []) or [])[: max(0, int(self.max_proposed_tasks))]
+        created_task_ids: List[str] = []
+        entry_candidates: List[ActionCandidate] = []
+        existing_candidates = list(getattr(combined.navigation, "candidate_actions", []) or [])
+        existing_by_key: Dict[str, ActionCandidate] = {}
+        for cand in existing_candidates:
+            steps = list(getattr(cand, "actions", []) or [])
+            if not steps:
+                continue
+            step_dict = self._model_to_json_dict(steps[0])
+            existing_by_key[candidate_key_from_step_dict(step_dict)] = cand
+
+        parent_task_id = current_task_id
+        for item in reversed(proposed):
+            item_dict = self._model_to_json_dict(item)
+            entry_action = item_dict.get("entry_action") if isinstance(item_dict.get("entry_action"), dict) else {}
+            task_obj = self.task_manager.push_child_task(
+                prompt=str(item_dict.get("prompt") or ""),
+                task_type=str(item_dict.get("task_type") or "generic"),
+                priority=float(item_dict.get("priority", 0.5) or 0.5),
+                exploration_depth=str(item_dict.get("exploration_depth") or "normal"),
+                initial_steps=int(item_dict.get("initial_steps", 4) or 4),
+                entry_action=entry_action,
+                reason=str(item_dict.get("reason") or ""),
+                related_router_questions=list(item_dict.get("related_router_questions") or []),
+                origin_state_sig=sig,
+                parent_task_id=parent_task_id,
+            )
+            if task_obj:
+                created_task_ids.append(task_obj.task_id)
+                try:
+                    entry_step_obj = getattr(item, "entry_action", None)
+                    entry_step = entry_step_obj if isinstance(entry_step_obj, ActionStep) else ActionStep(**entry_action)
+                    entry_key = candidate_key_from_step_dict(self._model_to_json_dict(entry_step))
+                    existing = existing_by_key.get(entry_key)
+                    if existing:
+                        existing.action_role = "start_child_task"
+                        existing.starts_task_type = str(item_dict.get("task_type") or "generic")
+                        existing.starts_task_depth = str(item_dict.get("exploration_depth") or "normal")
+                    else:
+                        synthesized = ActionCandidate(
+                            actions=[entry_step],
+                            score=float(item_dict.get("priority", 0.5) or 0.5),
+                            action_role="start_child_task",
+                            starts_task_type=str(item_dict.get("task_type") or "generic"),
+                            starts_task_depth=str(item_dict.get("exploration_depth") or "normal"),
+                        )
+                        entry_candidates.insert(0, synthesized)
+                        existing_by_key[entry_key] = synthesized
+                except Exception:
+                    logger.debug("failed to synthesize entry action candidate for task_id=%s", task_obj.task_id, exc_info=True)
+
+        if entry_candidates:
+            combined.navigation.candidate_actions = entry_candidates + existing_candidates
+
+        decision = getattr(combined, "task_decision", None)
+        decision_dict = self._model_to_json_dict(decision) if decision is not None else {}
+        should_finish = bool(decision_dict.get("current_task_done") or decision_dict.get("current_task_failed"))
+        finish_status = "failed" if bool(decision_dict.get("current_task_failed")) else "done"
+        finish_reason = str(decision_dict.get("reason") or "")
+
+        # If new child tasks were created from this page, keep the parent task on
+        # stack so the depth-first child can return to it after completion.
+        if should_finish and not created_task_ids:
+            self.task_manager.finish_current_task(finish_status, finish_reason, state_sig=sig)
+
+        self._log_event(
+            "task_decision_applied",
+            sig=sig,
+            requested_task_id=expected_task_id,
+            created_task_ids=list(reversed(created_task_ids)),
+            current_task_done=bool(decision_dict.get("current_task_done")),
+            current_task_failed=bool(decision_dict.get("current_task_failed")),
+            should_return=bool(decision_dict.get("should_return")),
+            reason=finish_reason,
+            ignored_proposed_task_count=len(self.task_manager.ignored_proposed_tasks),
+        )
+        self._save_tasks_snapshot(reason="task_decision_applied")
+
     def _drain_futures(self) -> None:
         """
         WHEN called:
@@ -4192,6 +4376,8 @@ class WorkflowRunner:
                     route = combined.router
                     nav.state_sig = sig or getattr(nav, "state_sig", "")
                     route.state_sig = sig or getattr(route, "state_sig", "")
+                    requested_task_id = self._nav_task_ids.get(sig, "")
+                    self._apply_task_decision(sig, combined, requested_task_id)
                     self.nav_cache[sig] = nav
                     self.nav_ready_once = True
                     try:
@@ -4254,8 +4440,14 @@ class WorkflowRunner:
                                 "matched_block_ids": [block.get("id") for block in self.block_match_cache.get(sig, [])],
                                 "result": {
                                     "state_sig": sig,
+                                    "task_id": str(getattr(combined, "task_id", "") or requested_task_id),
                                     "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
                                     "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                                    "task_decision": self._model_to_json_dict(getattr(combined, "task_decision", None)),
+                                    "proposed_tasks": [
+                                        self._model_to_json_dict(item)
+                                        for item in (getattr(combined, "proposed_tasks", None) or [])
+                                    ],
                                 },
                             },
                         )
@@ -4270,8 +4462,14 @@ class WorkflowRunner:
                                 "matched_block_ids": [],
                                 "result": {
                                     "state_sig": sig,
+                                    "task_id": str(getattr(combined, "task_id", "") or requested_task_id),
                                     "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
                                     "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
+                                    "task_decision": self._model_to_json_dict(getattr(combined, "task_decision", None)),
+                                    "proposed_tasks": [
+                                        self._model_to_json_dict(item)
+                                        for item in (getattr(combined, "proposed_tasks", None) or [])
+                                    ],
                                 },
                                 "error": "combined_router_postprocess_failed",
                             },
@@ -4308,6 +4506,7 @@ class WorkflowRunner:
                     )
                 finally:
                     self._nav_futures.pop(sig, None)
+                    self._nav_task_ids.pop(sig, None)
 
         for sig in list(self._block_router_futures.keys()):
             fut = self._block_router_futures[sig]
@@ -4700,8 +4899,7 @@ class WorkflowRunner:
             if not self._execute_action(step, snap["vid_map"], sig):
                 self._log_event("overlay_dismiss_action_failed", sig=sig, action_key=self._action_key(step))
                 continue
-            self.action_count += 1
-            self.history.append(self._action_key(step))
+            self._record_successful_action_step(step, sig, source="overlay_dismiss")
             time.sleep(self.budget.post_action_settle_s)
 
             drift = self._check_drift_lightweight(prev_snap, timeout_s=0.8)
@@ -4728,21 +4926,26 @@ class WorkflowRunner:
             sig, snap = new_sig, ns
 
             self._schedule_state(sig, snap, task)
-            self._drain_futures()
-
-            new_nav = self.nav_cache.get(sig)
-            if new_nav and self._overlay_kind_value(new_nav) != OverlayKind.DISMISS.value:
-                logger.info("Overlay resolved; now at sig=%s", sig[:8])
-                self._emit_decision(sig, "overlay_resolved", {"via_action": self._action_signature(step)})
-                self._mark_progress("overlay_resolved", {"sig": sig})
-                return OverlayDismissOutcome(
-                    resolved=True,
-                    next_sig=sig,
-                    next_snap=snap,
-                    drift_kind=drift.kind,
-                    action_key=self._action_key(step),
-                    reason="resolved_non_dismiss",
-                )
+            logger.info("Overlay dismiss changed state; defer new UI classification to main loop: %s -> %s", prev_sig[:8], sig[:8])
+            self._emit_decision(
+                sig,
+                "overlay_resolved_state_changed",
+                {
+                    "via_action": self._action_signature(step),
+                    "from_sig": prev_sig,
+                    "to_sig": sig,
+                    "drift_kind": drift.kind,
+                },
+            )
+            self._mark_progress("overlay_resolved_state_changed", {"sig": sig})
+            return OverlayDismissOutcome(
+                resolved=True,
+                next_sig=sig,
+                next_snap=snap,
+                drift_kind=drift.kind,
+                action_key=self._action_key(step),
+                reason="state_changed_after_dismiss",
+            )
 
         self._emit_decision(sig, "overlay_unresolved", {"actions_tried": len(actions)})
         return OverlayDismissOutcome(resolved=False, next_sig=sig, next_snap=snap, reason="unresolved")
@@ -5456,8 +5659,7 @@ class WorkflowRunner:
         action_payload = self._actions_signature([back], vid_map=snap.get("vid_map") or {})
         ok = self._execute_action(back, snap.get("vid_map") or {}, cur_sig)
         if ok:
-            self.action_count += 1
-            self.history.append(self._action_key(back))
+            self._record_successful_action_step(back, cur_sig, source="fallback_back_after_page_return")
             time.sleep(self.budget.post_action_settle_s)
             drift = self._check_drift_lightweight(snap, timeout_s=0.8)
             handled, next_sig, next_snap = self._route_return_drift(cur_sig, snap, back, action_payload, drift, task)
@@ -5751,8 +5953,7 @@ class WorkflowRunner:
                     },
                 )
                 return None
-            self.action_count += 1
-            self.history.append(self._action_key(step))
+            self._record_successful_action_step(step, pre_sig, source="probe_return")
             time.sleep(self.budget.post_action_settle_s)
             nxt = self._capture_and_process()
             if not nxt:
@@ -6704,8 +6905,7 @@ class WorkflowRunner:
             ok = self._execute_action(st, snap.get("vid_map") or {}, cur_sig)
             if not ok:
                 return False
-            self.action_count += 1
-            self.history.append("back:None:")
+            self._record_successful_action_step(st, cur_sig, source="backtrace")
             time.sleep(self.budget.post_action_settle_s)
 
             snap2 = self._capture_and_process()
@@ -6987,8 +7187,7 @@ class WorkflowRunner:
         ok = self._execute_action(step, snap["vid_map"], sig)
         if not ok:
             return False, sig, snap
-        self.action_count += 1
-        self.history.append(self._action_key(step))
+        self._record_successful_action_step(step, sig, source="recovery_step")
         time.sleep(self.budget.post_action_settle_s)
 
         ns = self._capture_and_process()
@@ -7018,8 +7217,8 @@ class WorkflowRunner:
             for _ in range(2):
                 try:
                     self.appium.back()
-                    self.action_count += 1
-                    self.history.append("back:None:")
+                    back_step = ActionStep(action=ActionType.BACK, element_id=None, priority=1, reasoning="foreground_recovery_back")
+                    self._record_successful_action_step(back_step, sig, source="foreground_recovery")
                     time.sleep(self.budget.post_action_settle_s)
                 except Exception:
                     pass
@@ -7341,8 +7540,7 @@ class WorkflowRunner:
             )
             if not self._execute_action(step, vid_map, str(snap.get("state_sig") or "")):
                 return False, act
-            self.action_count += 1
-            self.history.append(self._action_key(step))
+            self._record_successful_action_step(step, str(snap.get("state_sig") or ""), source="action_payload")
             time.sleep(self.budget.post_action_settle_s)
 
             # Preserve original step dict, but attach used id for audit/debug.
@@ -7518,8 +7716,13 @@ class WorkflowRunner:
         if not actions:
             logger.warning("Replay path not found from post-restart sig=%s to target=%s. Resume here.", cur[:8], best_target[:8])
             self._log_event("replay_path_missing", sig=cur, target_sig=best_target)
+            self._fail_current_task_after_recovery_unreachable(
+                cur,
+                reason=f"replay_path_missing_after_restart:{reason or 'unspecified'}",
+                target_sig=best_target,
+            )
             self._schedule_state(cur, snap, task)
-            return False
+            return True
         self._log_event("replay_path", sig=cur, target_sig=best_target, steps=len(actions))
 
         reached = False
@@ -7580,8 +7783,13 @@ class WorkflowRunner:
         if not reached:
             logger.info("Replay did not reach target. Resume navigation at current sig=%s", cur[:8])
             self._log_event("replay_incomplete", sig=cur, target_sig=best_target)
+            self._fail_current_task_after_recovery_unreachable(
+                cur,
+                reason=f"replay_incomplete_after_restart:{reason or 'unspecified'}",
+                target_sig=best_target,
+            )
             self._schedule_state(cur, snap, task)
-            return False
+            return True
         return True
 
     # ---------------------------
@@ -7720,11 +7928,44 @@ class WorkflowRunner:
             ok = self._execute_action(st, vid_map, cur_snap.get("state_sig"))
             if not ok:
                 return False
-            self.action_count += 1
-            self.history.append(self._action_key(st))
+            self._record_successful_action_step(st, str(cur_snap.get("state_sig") or ""), source="action_sequence")
             time.sleep(self.budget.post_action_settle_s)
 
         return True
+
+    def _record_successful_action_step(self, step: ActionStep, sig: str, *, source: str) -> None:
+        """
+        Input: executed action step, source state signature, and caller label.
+        Output: updates action counters, history, task budget, and tasks.json.
+        Function: keeps action_count and task used_steps aligned.
+        """
+        action_key = self._action_key(step)
+        self.action_count += 1
+        self.history.append(action_key)
+        self.task_manager.consume_step(state_sig=sig, action_key=action_key, source=source)
+        self._save_tasks_snapshot(reason="action_step_consumed")
+
+    def _fail_current_task_after_recovery_unreachable(self, sig: str, *, reason: str, target_sig: str = "") -> None:
+        """
+        Input: current state signature, failure reason, and optional unreachable target signature.
+        Output: marks the active task as failed and persists tasks.json.
+        Function: prevents one unreachable recovery/replay target from stopping the whole run.
+        """
+        current_task = self.task_manager.current_task()
+        task_id = current_task.task_id if current_task else ""
+        detail = str(reason or "recovery_target_unreachable")
+        if target_sig:
+            detail = f"{detail}; target_sig={target_sig}"
+        if current_task:
+            self.task_manager.finish_current_task("failed", detail, state_sig=sig)
+        self._log_event(
+            "task_failed_recovery_unreachable",
+            sig=sig,
+            task_id=task_id,
+            reason=detail,
+            target_sig=target_sig,
+        )
+        self._save_tasks_snapshot(reason="task_failed_recovery_unreachable")
 
     def _visual_click_bbox(self, step: ActionStep, png_w: int, png_h: int) -> Optional[List[int]]:
         raw_bbox = getattr(step, "bbox", None) or None
