@@ -784,6 +784,18 @@ def build_interactive_html(run_dir: Path) -> Path:
             or snap_paths.get("screenshot_raw_path")
             or ""
         )
+        utg_context_path = ""
+        utg_context_text = ""
+        try:
+            nav_result_path = str((nav.get("navigation_router_result_path") or ""))
+            if nav_result_path:
+                candidate_path = Path(nav_result_path).parent / "utg_context.txt"
+                if candidate_path.exists():
+                    utg_context_path = str(candidate_path)
+                    utg_context_text = candidate_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            utg_context_path = ""
+            utg_context_text = ""
 
         node_detail_map[sig] = {
             "alias": alias[sig],
@@ -811,8 +823,10 @@ def build_interactive_html(run_dir: Path) -> Path:
                 "uist_overlay_path": _relpath_or_raw(str(snap_paths.get("uist_overlay_path") or ""), interactive_dir),
                 "vidmap_overlay_path": _relpath_or_raw(str(snap_paths.get("vidmap_overlay_path") or ""), interactive_dir),
                 "navigation_router_result_path": _relpath_or_raw(str((nav.get("navigation_router_result_path") or "")), interactive_dir),
+                "utg_context_path": _relpath_or_raw(str(utg_context_path), interactive_dir),
                 "blocks_fill_result_path": _relpath_or_raw(str((blocks_obs.get(sig) or {}).get("blocks_fill_result_path") or ""), interactive_dir),
             },
+            "utg_context_text": utg_context_text,
             "vid_map_summary": trace_state.get("vid_map_summary") or {},
             "snapshot_meta": trace_state.get("snapshot_meta") or {},
             "task_context": trace_state.get("task_context") or {},
@@ -1076,6 +1090,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += renderPathLink('uist_overlay', sp.uist_overlay_path);
       html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
       html += renderPathLink('navigation_router_result', sp.navigation_router_result_path);
+      html += renderPathLink('utg_context', sp.utg_context_path);
       html += renderPathLink('blocks_fill_result', sp.blocks_fill_result_path);
       html += `</div>`;
 
@@ -1083,6 +1098,8 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div>overlay_kind: <span class="mono">${{esc(nav.overlay_kind ?? '-')}}</span></div>`;
       html += `<div>overlay_reason: <span class="mono">${{esc(nav.overlay_reason ?? '-')}}</span></div>`;
       html += `<div>candidate_count: <span class="mono">${{esc((nav.candidate_actions || []).length)}}</span></div>`;
+      html += `<div>page_return_status: <span class="mono">${{esc(nav.page_return_status ?? 'legacy_unknown')}}</span></div>`;
+      html += `<div>page_return_reason: <span class="mono">${{esc(nav.page_return_reason ?? '')}}</span></div>`;
       html += `<div>exhausted: <span class="mono">${{esc(nav.exhausted)}}</span>, confidence: <span class="mono">${{esc(nav.exhausted_confidence)}}</span></div>`;
       html += `<div>why_these_actions: <span class="mono">${{esc(nav.why_these_actions ?? '')}}</span></div>`;
       if (cands.length) {{
@@ -1093,6 +1110,17 @@ def build_interactive_html(run_dir: Path) -> Path:
         }}
         html += `</tbody></table></details>`;
       }}
+      const returnActions = nav.page_return_actions || [];
+      if (returnActions.length) {{
+        html += `<details style="margin-top:8px" open><summary>Page Return Actions (${{esc(returnActions.length)}})</summary><table><thead><tr><th>#</th><th>type</th><th>element</th><th>label/text</th><th>reason</th></tr></thead><tbody>`;
+        returnActions.forEach((a, idx) => {{
+          const label = a.anchor_label || a.label || a.text || '';
+          html += `<tr><td>R${{idx + 1}}</td><td>${{esc(a.action || '')}}</td><td class="mono">${{esc(a.element_id ?? 'None')}}</td><td>${{esc(label)}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
+        }});
+        html += `</tbody></table></details>`;
+      }} else {{
+        html += `<div class="meta" style="margin-top:8px;">No page_return_actions. status=${{esc(nav.page_return_status ?? 'legacy_unknown')}}</div>`;
+      }}
       if (false && cands.length) {{
         html += `<details style="margin-top:8px" open><summary>候选动作（state_action_snapshot）</summary><table><thead><tr><th>key</th><th>role</th><th>starts</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
         for (const c of cands) {{
@@ -1100,6 +1128,14 @@ def build_interactive_html(run_dir: Path) -> Path:
           html += `<tr><td class="mono">${{esc(c.candidate_key)}}</td><td>${{esc(c.action_role || '')}}</td><td>${{esc(c.starts_task_type || '')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
         }}
         html += `</tbody></table></details>`;
+      }}
+      html += `</div>`;
+
+      html += `<div class="card"><div class="k">UTG Context</div>`;
+      if (d.utg_context_text) {{
+        html += `<pre>${{esc(d.utg_context_text)}}</pre>`;
+      }} else {{
+        html += `<div class="meta">UTG context not generated for this UI.</div>`;
       }}
       html += `</div>`;
 

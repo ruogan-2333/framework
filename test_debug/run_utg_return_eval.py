@@ -28,9 +28,8 @@ import base64
 import json
 import os
 import sys
-from collections import deque
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +40,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from env_config import load_project_env
 from gpt_cls import GPTClient, _b64_image_url, _compact_digest
+from state_graph import Edge, StateGraph, TextUTGContext
 
 
 class ReturnActionHint(BaseModel):
@@ -108,13 +108,6 @@ def short_sig(sig: str, width: int = 8) -> str:
     return sig[:width]
 
 
-def make_aliases(graph: Dict[str, Any]) -> Dict[str, str]:
-    """Create UI aliases that match the interactive HTML ordering when graph node order is unchanged."""
-
-    nodes = graph.get("nodes") or {}
-    return {sig: f"UI{idx}" for idx, sig in enumerate(nodes.keys(), start=1)}
-
-
 def find_state_dir(trace_dir: Path, sig: str) -> Optional[Path]:
     """Find the trace states/<UI...> directory corresponding to a state signature."""
 
@@ -143,87 +136,65 @@ def load_page_summary(trace_dir: Path, sig: str) -> str:
     return str((nav or {}).get("page_summary") or "").strip()
 
 
-def edge_action_summary(edge: Dict[str, Any]) -> str:
-    """Summarize a graph edge action into a short human-readable path segment."""
+def enrich_graph_page_summaries(trace_dir: Path, graph: StateGraph) -> None:
+    """
+    Load saved LLM page summaries into StateGraph node metadata.
 
-    action_payload = edge.get("action") or {}
-    steps = action_payload.get("actions") or []
-    labels: List[str] = []
-    for step in steps:
-        action = str(step.get("action") or "").replace("ActionType.", "").lower()
-        label = str(step.get("anchor_label") or step.get("text") or "").strip()
-        if label:
-            labels.append(f"{action} {label}".strip())
-        elif action:
-            labels.append(action)
-    if labels:
-        return " + ".join(labels)
-    return "unknown action"
+    Input:
+    - trace_dir: saved trace root.
+    - graph: StateGraph rebuilt from state_graph_snapshot.json.
+
+    Output:
+    - None; graph node metadata is updated in-place.
+
+    Function:
+    - Lets offline evaluation use the same page_summary source as the main workflow.
+    """
+    for sig in list(graph.nodes.keys()):
+        summary = load_page_summary(trace_dir, sig)
+        if summary:
+            graph.annotate_meta(sig, page_summary=summary)
 
 
-def find_forward_edge(graph: Dict[str, Any], parent_sig: str, child_sig: str) -> Optional[Dict[str, Any]]:
+def edge_action_summary(graph: StateGraph, edge: Optional[Edge]) -> str:
+    """
+    Summarize a graph edge action through StateGraph's shared action text logic.
+
+    Input:
+    - graph: StateGraph containing the edge.
+    - edge: optional edge from parent to child.
+
+    Output:
+    - Human-readable edge action summary.
+
+    Function:
+    - Avoids a second action-label implementation in the offline script.
+    """
+    if edge is None:
+        return "unknown action"
+    return graph._action_text_for_context(edge.action)
+
+
+def find_forward_edge(graph: StateGraph, parent_sig: str, child_sig: str) -> Optional[Edge]:
     """Find the first saved graph edge from parent UI to child UI."""
 
-    for edge in graph.get("edges") or []:
-        if str(edge.get("src") or "") == parent_sig and str(edge.get("dst") or "") == child_sig:
+    for edge in graph.edges.values():
+        if str(edge.src or "") == parent_sig and str(edge.dst or "") == child_sig:
             return edge
     return None
 
 
-def build_adjacency(graph: Dict[str, Any]) -> Dict[str, List[Tuple[str, Dict[str, Any]]]]:
-    """Build a directed adjacency list from graph edges."""
+def build_home_path_rows(context: TextUTGContext) -> List[Dict[str, str]]:
+    """Build home path rows from a shared StateGraph text context result."""
 
-    adjacency: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
-    for edge in graph.get("edges") or []:
-        src = str(edge.get("src") or "")
-        dst = str(edge.get("dst") or "")
-        if not src or not dst:
-            continue
-        adjacency.setdefault(src, []).append((dst, edge))
-    return adjacency
-
-
-def shortest_paths_from_home(graph: Dict[str, Any], home_sig: str) -> Dict[str, List[Dict[str, str]]]:
-    """Compute one shortest edge path from home to every reachable UI."""
-
-    adjacency = build_adjacency(graph)
-    paths: Dict[str, List[Dict[str, str]]] = {home_sig: []}
-    queue: deque[str] = deque([home_sig])
-    while queue:
-        src = queue.popleft()
-        for dst, edge in adjacency.get(src, []):
-            if dst in paths:
-                continue
-            paths[dst] = paths[src] + [{"from": src, "to": dst, "action": edge_action_summary(edge)}]
-            queue.append(dst)
-    return paths
-
-
-def path_to_text(sig: str, aliases: Dict[str, str], paths: Dict[str, List[Dict[str, str]]], home_sig: str) -> str:
-    """Render one UI's path from home as a compact string."""
-
-    if sig == home_sig:
-        return "home"
-    if sig not in paths:
-        return "not reachable from home"
-    parts = ["home"]
-    for step in paths[sig]:
-        parts.append(step["action"])
-    return " > ".join(parts)
-
-
-def build_home_path_rows(graph: Dict[str, Any], aliases: Dict[str, str], home_sig: str) -> List[Dict[str, str]]:
-    """Build home path rows for all graph nodes in alias order."""
-
-    paths = shortest_paths_from_home(graph, home_sig)
     rows: List[Dict[str, str]] = []
-    for sig in (graph.get("nodes") or {}).keys():
+    for sig, alias in (context.aliases or {}).items():
         rows.append(
             {
-                "alias": aliases.get(sig, short_sig(sig)),
+                "alias": alias,
                 "state_sig": sig,
                 "short_sig": short_sig(sig),
-                "home_path": path_to_text(sig, aliases, paths, home_sig),
+                "home_path": (context.home_paths or {}).get(sig, "unreachable_from_home"),
             }
         )
     return rows
@@ -239,52 +210,24 @@ def render_home_paths_md(rows: Iterable[Dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def render_utg_text(
-    trace_dir: Path,
-    graph: Dict[str, Any],
+def append_eval_context_to_utg_text(
+    graph: StateGraph,
+    utg_text: str,
     aliases: Dict[str, str],
-    home_sig: str,
     parent_sig: str,
     child_sig: str,
-    forward_edge: Optional[Dict[str, Any]],
-    home_rows: List[Dict[str, str]],
+    forward_edge: Optional[Edge],
 ) -> str:
-    """Render a text-only UTG with nodes, edges, home paths, and return-hints context."""
+    """Append the specific parent-child return-hints question to shared UTG text."""
 
-    lines: List[str] = [
-        f"HOME: {aliases.get(home_sig, short_sig(home_sig))} ({home_sig})",
-        f"PARENT: {aliases.get(parent_sig, short_sig(parent_sig))} ({parent_sig})",
-        f"CHILD: {aliases.get(child_sig, short_sig(child_sig))} ({child_sig})",
-        "",
-        "Nodes:",
-    ]
-    for sig, node in (graph.get("nodes") or {}).items():
-        alias = aliases.get(sig, short_sig(sig))
-        summary = load_page_summary(trace_dir, sig)
-        activity = str(((node.get("meta") or {}).get("foreground_activity")) or "")
-        overlay = str(node.get("overlay_kind") or "")
-        description = summary or activity or "no saved page summary"
-        lines.append(f"- {alias}: {description}. overlay={overlay}; sig={sig}")
-
-    lines.extend(["", "Edges:"])
-    for edge in graph.get("edges") or []:
-        src = str(edge.get("src") or "")
-        dst = str(edge.get("dst") or "")
-        if not src or not dst:
-            continue
-        lines.append(f"- {aliases.get(src, short_sig(src))} -> {aliases.get(dst, short_sig(dst))}: {edge_action_summary(edge)}")
-
-    lines.extend(["", "Home paths:"])
-    for row in home_rows:
-        lines.append(f"- {row['alias']}: {row['home_path']}")
-
+    lines = [utg_text.rstrip()]
     lines.extend(
         [
             "",
             "Forward edge under evaluation:",
             f"- Parent UI: {aliases.get(parent_sig, short_sig(parent_sig))}",
             f"- Child UI: {aliases.get(child_sig, short_sig(child_sig))}",
-            f"- Forward action: {edge_action_summary(forward_edge or {})}",
+            f"- Forward action: {edge_action_summary(graph, forward_edge)}",
             "",
             "Return-hints task:",
             "- Decide whether the child UI needs predicted return actions.",
@@ -329,11 +272,12 @@ def screenshot_path(trace_dir: Path, sig: str) -> Path:
 
 
 def render_prompt(
+    graph: StateGraph,
     utg_text: str,
     aliases: Dict[str, str],
     parent_sig: str,
     child_sig: str,
-    forward_edge: Optional[Dict[str, Any]],
+    forward_edge: Optional[Edge],
     child_ui_digest: Dict[str, Any],
 ) -> str:
     """Build the text prompt for the UTG return-hints evaluation."""
@@ -343,7 +287,7 @@ def render_prompt(
     payload = {
         "parent_ui": {"alias": parent_alias, "state_sig": parent_sig},
         "child_ui": {"alias": child_alias, "state_sig": child_sig},
-        "forward_action": edge_action_summary(forward_edge or {}),
+        "forward_action": edge_action_summary(graph, forward_edge),
         "child_ui_digest": child_ui_digest,
     }
     return (
@@ -351,7 +295,7 @@ def render_prompt(
         "Task:\n"
         f"- The parent UI is {parent_alias}.\n"
         f"- The child UI is {child_alias}.\n"
-        f"- The saved forward action is: {edge_action_summary(forward_edge or {})}.\n"
+        f"- The saved forward action is: {edge_action_summary(graph, forward_edge)}.\n"
         "- Generate a small set of predicted return actions for the child UI.\n"
         "- Prefer targets in this order: home, parent, nearest useful ancestor.\n"
         "- If the forward edge is a one-way startup/loading transition, or returning is not useful, set no_return_needed=true.\n"
@@ -421,17 +365,20 @@ def main() -> int:
     trace_dir = Path(args.trace_dir).resolve()
     out_dir = Path(args.out_dir).resolve()
     graph_path = trace_dir / "graph" / "state_graph_snapshot.json"
-    graph = read_json(graph_path)
+    graph_snapshot = read_json(graph_path)
+    graph = StateGraph.from_snapshot(graph_snapshot)
+    enrich_graph_page_summaries(trace_dir, graph)
     parent_sig = str(args.parent_sig)
     child_sig = str(args.child_sig)
     home_sig = str(args.home_sig or parent_sig)
 
-    aliases = make_aliases(graph)
+    context = graph.build_text_utg_context(current_sig=child_sig, home_sig=home_sig, parent_sig=parent_sig)
+    aliases = context.aliases
     forward_edge = find_forward_edge(graph, parent_sig, child_sig)
-    home_rows = build_home_path_rows(graph, aliases, home_sig)
+    home_rows = build_home_path_rows(context)
     child_ui_digest = load_ui_digest(trace_dir, child_sig)
-    utg_text = render_utg_text(trace_dir, graph, aliases, home_sig, parent_sig, child_sig, forward_edge, home_rows)
-    prompt = render_prompt(utg_text, aliases, parent_sig, child_sig, forward_edge, child_ui_digest)
+    utg_text = append_eval_context_to_utg_text(graph, context.text, aliases, parent_sig, child_sig, forward_edge)
+    prompt = render_prompt(graph, utg_text, aliases, parent_sig, child_sig, forward_edge, child_ui_digest)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     write_json(
@@ -445,7 +392,7 @@ def main() -> int:
             "home_sig": home_sig,
             "home_alias": aliases.get(home_sig, ""),
             "forward_edge_found": bool(forward_edge),
-            "forward_action": edge_action_summary(forward_edge or {}),
+            "forward_action": edge_action_summary(graph, forward_edge),
             "mode": args.mode,
             "call_llm": bool(args.call_llm),
         },

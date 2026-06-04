@@ -26,7 +26,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 
 @dataclass
@@ -59,6 +59,31 @@ class Node:
     incoming: Set[str] = field(default_factory=set)
 
 
+@dataclass
+class TextUTGContext:
+    """
+    Text export result for feeding the current StateGraph into an LLM prompt.
+
+    Input:
+    - StateGraph nodes and edges plus current/home/parent state signatures.
+
+    Output:
+    - text: compact human-readable UTG text.
+    - aliases: state signature to UI label map, such as {"xml:abc": "UI1"}.
+    - home_paths: state signature to semantic path from home.
+
+    Function:
+    - Keeps prompt-facing UTG context structured without creating a second graph model.
+    """
+
+    text: str
+    aliases: Dict[str, str] = field(default_factory=dict)
+    home_paths: Dict[str, str] = field(default_factory=dict)
+    home_sig: Optional[str] = None
+    current_sig: Optional[str] = None
+    parent_sig: Optional[str] = None
+
+
 class StateGraph:
     def __init__(self) -> None:
         self.nodes: Dict[str, Node] = {}
@@ -66,6 +91,69 @@ class StateGraph:
         self.edges: Dict[Tuple[str, str, str], Edge] = {}
         # adjacency for path search
         self._adj: Dict[str, List[Edge]] = defaultdict(list)
+
+    @classmethod
+    def from_snapshot(cls, snapshot: Mapping[str, Any]) -> "StateGraph":
+        """
+        Rebuild a StateGraph from graph/state_graph_snapshot.json.
+
+        Input:
+        - snapshot: JSON object with "nodes" and "edges" fields from a saved run.
+
+        Output:
+        - StateGraph containing the saved nodes, edges, metadata, and adjacency.
+
+        Function:
+        - Lets offline debug scripts reuse StateGraph methods without duplicating UTG parsing.
+        """
+        graph = cls()
+        nodes = snapshot.get("nodes") if isinstance(snapshot, Mapping) else {}
+        if isinstance(nodes, Mapping):
+            for sig, raw in nodes.items():
+                if not sig:
+                    continue
+                row = raw if isinstance(raw, Mapping) else {}
+                node = Node(
+                    sig=str(sig),
+                    visit_count=int(row.get("visit_count", 0) or 0),
+                    first_ts=float(row.get("first_ts", 0.0) or 0.0),
+                    last_ts=float(row.get("last_ts", 0.0) or 0.0),
+                    overlay_kind=str(row.get("overlay_kind", "none") or "none"),
+                    meta=dict(row.get("meta") or {}) if isinstance(row.get("meta"), Mapping) else {},
+                )
+                graph.nodes[str(sig)] = node
+
+        edges = snapshot.get("edges") if isinstance(snapshot, Mapping) else []
+        if isinstance(edges, list):
+            for raw_edge in edges:
+                if not isinstance(raw_edge, Mapping):
+                    continue
+                src = str(raw_edge.get("src") or "")
+                dst = str(raw_edge.get("dst") or "")
+                if not src or not dst:
+                    continue
+                action = raw_edge.get("action") if isinstance(raw_edge.get("action"), Mapping) else {}
+                edge = Edge(
+                    src=src,
+                    dst=dst,
+                    action=dict(action),
+                    count=int(raw_edge.get("count", 0) or 0),
+                    last_ts=float(raw_edge.get("last_ts", 0.0) or 0.0),
+                    no_effect=bool(raw_edge.get("no_effect", False)),
+                    verified_ok=int(raw_edge.get("verified_ok", 0) or 0),
+                    verified_fail=int(raw_edge.get("verified_fail", 0) or 0),
+                    last_verified_ts=float(raw_edge.get("last_verified_ts", 0.0) or 0.0),
+                )
+                if src not in graph.nodes:
+                    graph.nodes[src] = Node(sig=src)
+                if dst not in graph.nodes:
+                    graph.nodes[dst] = Node(sig=dst)
+                graph.nodes[src].outgoing.add(dst)
+                graph.nodes[dst].incoming.add(src)
+                key = (src, dst, graph._action_key(edge.action))
+                graph.edges[key] = edge
+                graph._adj[src].append(edge)
+        return graph
 
     # -------------------------
     # Introspection helpers
@@ -141,6 +229,206 @@ class StateGraph:
             n.overlay_kind = self._norm_overlay_kind(overlay_kind)
         if meta:
             n.meta.update(meta)
+
+    def annotate_meta(self, sig: str, **meta: Any) -> None:
+        """
+        Attach metadata to a state node without incrementing its visit count.
+
+        Input:
+        - sig: state signature to annotate.
+        - meta: JSON-safe metadata fields such as page_summary.
+
+        Output:
+        - None; the node metadata is updated in-place.
+
+        Function:
+        - Provides a small explicit wrapper so workflow code does not manipulate Node.meta directly.
+        """
+        self.annotate(sig, meta=dict(meta or {}))
+
+    @staticmethod
+    def _clip_text(value: Any, limit: int) -> str:
+        """
+        Convert a value to a one-line clipped string.
+
+        Input:
+        - value: arbitrary text-like value.
+        - limit: maximum output length.
+
+        Output:
+        - One-line string clipped to limit characters.
+
+        Function:
+        - Keeps generated UTG prompt context compact and stable.
+        """
+        text = str(value or "").replace("\r", " ").replace("\n", " ").strip()
+        text = " ".join(text.split())
+        if limit > 0 and len(text) > limit:
+            return text[: max(0, limit - 1)].rstrip() + "…"
+        return text
+
+    def _action_text_for_context(self, action: Mapping[str, Any], limit: int = 120) -> str:
+        """
+        Build a short human-readable action label for UTG text.
+
+        Input:
+        - action: stored edge action payload, usually {"actions": [step, ...]}.
+        - limit: maximum length for each step summary.
+
+        Output:
+        - Text such as "click Personal" or "click Settings ; click OK".
+
+        Function:
+        - Converts replay action payloads into semantic edge labels for LLM context.
+        """
+        steps = action.get("actions") if isinstance(action, Mapping) else []
+        if not isinstance(steps, list):
+            steps = []
+        parts: List[str] = []
+        for step in steps:
+            if not isinstance(step, Mapping):
+                continue
+            verb = self._clip_text(step.get("action") or step.get("type") or "action", 24)
+            label = (
+                step.get("action_summary")
+                or step.get("semantic_action")
+                or step.get("anchor_label")
+                or step.get("label")
+                or step.get("text")
+                or step.get("content_desc")
+                or step.get("resource_id")
+                or step.get("reasoning")
+                or ""
+            )
+            label_text = self._clip_text(label, limit)
+            parts.append(f"{verb} {label_text}".strip())
+        if not parts:
+            return "unknown action"
+        return " ; ".join(parts)
+
+    def _home_paths_for_context(self, home_sig: Optional[str]) -> Dict[str, str]:
+        """
+        Compute semantic paths from the home UI to every known node.
+
+        Input:
+        - home_sig: state signature currently treated as the app home page.
+
+        Output:
+        - Mapping from state signature to path text.
+
+        Function:
+        - Gives the LLM a compact branch-position cue without adding extra schema fields.
+        """
+        if not home_sig or home_sig not in self.nodes:
+            return {sig: "unknown_home" for sig in self.nodes.keys()}
+
+        paths: Dict[str, str] = {home_sig: "home"}
+        q = deque([home_sig])
+        while q:
+            cur = q.popleft()
+            edges = sorted(self._adj.get(cur, []), key=lambda e: e.count, reverse=True)
+            for edge in edges:
+                nxt = edge.dst
+                if nxt in paths:
+                    continue
+                action_text = self._action_text_for_context(edge.action)
+                paths[nxt] = f"{paths[cur]} > {action_text}"
+                q.append(nxt)
+
+        for sig in self.nodes.keys():
+            paths.setdefault(sig, "unreachable_from_home")
+        return paths
+
+    def build_text_utg_context(
+        self,
+        current_sig: Optional[str],
+        home_sig: Optional[str],
+        parent_sig: Optional[str] = None,
+        max_nodes: int = 40,
+        max_edges: int = 80,
+        summary_chars: int = 160,
+    ) -> TextUTGContext:
+        """
+        Export a compact text UTG context for the navigation/router LLM.
+
+        Input:
+        - current_sig: state currently being analyzed.
+        - home_sig: best-known app home state, or None when unknown.
+        - parent_sig: direct predecessor state when known.
+        - max_nodes/max_edges/summary_chars: prompt-size controls.
+
+        Output:
+        - TextUTGContext containing text plus alias and home-path maps.
+
+        Function:
+        - Lets LLM see known UI graph position, node summaries, edges, and home paths.
+        """
+        special = [sig for sig in (home_sig, parent_sig, current_sig) if sig]
+        selected: List[str] = []
+        for sig in self.nodes.keys():
+            if len(selected) >= max_nodes and sig not in special:
+                continue
+            if sig not in selected:
+                selected.append(sig)
+        for sig in special:
+            if sig and sig in self.nodes and sig not in selected:
+                selected.append(sig)
+
+        aliases = {sig: f"UI{idx + 1}" for idx, sig in enumerate(selected)}
+        all_home_paths = self._home_paths_for_context(home_sig)
+        home_paths = {sig: all_home_paths.get(sig, "unreachable_from_home") for sig in selected}
+
+        def alias_or_unknown(sig: Optional[str]) -> str:
+            if not sig:
+                return "unknown"
+            return aliases.get(sig, sig[:12])
+
+        lines: List[str] = [
+            f"HOME: {alias_or_unknown(home_sig)}",
+            f"CURRENT: {alias_or_unknown(current_sig)}",
+            f"PARENT: {alias_or_unknown(parent_sig)}",
+            "",
+            "Nodes:",
+        ]
+        for sig in selected:
+            node = self.nodes.get(sig)
+            summary = "no page summary"
+            overlay = "none"
+            if node is not None:
+                summary = self._clip_text((node.meta or {}).get("page_summary") or "no page summary", summary_chars)
+                overlay = str(node.overlay_kind or "none")
+            lines.append(f"- {aliases[sig]}: {summary} [sig={sig}, overlay={overlay}]")
+
+        lines.extend(["", "Edges:"])
+        edge_count = 0
+        selected_set = set(selected)
+        for edge in sorted(self.edges.values(), key=lambda e: (-int(e.count or 0), str(e.src), str(e.dst))):
+            if edge.src not in selected_set or edge.dst not in selected_set:
+                continue
+            if edge_count >= max_edges:
+                break
+            edge_count += 1
+            action_text = self._action_text_for_context(edge.action)
+            lines.append(f"- {aliases[edge.src]} -> {aliases[edge.dst]}: {action_text} [count={int(edge.count or 0)}]")
+        omitted_edges = max(0, len(self.edges) - edge_count)
+        if omitted_edges:
+            lines.append(f"- ... omitted_edges={omitted_edges}")
+
+        lines.extend(["", "Home paths:"])
+        for sig in selected:
+            lines.append(f"- {aliases[sig]}: {home_paths.get(sig, 'unreachable_from_home')}")
+        omitted_nodes = max(0, len(self.nodes) - len(selected))
+        if omitted_nodes:
+            lines.append(f"- ... omitted_nodes={omitted_nodes}")
+
+        return TextUTGContext(
+            text="\n".join(lines),
+            aliases=aliases,
+            home_paths=home_paths,
+            home_sig=home_sig,
+            current_sig=current_sig,
+            parent_sig=parent_sig,
+        )
 
     # -------------------------
     # Edges / transitions

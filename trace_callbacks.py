@@ -690,6 +690,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             f"- state_sig: `{sig}`",
             f"- navigation_router: {'yes' if nav_router else 'no'}",
             f"- blocks_fill: {'yes' if blocks_fill else 'no'}",
+            f"- UTG context: {'llm/utg_context.txt' if os.path.exists(os.path.join(llm_dir, 'utg_context.txt')) else 'not generated'}",
             "",
             "## Navigation Router",
             "",
@@ -700,6 +701,8 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     f"- page_summary: {str(nav_body.get('page_summary') or '')}",
                     f"- overlay_kind: {str(nav_body.get('overlay_kind') or '')}",
                     f"- candidate_actions: {len(nav_body.get('candidate_actions') or [])}",
+                    f"- page_return_status: {str(nav_body.get('page_return_status') or 'legacy_unknown')}",
+                    f"- page_return_reason: {str(nav_body.get('page_return_reason') or '')}",
                     f"- page_return_actions: {len(nav_body.get('page_return_actions') or [])}",
                 ]
             )
@@ -720,6 +723,16 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     lines.append(
                         f"- C{idx}: role={role}, starts_task_type={starts}, starts_task_depth={starts_depth}, score={cand.get('score')}, "
                         f"action={step.get('action')}:{step.get('element_id')} {label}"
+                    )
+            return_actions = list(nav_body.get("page_return_actions") or [])
+            if return_actions:
+                lines.extend(["", "### Page Return Actions", ""])
+                for idx, step in enumerate(return_actions, start=1):
+                    if not isinstance(step, dict):
+                        continue
+                    label = str(step.get("anchor_label") or step.get("text") or step.get("reasoning") or "")
+                    lines.append(
+                        f"- R{idx}: action={step.get('action')}:{step.get('element_id')} {label}"
                     )
         if router_body:
             lines.extend(

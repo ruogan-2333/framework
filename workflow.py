@@ -636,6 +636,8 @@ class WorkflowRunner:
     # Restart baselines for replay
     entry_sig: str = ""
     restart_entry_sig: Optional[str] = None
+    # Best-known app home state for text UTG context. This is a runtime hint, not a permanent truth.
+    home_sig: Optional[str] = None
     restart_recent: Deque[float] = field(default_factory=deque, init=False)
 
     # Snapshot post-process cache
@@ -1150,6 +1152,15 @@ class WorkflowRunner:
             out_dir.mkdir(parents=True, exist_ok=True)
 
             graph_nodes: Dict[str, Any] = {}
+            graph_home_paths: Dict[str, str] = {}
+            try:
+                graph_home_paths = self.graph.build_text_utg_context(
+                    current_sig=cur_sig,
+                    home_sig=self.home_sig,
+                    parent_sig=self.parent_map.get(cur_sig),
+                ).home_paths
+            except Exception:
+                graph_home_paths = {}
             for sig, node in (self.graph.nodes or {}).items():
                 graph_nodes[sig] = {
                     "sig": sig,
@@ -1158,6 +1169,7 @@ class WorkflowRunner:
                     "last_ts": float(getattr(node, "last_ts", 0.0) or 0.0),
                     "overlay_kind": str(getattr(node, "overlay_kind", "none") or "none"),
                     "meta": self._jsonable(getattr(node, "meta", {}) or {}),
+                    "home_path": str(graph_home_paths.get(sig) or ""),
                     "outgoing_count": len(getattr(node, "outgoing", set()) or set()),
                     "incoming_count": len(getattr(node, "incoming", set()) or set()),
                 }
@@ -1181,6 +1193,7 @@ class WorkflowRunner:
                 "cur_sig": cur_sig,
                 "entry_sig": self.entry_sig,
                 "restart_entry_sig": self.restart_entry_sig,
+                "home_sig": self.home_sig,
                 "stop_reason": stop_reason,
                 "node_count": len(graph_nodes),
                 "edge_count": len(graph_edges),
@@ -1198,6 +1211,7 @@ class WorkflowRunner:
                 "stop_reason": stop_reason,
                 "entry_sig": self.entry_sig,
                 "restart_entry_sig": self.restart_entry_sig,
+                "home_sig": self.home_sig,
                 "dfs_stack": list(self.dfs_stack),
                 "dfs_via": list(self.dfs_via),
                 "parent_map": dict(self.parent_map),
@@ -1222,6 +1236,7 @@ class WorkflowRunner:
                 "stop_reason": stop_reason,
                 "cur_sig": cur_sig,
                 "entry_sig": self.entry_sig,
+                "home_sig": self.home_sig,
                 "action_count": int(self.action_count),
                 "no_new_state_count": int(self.no_new_state_count),
                 "no_progress_loops": int(self.no_progress_loops),
@@ -4019,6 +4034,137 @@ class WorkflowRunner:
             "ocr_top_lines": uniq[:12],
         }
 
+    def _record_page_summary_for_state(self, state_sig: str, page_summary: str) -> None:
+        """
+        Input: state signature and LLM page summary.
+        Output: None.
+        Function: stores page_summary on the StateGraph node for later text UTG export.
+        """
+        summary = str(page_summary or "").strip()
+        if not state_sig or not summary:
+            return
+        try:
+            self.graph.annotate_meta(state_sig, page_summary=summary)
+        except Exception:
+            logger.debug("failed to record page_summary for sig=%s", state_sig[:8], exc_info=True)
+
+    def _looks_like_home_page(self, nav: Optional[NavigationProposal]) -> bool:
+        """
+        Input: navigation proposal for one UI state.
+        Output: True when the page summary/type looks like a stable app home page.
+        Function: provides a conservative fallback when the task stack has not recorded home yet.
+        """
+        if nav is None:
+            return False
+        overlay = self._overlay_kind_value(nav)
+        if overlay in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
+            return False
+        summary = str(getattr(nav, "page_summary", "") or "").lower()
+        ui_type = str(getattr(nav, "ui_type", "") or "").lower()
+        blob = f"{summary} {ui_type}"
+        positive = ("home", "main", "menu", "dashboard", "start screen", "landing")
+        negative = ("login", "sign in", "signup", "permission", "loading", "splash", "popup", "dialog", "settings")
+        return any(k in blob for k in positive) and not any(k in blob for k in negative)
+
+    def _maybe_record_home_state(
+        self,
+        sig: str,
+        nav: Optional[NavigationProposal],
+        combined: Optional[NavigationRouterResult] = None,
+        current_task: Optional[Any] = None,
+    ) -> None:
+        """
+        Input: current state, navigation result, combined task decision, and active task.
+        Output: None.
+        Function: updates the best-known app home state used by text UTG context.
+        """
+        if not sig or self.home_sig:
+            return
+        task_type = str(getattr(current_task, "task_type", "") or "")
+        decision = self._model_to_json_dict(getattr(combined, "task_decision", None)) if combined is not None else {}
+        if task_type == "enter_main_page" and bool(decision.get("current_task_done")) and not bool(decision.get("current_task_failed")):
+            self.home_sig = sig
+            self.graph.annotate_meta(sig, is_home=True)
+            self._log_event("home_state_inferred", sig=sig, reason="enter_main_page_done")
+            return
+        if self._looks_like_home_page(nav):
+            self.home_sig = sig
+            self.graph.annotate_meta(sig, is_home=True)
+            self._log_event("home_state_inferred", sig=sig, reason="page_summary_heuristic")
+
+    def _infer_utg_parent_sig(self, sig: str) -> Optional[str]:
+        """
+        Input: current state signature.
+        Output: direct parent state signature when known.
+        Function: supplies parent context for text UTG without changing graph traversal state.
+        """
+        if not sig:
+            return None
+        parent = self.parent_map.get(sig)
+        if parent:
+            return parent
+        best_src = ""
+        best_count = -1
+        try:
+            for edge in (self.graph.edges or {}).values():
+                if str(getattr(edge, "dst", "") or "") != sig:
+                    continue
+                count = int(getattr(edge, "count", 0) or 0)
+                if count > best_count:
+                    best_count = count
+                    best_src = str(getattr(edge, "src", "") or "")
+        except Exception:
+            return None
+        return best_src or None
+
+    def _build_utg_context_for_state(self, sig: str) -> Dict[str, Any]:
+        """
+        Input: current state signature.
+        Output: JSON-safe text UTG context payload for the navigation/router LLM.
+        Function: centralizes UTG context construction and graceful degradation.
+        """
+        parent_sig = self._infer_utg_parent_sig(sig)
+        try:
+            ctx = self.graph.build_text_utg_context(
+                current_sig=sig,
+                home_sig=self.home_sig,
+                parent_sig=parent_sig,
+            )
+            return {
+                "format": "text_v1",
+                "text": ctx.text,
+                "home_sig": ctx.home_sig or "",
+                "current_sig": ctx.current_sig or "",
+                "parent_sig": ctx.parent_sig or "",
+                "aliases": dict(ctx.aliases or {}),
+                "home_paths": dict(ctx.home_paths or {}),
+            }
+        except Exception:
+            logger.debug("failed to build UTG context for sig=%s", sig[:8], exc_info=True)
+            return {
+                "format": "text_v1",
+                "text": "UTG context unavailable.",
+                "home_sig": self.home_sig or "",
+                "current_sig": sig,
+                "parent_sig": parent_sig or "",
+                "aliases": {},
+                "home_paths": {},
+                "error": "utg_context_build_failed",
+            }
+
+    def _write_utg_context_artifact(self, sig: str, utg_context: Dict[str, Any]) -> None:
+        """
+        Input: state signature and UTG context payload.
+        Output: writes states/<ui>/llm/utg_context.txt when possible.
+        Function: makes each LLM-visible UTG context easy to inspect by hand.
+        """
+        try:
+            out_path = self._debug_page_artifact_path(sig, "llm/utg_context.txt")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(str(utg_context.get("text") or ""), encoding="utf-8")
+        except Exception:
+            logger.debug("failed to write utg_context artifact sig=%s", sig[:8], exc_info=True)
+
     def _schedule_state(self, sig: str, snap: Dict[str, Any], task: str) -> None:
         """
         IPO:
@@ -4047,6 +4193,8 @@ class WorkflowRunner:
                 current_task_payload = current_task.to_dict() if current_task else {}
                 task_stack_payload = self.task_manager.stack_summary()
                 task_id = str(current_task_payload.get("task_id") or "")
+                utg_context_payload = self._build_utg_context_for_state(sig)
+                self._write_utg_context_artifact(sig, utg_context_payload)
                 logger.debug(
                     "Schedule NavigationRouter for sig=%s blocks=%d routers=%d task_id=%s",
                     sig[:8],
@@ -4076,7 +4224,7 @@ class WorkflowRunner:
                         "task": task,
                         "current_task": current_task_payload,
                         "task_stack": task_stack_payload,
-                        "utg_context": {},
+                        "utg_context": utg_context_payload,
                         "max_proposed_tasks": int(self.max_proposed_tasks),
                         "task_id": task_id,
                         "history": list(self.history),
@@ -4096,7 +4244,7 @@ class WorkflowRunner:
                     history=list(self.history),
                     current_task=current_task_payload,
                     task_stack=task_stack_payload,
-                    utg_context={},
+                    utg_context=utg_context_payload,
                     max_proposed_tasks=int(self.max_proposed_tasks),
                     state_sig=sig,
                     xml_reliable=snap.get("xml_reliable"),
@@ -4263,6 +4411,8 @@ class WorkflowRunner:
             self._save_tasks_snapshot(reason="task_decision_stale")
             return
 
+        self._maybe_record_home_state(sig, getattr(combined, "navigation", None), combined, current_task)
+
         def candidate_key_from_step_dict(step_dict: Dict[str, Any]) -> str:
             """
             Input: ActionStep-like dictionary from LLM JSON.
@@ -4377,6 +4527,7 @@ class WorkflowRunner:
                     nav.state_sig = sig or getattr(nav, "state_sig", "")
                     route.state_sig = sig or getattr(route, "state_sig", "")
                     requested_task_id = self._nav_task_ids.get(sig, "")
+                    self._record_page_summary_for_state(sig, getattr(nav, "page_summary", "") or "")
                     self._apply_task_decision(sig, combined, requested_task_id)
                     self.nav_cache[sig] = nav
                     self.nav_ready_once = True

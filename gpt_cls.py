@@ -65,6 +65,12 @@ class OverlayKind(str, Enum):
     LOADING = "loading"      # spinner / transition
 
 
+class PageReturnStatus(str, Enum):
+    HAS_VISIBLE_RETURN = "has_visible_return"
+    NO_RETURN_NEEDED = "no_return_needed"
+    NEEDS_RETURN_BUT_NO_VISIBLE_CONTROL = "needs_return_but_no_visible_control"
+
+
 class UIElementType(str, Enum):
     BUTTON = "Button"
     TEXT_BUTTON = "TextButton"
@@ -192,6 +198,15 @@ class NavigationProposal(BaseModel):
             "Do not duplicate candidate_actions. If no visible return control exists, keep empty."
         ),
     )
+    page_return_status: PageReturnStatus = Field(
+        PageReturnStatus.NO_RETURN_NEEDED,
+        description=(
+            "Page-level return status. Use has_visible_return when page_return_actions contains usable visible controls; "
+            "no_return_needed for home/loading/splash/startup-only pages; "
+            "needs_return_but_no_visible_control when returning is useful but no reliable visible return control is found."
+        ),
+    )
+    page_return_reason: str = Field("", description="Short reason for page_return_status.")
 
 
 class RecoveryProposal(BaseModel):
@@ -463,6 +478,8 @@ OUTPUT (strict JSON matching NavigationProposal):
 - overlay_dismiss_actions
 - candidate_actions
 - page_return_actions
+- page_return_status
+- page_return_reason
 
 ACTION STEP RULES:
 - action must be one of: click | input | wait | back | restart | complete | none.
@@ -492,6 +509,13 @@ CANDIDATE ACTION RULES:
 PAGE RETURN RULES:
 - page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
 - Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.
+- First set page_return_status:
+  * has_visible_return: this page should be able to return and a visible return/close/up/tab-return control exists.
+  * no_return_needed: this is home, loading, splash, startup-only, or otherwise should not return to a previous UI.
+  * needs_return_but_no_visible_control: returning would be useful but no reliable visible return control is found.
+- Always explain the status in page_return_reason.
+- If page_return_status=has_visible_return, fill page_return_actions with the visible controls.
+- If page_return_status=no_return_needed or needs_return_but_no_visible_control, keep page_return_actions=[].
 - Do not duplicate any element_id/action already listed in candidate_actions or overlay_dismiss_actions.
 - If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
 
@@ -599,7 +623,7 @@ INPUTS:
 - task: current exploration goal.
 - current_task: structured active task context. Its task_id should be echoed as task_id.
 - task_stack: compact depth-first task stack. The last item is the active task.
-- utg_context: reserved UI transition graph context; may be empty in the first version.
+- utg_context: text UI transition graph context. It may be unavailable early in a run, but when present it describes known UI nodes, edges, aliases, home path, CURRENT, PARENT, and HOME.
 - app_intro/focus_hints: weak app-level priors; current-screen evidence has priority.
 - history: recent action/context strings.
 - block_status: existing block runtime status for navigation context.
@@ -628,6 +652,7 @@ DECISION ORDER:
 7. Use current_task.step_budget and current_task.used_steps to judge whether to continue. If many steps have already been used, prefer finishing the task unless a questionnaire-relevant path clearly needs more evidence.
 
 NAVIGATION RULES:
+- Use utg_context to understand where CURRENT is in the known UI transition graph before selecting actions.
 - If navigation.overlay_kind=dismiss, put all close/deny/not-now/OK/skip/continue-past-popup actions in navigation.overlay_dismiss_actions and set navigation.candidate_actions=[].
 - If navigation.overlay_kind=dismiss, do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
 - navigation.candidate_actions are the current UI action pool. They may continue the active task or start child tasks.
@@ -639,6 +664,22 @@ NAVIGATION RULES:
 - Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
 - navigation.page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
 - Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.
+- PAGE RETURN RULES WITH UTG:
+  - Use utg_context to decide page_return_actions when utg_context.text is present.
+  - First set navigation.page_return_status:
+    * has_visible_return: CURRENT should be able to return and a visible return/close/up/tab-return control exists.
+    * no_return_needed: CURRENT is home, loading, splash, startup-only, or otherwise should not return to a previous UI.
+    * needs_return_but_no_visible_control: CURRENT should return to parent/home/ancestor but no reliable visible return control is available.
+  - Always explain the status in navigation.page_return_reason.
+  - If page_return_status=has_visible_return, fill page_return_actions with the visible controls.
+  - If page_return_status=no_return_needed or needs_return_but_no_visible_control, keep page_return_actions=[].
+  - page_return_actions should be visible actions on CURRENT that return to one of: home UI, parent UI, or nearest useful ancestor UI.
+  - Prefer home if it is visible and meaningful.
+  - Prefer parent when home is not directly reachable.
+  - Use nearest useful ancestor when parent is loading, splash, one-way, or overlay.
+  - Do not generate page_return_actions back to splash/loading/startup pages.
+  - If CURRENT was reached by bottom-tab switching, prefer switching back to the previous/home tab instead of Android back.
+  - If no visible return, close, up, or tab-return control exists, keep page_return_actions=[].
 - Do not duplicate any element_id/action between candidate_actions, overlay_dismiss_actions, and page_return_actions.
 - If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
 - Do not output screenshot coordinates or bounding boxes.
