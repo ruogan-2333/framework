@@ -183,13 +183,9 @@ def draw_labeled_box(draw: ImageDraw.ImageDraw, frame: Dict[str, int], label: st
 def iter_action_steps_for_overlay(navigation: Dict[str, Any]) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
     """
     Input: NavigationProposal JSON payload from the combined result.
-    Output: labeled overlay/candidate/page-return action steps with colors for rendering.
+    Output: labeled candidate/page-return action steps with colors for rendering.
     """
     items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
-    for idx, step in enumerate(navigation.get("overlay_dismiss_actions") or [], start=1):
-        if isinstance(step, dict):
-            items.append((f"O{idx}", step, (220, 50, 47)))
-
     for cand_idx, candidate in enumerate(navigation.get("candidate_actions") or [], start=1):
         if not isinstance(candidate, dict):
             continue

@@ -222,14 +222,10 @@ def iter_action_steps_for_overlay(
 ) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
     """
     Input: NavigationProposal JSON payload and optional proposed task payloads.
-    Output: labeled overlay/candidate/page-return action steps with colors.
+    Output: labeled candidate/page-return/task-entry action steps with colors.
     Function: converts LLM action lists and task entry actions into drawable items.
     """
     items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
-    for idx, step in enumerate(navigation.get("overlay_dismiss_actions") or [], start=1):
-        if isinstance(step, dict):
-            items.append((f"O{idx}", step, (220, 50, 47)))
-
     for cand_idx, candidate in enumerate(navigation.get("candidate_actions") or [], start=1):
         if not isinstance(candidate, dict):
             continue
@@ -560,11 +556,11 @@ def process_one_navigation(gpt: GPTClient, snap_path: Path) -> bool:
     draw_llm_actions_overlay(snap, result if isinstance(result, dict) else {}, out_dir / "llm_navigation_actions_overlay.png")
 
     candidate_count = len((result or {}).get("candidate_actions") or []) if isinstance(result, dict) else 0
-    overlay_kind = (result or {}).get("overlay_kind") if isinstance(result, dict) else ""
+    page_kind = (result or {}).get("page_kind") if isinstance(result, dict) else "legacy_unknown"
     return_count = len((result or {}).get("page_return_actions") or []) if isinstance(result, dict) else 0
     print(
         f"[OK] {snap_path.parent.name} mode=navigation elapsed_s={elapsed_s:.3f} "
-        f"overlay={overlay_kind} candidates={candidate_count} page_return={return_count}"
+        f"page_kind={page_kind} candidates={candidate_count} page_return={return_count}"
     )
     return True
 

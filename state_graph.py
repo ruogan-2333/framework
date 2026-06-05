@@ -11,7 +11,7 @@ CRITICAL SEMANTICS (workflow depends on these; do NOT re-implement elsewhere):
 1) add_edge() touches src/dst (visit_count++).
 2) Therefore, "dst was new at discovery" MUST be computed BEFORE add_edge().
    => record_transition() returns dst_was_new_at_discovery (bool).
-3) We must sometimes attach overlay/meta WITHOUT incrementing visit_count.
+3) We must sometimes attach page_kind/meta WITHOUT incrementing visit_count.
    => annotate() updates node metadata/flags without counting a "visit".
 
 WHEN USED IN WORKFLOW:
@@ -47,12 +47,12 @@ class Edge:
 
 @dataclass
 class Node:
-    # State signature node with visit metadata; overlay_kind used as lightweight filter.
+    # State signature node with visit metadata and page-shape metadata.
     sig: str
     visit_count: int = 0
     first_ts: float = 0.0
     last_ts: float = 0.0
-    overlay_kind: str = "none"
+    page_kind: str = "stable"
     meta: Dict[str, Any] = field(default_factory=dict)
 
     outgoing: Set[str] = field(default_factory=set)
@@ -118,7 +118,7 @@ class StateGraph:
                     visit_count=int(row.get("visit_count", 0) or 0),
                     first_ts=float(row.get("first_ts", 0.0) or 0.0),
                     last_ts=float(row.get("last_ts", 0.0) or 0.0),
-                    overlay_kind=str(row.get("overlay_kind", "none") or "none"),
+                    page_kind=str(row.get("page_kind", "stable") or "stable"),
                     meta=dict(row.get("meta") or {}) if isinstance(row.get("meta"), Mapping) else {},
                 )
                 graph.nodes[str(sig)] = node
@@ -160,12 +160,24 @@ class StateGraph:
     # -------------------------
 
     @staticmethod
-    def _norm_overlay_kind(overlay_kind: Optional[str]) -> str:
-        if not overlay_kind:
-            return "none"
-        if hasattr(overlay_kind, "value"):
-            return str(getattr(overlay_kind, "value"))
-        return str(overlay_kind)
+    def _norm_page_kind(page_kind: Optional[str]) -> str:
+        """
+        Normalize page_kind values stored on StateGraph nodes.
+
+        Input:
+        - page_kind: raw string or enum-like object from LLM schema.
+
+        Output:
+        - stable/popup/loading string, defaulting to stable when empty.
+
+        Function:
+        - Keeps StateGraph independent from the Pydantic enum class.
+        """
+        if not page_kind:
+            return "stable"
+        if hasattr(page_kind, "value"):
+            return str(getattr(page_kind, "value"))
+        return str(page_kind)
 
     def has_state(self, sig: str) -> bool:
         """
@@ -184,10 +196,10 @@ class StateGraph:
     # Node touch / annotate
     # -------------------------
 
-    def touch(self, sig: str, overlay_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
+    def touch(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
         """
         IPO:
-          in : sig; optional overlay/meta
+          in : sig; optional page_kind/meta
           out: Node (created if needed) with visit_count incremented
         WHEN called:
           - record_observation()
@@ -196,23 +208,23 @@ class StateGraph:
         now = time.time()
         n = self.nodes.get(sig)
         if n is None:
-            n = Node(sig=sig, visit_count=0, first_ts=now, last_ts=now, overlay_kind=self._norm_overlay_kind(overlay_kind), meta=meta or {})
+            n = Node(sig=sig, visit_count=0, first_ts=now, last_ts=now, page_kind=self._norm_page_kind(page_kind), meta=meta or {})
             self.nodes[sig] = n
         n.visit_count += 1
         n.last_ts = now
-        if overlay_kind is not None:
-            n.overlay_kind = self._norm_overlay_kind(overlay_kind)
+        if page_kind is not None:
+            n.page_kind = self._norm_page_kind(page_kind)
         if meta:
             n.meta.update(meta)
         return n
 
-    def annotate(self, sig: str, overlay_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+    def annotate(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
         """
         IPO:
-          in : sig; optional overlay/meta
+          in : sig; optional page_kind/meta
           out: updates node flags/meta WITHOUT incrementing visit_count
         WHEN called (workflow):
-          - after receiving NAV results (LLM1) to mark overlay status
+          - after receiving NAV results (LLM1) to mark page_kind
           - whenever we want to attach extra metadata to existing nodes
         WHY:
           - add_edge/touch already counts visits; we must not inflate visit_count just to store flags.
@@ -221,12 +233,12 @@ class StateGraph:
         n = self.nodes.get(sig)
         if n is None:
             # If node doesn't exist, we DO want to create it, but still do NOT count as a visit.
-            n = Node(sig=sig, visit_count=0, first_ts=now, last_ts=now, overlay_kind=self._norm_overlay_kind(overlay_kind), meta=meta or {})
+            n = Node(sig=sig, visit_count=0, first_ts=now, last_ts=now, page_kind=self._norm_page_kind(page_kind), meta=meta or {})
             self.nodes[sig] = n
             return
         n.last_ts = now
-        if overlay_kind is not None:
-            n.overlay_kind = self._norm_overlay_kind(overlay_kind)
+        if page_kind is not None:
+            n.page_kind = self._norm_page_kind(page_kind)
         if meta:
             n.meta.update(meta)
 
@@ -393,11 +405,11 @@ class StateGraph:
         for sig in selected:
             node = self.nodes.get(sig)
             summary = "no page summary"
-            overlay = "none"
+            page_kind = "stable"
             if node is not None:
                 summary = self._clip_text((node.meta or {}).get("page_summary") or "no page summary", summary_chars)
-                overlay = str(node.overlay_kind or "none")
-            lines.append(f"- {aliases[sig]}: {summary} [sig={sig}, overlay={overlay}]")
+                page_kind = str(node.page_kind or "stable")
+            lines.append(f"- {aliases[sig]}: {summary} [sig={sig}, page_kind={page_kind}]")
 
         lines.extend(["", "Edges:"])
         edge_count = 0
@@ -537,7 +549,7 @@ class StateGraph:
         self.nodes[src].outgoing.add(dst)
         self.nodes[dst].incoming.add(src)
 
-    def record_observation(self, sig: str, overlay_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
+    def record_observation(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
         """
         IPO:
           in : sig observed without a clean predecessor action edge
@@ -547,7 +559,7 @@ class StateGraph:
           - post-restart landing state
           - post-recovery reconciliation when we can't safely label the move as an action edge
         """
-        return self.touch(sig, overlay_kind=overlay_kind, meta=meta)
+        return self.touch(sig, page_kind=page_kind, meta=meta)
 
     def record_transition(
         self,
@@ -556,20 +568,20 @@ class StateGraph:
         action: Dict[str, Any],
         *,
         touch: bool = True,
-        dst_overlay_kind: Optional[str] = None,
+        dst_page_kind: Optional[str] = None,
         dst_meta: Optional[Dict[str, Any]] = None,
-        src_overlay_kind: Optional[str] = None,
+        src_page_kind: Optional[str] = None,
         src_meta: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         IPO:
-          in : (src, dst, action_dict) and optional overlay/meta annotations
+          in : (src, dst, action_dict) and optional page_kind/meta annotations
                action_dict may represent a single step or include an `actions` list for multi-step probes.
           out: dst_was_new_at_discovery (bool)
 
         WHEN called (workflow):
           - EVERY time we execute something and then capture a new authoritative snapshot
-            (probe, forward, overlay dismissal, recovery step, replay step, drift).
+            (probe, forward, recovery step, replay step, drift).
 
         CRITICAL:
           - dst_was_new_at_discovery is computed BEFORE add_edge(), because add_edge touches nodes.
@@ -581,10 +593,10 @@ class StateGraph:
             self.add_edge_no_touch(src, dst, action)
 
         # annotate WITHOUT incrementing (avoid double-touch inflation)
-        if src_overlay_kind is not None or src_meta:
-            self.annotate(src, overlay_kind=src_overlay_kind, meta=src_meta)
-        if dst_overlay_kind is not None or dst_meta:
-            self.annotate(dst, overlay_kind=dst_overlay_kind, meta=dst_meta)
+        if src_page_kind is not None or src_meta:
+            self.annotate(src, page_kind=src_page_kind, meta=src_meta)
+        if dst_page_kind is not None or dst_meta:
+            self.annotate(dst, page_kind=dst_page_kind, meta=dst_meta)
 
         return dst_was_new
 
@@ -598,12 +610,10 @@ class StateGraph:
         return sig not in self.nodes or self.nodes[sig].visit_count <= 1
 
     def frontier_states(self, max_items: int = 10) -> List[str]:
-        # Heuristic frontier: prefer rarely visited, low-degree, recently seen non-overlay states.
+        # Heuristic frontier: prefer rarely visited, low-degree, recently seen states.
         scored: List[Tuple[float, str]] = []
         now = time.time()
         for sig, n in self.nodes.items():
-            if n.overlay_kind in ("dismiss", "loading"):
-                continue
             out_deg = len(n.outgoing)
             age = now - n.last_ts
             score = 0.0

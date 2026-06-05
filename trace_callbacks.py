@@ -554,12 +554,9 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         """
         Input: navigation result dict.
         Output: labeled action steps and colors.
-        Function: mirrors test_debug overlays for dismiss, candidate, and page-return actions.
+        Function: mirrors test_debug overlays for candidate and page-return actions.
         """
         items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
-        for idx, step in enumerate(navigation.get("overlay_dismiss_actions") or [], start=1):
-            if isinstance(step, dict):
-                items.append((f"D{idx}", step, (220, 50, 47)))
         for cand_idx, cand in enumerate(navigation.get("candidate_actions") or [], start=1):
             if not isinstance(cand, dict):
                 continue
@@ -699,7 +696,8 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             lines.extend(
                 [
                     f"- page_summary: {str(nav_body.get('page_summary') or '')}",
-                    f"- overlay_kind: {str(nav_body.get('overlay_kind') or '')}",
+                    f"- page_kind: {str(nav_body.get('page_kind') or 'legacy_unknown')}",
+                    f"- page_kind_reason: {str(nav_body.get('page_kind_reason') or '')}",
                     f"- candidate_actions: {len(nav_body.get('candidate_actions') or [])}",
                     f"- page_return_status: {str(nav_body.get('page_return_status') or 'legacy_unknown')}",
                     f"- page_return_reason: {str(nav_body.get('page_return_reason') or '')}",
@@ -965,7 +963,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             self._write_debug_summary(sig, page_dir)
         cand_count = len((result_body or {}).get("candidate_actions") or [])
         return_count = len((result_body or {}).get("page_return_actions") or [])
-        overlay_kind = (result_body or {}).get("overlay_kind") or "-"
+        page_kind = (result_body or {}).get("page_kind") or "legacy_unknown"
         self._write_event(
             "llm_result",
             ctx,
@@ -978,7 +976,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 "error": result.get("error"),
                 "candidate_count": cand_count,
                 "return_count": return_count,
-                "overlay_kind": overlay_kind,
+                "page_kind": page_kind,
                 "matched_block_ids": result.get("matched_block_ids"),
             },
         )
@@ -991,11 +989,11 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                 "duration_s": result.get("duration_s"),
                 "candidate_count": cand_count,
                 "return_count": return_count,
-                "overlay_kind": overlay_kind,
+                "page_kind": page_kind,
                 "result_path": result_path,
                 "actions_overlay_path": overlay_path,
             },
-            f"[LLM] result {kind} sig={self._safe_filename_token(sig)[:16]} overlay={overlay_kind} candidates={cand_count} return={return_count} elapsed={result.get('duration_s')}",
+            f"[LLM] result {kind} sig={self._safe_filename_token(sig)[:16]} page_kind={page_kind} candidates={cand_count} return={return_count} elapsed={result.get('duration_s')}",
         )
 
     def on_action(self, ctx: StepCtx, action: Dict[str, Any], phase: str, extra: Dict[str, Any]) -> None:  # type: ignore[override]
@@ -1109,7 +1107,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             if typ == "snapshot":
                 lines.append(f"{idx}. SNAP step={step_id} page={row.get('page')} known={row.get('known')} xml_reliable={row.get('xml_reliable')} vid={row.get('vid_count')}")
             elif typ == "llm_result":
-                lines.append(f"{idx}. LLM step={step_id} kind={row.get('kind')} candidates={row.get('candidate_count')} return={row.get('return_count')} overlay={row.get('overlay_kind')}")
+                lines.append(f"{idx}. LLM step={step_id} kind={row.get('kind')} candidates={row.get('candidate_count')} return={row.get('return_count')} page_kind={row.get('page_kind')}")
             elif typ == "action_after":
                 act = row.get("action") or {}
                 lines.append(f"{idx}. ACT step={step_id} {act.get('action')} element={act.get('element_id')} success={row.get('success')} reason={row.get('reason') or '-'}")

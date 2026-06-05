@@ -758,13 +758,14 @@ def build_interactive_html(run_dir: Path) -> Path:
         cand_ct = int(row_action.get("candidate_count", 0) or 0)
         rem_ct = int(row_action.get("remaining_count", 0) or 0)
         visit = int(node.get("visit_count", 0) or 0)
-        overlay = str(node.get("overlay_kind") or "none")
+        page_kind = str(node.get("page_kind") or nav_result.get("page_kind") or "legacy_unknown")
+        page_kind_reason = str((nav_result or {}).get("page_kind_reason") or meta.get("page_kind_reason") or "")
         fg_pkg = str(meta.get("foreground_package") or "")
         is_external = bool(target_pkg and fg_pkg and fg_pkg != target_pkg)
 
         color = "#ffe9e9" if is_external else ("#e8f5ff" if sig in unfinished else "#eef6ee")
         border = "#d23f3f" if is_external else ("#2f6fad" if sig in unfinished else "#5a8f5a")
-        label = f"{alias[sig]}\nvisit={visit} rem={rem_ct}\n{overlay}"
+        label = f"{alias[sig]}\nvisit={visit} rem={rem_ct}\n{page_kind}"
 
         vis_nodes.append(
             {
@@ -805,7 +806,8 @@ def build_interactive_html(run_dir: Path) -> Path:
             "target_package": target_pkg,
             "foreground_package": fg_pkg,
             "foreground_activity": str(meta.get("foreground_activity") or ""),
-            "overlay_kind": overlay,
+            "page_kind": page_kind,
+            "page_kind_reason": page_kind_reason,
             "xml_reliable": meta.get("xml_reliable"),
             "candidate_summary": {
                 "candidate_count": cand_ct,
@@ -1041,7 +1043,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       let html = '';
       html += `<div class="card"><div class="k">节点</div><div class="mono">${{esc(d.alias)}} | ${{esc(d.state_sig)}}</div>`;
       html += `<div style="margin-top:6px">${{tag}}`;
-      html += `<span class="pill warn">overlay=${{esc(d.overlay_kind)}}</span>`;
+      html += `<span class="pill warn">page_kind=${{esc(d.page_kind)}}</span>`;
       html += `<span class="pill warn">visit=${{esc(d.visit_count)}}</span>`;
       html += `<span class="pill warn">remaining=${{esc((d.candidate_summary || {{}}).remaining_count)}}</span>`;
       if (currentTask.task_id) {{
@@ -1095,8 +1097,8 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `</div>`;
 
       html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
-      html += `<div>overlay_kind: <span class="mono">${{esc(nav.overlay_kind ?? '-')}}</span></div>`;
-      html += `<div>overlay_reason: <span class="mono">${{esc(nav.overlay_reason ?? '-')}}</span></div>`;
+      html += `<div>page_kind: <span class="mono">${{esc(nav.page_kind ?? d.page_kind ?? 'legacy_unknown')}}</span></div>`;
+      html += `<div>page_kind_reason: <span class="mono">${{esc(nav.page_kind_reason ?? d.page_kind_reason ?? '')}}</span></div>`;
       html += `<div>candidate_count: <span class="mono">${{esc((nav.candidate_actions || []).length)}}</span></div>`;
       html += `<div>page_return_status: <span class="mono">${{esc(nav.page_return_status ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_return_reason: <span class="mono">${{esc(nav.page_return_reason ?? '')}}</span></div>`;

@@ -12,28 +12,28 @@ Core design constraints (robustness over cleverness):
 - LLM calls are slow; UI actions are fast; pipeline LLM calls with a thread pool.
 - Never "guess click" unless NAV truly failed/timed-out (NAV barrier).
 - Navigation is "complete": exhaust all candidates in a state, then backtrace (DFS-style).
-- Overlays/popups are resolved first; if not resolvable -> recovery -> restart+replay -> replan.
+- Popups/loading pages are classified as page_kind metadata; actions still flow through unified candidates.
 
 Critical StateGraph alignment (must match patched state_graph.py):
 - graph.add_edge() touches src/dst (increments visit_count).
 - Therefore: "dst is new" must be computed BEFORE recording edge.
 - Workflow does NOT duplicate that semantic:
   => We call graph.record_transition() which returns dst_was_new_at_discovery.
-- Overlay/meta updates must NOT inflate visit_count:
+- Page-kind/meta updates must NOT inflate visit_count:
   => We call graph.annotate() for flags.
 
 CONDITIONS explicitly handled:
 - DRIFT: UI changes without our logged action -> record drift edge, replan at new state.
-- OVERLAY: blocking popup/dialog -> LLM1 overlay_dismiss_actions, else recovery, else restart+replay.
+- PAGE_KIND: stable/popup/loading is recorded for debugging and UTG context, not used as a dismiss branch.
 - BACK-LIKE: a click lands in an ancestor state -> do NOT probe-return; replan at that ancestor.
 - NAV timeout: LLM1 not ready -> cancel best-effort; only then heuristics.
 - EXHAUSTED: state has no remaining unprobed candidates -> backtrace to nearest ancestor with work.
 - STUCK: progress watchdog (time/loops without progress) -> recovery then restart fallback.
 
 IMPORTANT subtlety (tabs / per-candidate return):
-- Different probes on the same page can require different unwind strategies (tab click vs close vs back).
-- LLM1 now attaches return_method/return_actions per candidate; global defaults are only fallbacks.
-- Workflow executes a candidate's return_actions FIRST; BACK is a LAST resort for tab-back/custom contexts.
+- Different pages can require different return strategies (tab click vs close vs back).
+- LLM1 now attaches page_return_actions for page-level rollback.
+- Workflow executes page_return_actions first; BACK is a last resort.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ from gpt_cls import (
     GPTClient,
     NavigationProposal,
     NavigationRouterResult,
-    OverlayKind,
+    PageKind,
     QuestionnaireUpdate,
     RecoveryProposal,
     RouterResult,
@@ -142,7 +142,6 @@ class BudgetConfig:
     # Recovery / replay / backtrace
     recovery_attempts: int = 2
     recovery_back_steps: int = 2
-    overlay_recovery_limit_per_family: int = 3  # Max unresolved overlay recovery attempts before stopping this run.
     replay_max_depth: int = 18
     backtrace_max_steps: int = 6
 
@@ -176,31 +175,7 @@ class DriftCheckResult:
     reason: str = ""
 
 
-@dataclass
-class OverlayDismissOutcome:
-    """
-    Input: result fields produced after trying one overlay dismiss sequence.
-    Output: truthy object only when the overlay was resolved and a concrete landing state is known.
-    Function: lets the main loop reuse the lightweight drift result instead of forcing a full recapture.
-    """
-    resolved: bool = False
-    next_sig: str = ""
-    next_snap: Optional[Dict[str, Any]] = None
-    drift_kind: str = ""
-    action_key: str = ""
-    reason: str = ""
-
-    def __bool__(self) -> bool:
-        """
-        Input: no arguments.
-        Output: True when overlay resolution succeeded.
-        Function: preserves compatibility with older boolean checks such as `if not outcome`.
-        """
-        return bool(self.resolved)
-
-
 class RecoveryReason(str, Enum):
-    OVERLAY_UNRESOLVED = "overlay_unresolved"
     FOREGROUND_MISMATCH = "foreground_mismatch"
     RETURN_FAILED = "return_failed"
     STUCK_NO_PROGRESS = "stuck_no_progress"
@@ -208,7 +183,6 @@ class RecoveryReason(str, Enum):
     BACKTRACE_FAILED = "backtrace_failed"
     FORWARD_ACTION_FAILED = "forward_action_failed"
     PROBE_CAPTURE_FAILED = "probe_capture_failed"
-    OVERLAY_DURING_BACKTRACE = "overlay_during_backtrace"
     CAPTURE_FAILED_AFTER_FORWARD = "capture_failed_after_forward"
 
 
@@ -656,10 +630,6 @@ class WorkflowRunner:
     # but recovery cannot reach it anymore, for example because restart/replay budget is exhausted.
     recovery_route_exhausted: bool = field(default=False, init=False)
     recovery_route_exhausted_reason: str = field(default="", init=False)
-    # Terminal guard for repeatedly unresolved blocking overlays, keyed by visual/state family.
-    overlay_recovery_counts: Dict[str, int] = field(default_factory=dict, init=False)
-    overlay_recovery_exhausted: bool = field(default=False, init=False)
-    overlay_recovery_exhausted_reason: str = field(default="", init=False)
 
     # Trace step counter
     _step_seq: int = field(default=0, init=False)
@@ -1117,7 +1087,7 @@ class WorkflowRunner:
             per_state[sig] = {
                 "state_sig": sig,
                 "family_id": fam,
-                "overlay_kind": self._overlay_kind_value(self.nav_cache.get(sig)),
+                "page_kind": self._page_kind_value(self.nav_cache.get(sig)),
                 "candidate_count": len(candidate_keys),
                 "explored_count": len([k for k in candidate_keys if k in explored]),
                 "attempted_count": len([k for k in candidate_keys if k in attempted]),
@@ -1137,7 +1107,6 @@ class WorkflowRunner:
                     sig
                     for sig, row in per_state.items()
                     if int(row.get("remaining_count", 0) or 0) > 0
-                    and str(row.get("overlay_kind") or "") != OverlayKind.DISMISS.value
                 ]
             ),
         }
@@ -1167,7 +1136,7 @@ class WorkflowRunner:
                     "visit_count": int(getattr(node, "visit_count", 0) or 0),
                     "first_ts": float(getattr(node, "first_ts", 0.0) or 0.0),
                     "last_ts": float(getattr(node, "last_ts", 0.0) or 0.0),
-                    "overlay_kind": str(getattr(node, "overlay_kind", "none") or "none"),
+                    "page_kind": str(getattr(node, "page_kind", "stable") or "stable"),
                     "meta": self._jsonable(getattr(node, "meta", {}) or {}),
                     "home_path": str(graph_home_paths.get(sig) or ""),
                     "outgoing_count": len(getattr(node, "outgoing", set()) or set()),
@@ -1285,8 +1254,6 @@ class WorkflowRunner:
         interesting = {
             "_probe_candidates",
             "_return_to_expected",
-            "_dismiss_overlay_with_nav",
-            "_handle_loading_overlay",
             "_backtrace_to",
             "_recover",
             "_restart_and_replay",
@@ -1314,7 +1281,6 @@ class WorkflowRunner:
             "entry_state",
             "new_state_discovered",
             "q_update_applied",
-            "overlay_resolved",
             "candidates_discovered",
         }
         is_strong = kind in strong_kinds
@@ -1324,69 +1290,44 @@ class WorkflowRunner:
 
         self._log_event("progress_event", kind=kind, level=("strong" if is_strong else "weak"), **(detail or {}))
 
-    def _overlay_kind_value(self, nav: Optional[NavigationProposal]) -> str:
-        if nav is None:
-            return OverlayKind.NONE.value
-        ok = getattr(nav, "overlay_kind", None)
-        if ok is None:
-            return OverlayKind.NONE.value
-        return ok.value if isinstance(ok, OverlayKind) else str(ok)
+    def _page_kind_value(self, nav: Optional[NavigationProposal]) -> str:
+        """
+        Return normalized page_kind from a navigation proposal.
 
-    def _overlay_kind_for_sig(self, sig: str, fallback: Optional[str] = None) -> str:
+        Input:
+        - nav: optional LLM navigation result for one UI state.
+
+        Output:
+        - stable/popup/loading string; stable is the safe default when nav is absent.
+
+        Function:
+        - Keeps workflow logging and StateGraph metadata independent from Pydantic enum details.
+        """
+        if nav is None:
+            return PageKind.STABLE.value
+        kind = getattr(nav, "page_kind", None)
+        if kind is None:
+            return PageKind.STABLE.value
+        return kind.value if isinstance(kind, PageKind) else str(kind)
+
+    def _page_kind_for_sig(self, sig: str, fallback: Optional[str] = None) -> str:
+        """
+        Return page_kind for a cached state signature.
+
+        Input:
+        - sig: state signature.
+        - fallback: optional value used when no cached navigation result exists.
+
+        Output:
+        - page_kind string.
+
+        Function:
+        - Provides a compact lookup for logging and replay diagnostics.
+        """
         nav = self.nav_cache.get(sig)
         if nav:
-            return self._overlay_kind_value(nav)
-        return fallback if fallback is not None else OverlayKind.NONE.value
-
-    def _allow_overlay_recovery_attempt(self, sig: str, nav: Optional[NavigationProposal], reason: str) -> bool:
-        """
-        Input: current overlay state signature, optional NavigationProposal, and the recovery reason.
-        Output: True when recovery is still allowed; False when the per-family overlay recovery budget is exhausted.
-        Function: prevents bad or impossible dismiss actions from cycling through recovery/restart forever.
-        """
-        family = self._family_id(sig)
-        limit = int(getattr(self.budget, "overlay_recovery_limit_per_family", 3) or 0)
-        if limit <= 0:
-            self._log_event("overlay_recovery_budget_disabled", sig=sig, family=family, reason=reason)
-            return True
-
-        next_count = int(self.overlay_recovery_counts.get(family, 0) or 0) + 1
-        self.overlay_recovery_counts[family] = next_count
-        overlay_kind = self._overlay_kind_value(nav)
-        self._log_event(
-            "overlay_recovery_attempt",
-            sig=sig,
-            family=family,
-            count=next_count,
-            limit=limit,
-            overlay_kind=overlay_kind,
-            reason=reason,
-        )
-        if next_count <= limit:
-            return True
-
-        self.overlay_recovery_exhausted = True
-        self.overlay_recovery_exhausted_reason = f"{family}:{reason}:attempts>{limit}"
-        self._emit_decision(
-            sig,
-            "overlay_recovery_exhausted",
-            {
-                "family": family,
-                "count": next_count,
-                "limit": limit,
-                "overlay_kind": overlay_kind,
-                "reason": reason,
-            },
-        )
-        logger.error(
-            "Overlay recovery exhausted at sig=%s family=%s count=%d limit=%d reason=%s",
-            sig[:8],
-            family[:12],
-            next_count,
-            limit,
-            reason,
-        )
-        return False
+            return self._page_kind_value(nav)
+        return fallback if fallback is not None else PageKind.STABLE.value
 
     # ---------------------------
     # Foreground package gate
@@ -1486,9 +1427,9 @@ class WorkflowRunner:
         #   - single entrypoint per exploration session
 
         # WHERE graph is updated:
-        #   - EVERY transition (probe/forward/overlay/recovery/replay/drift) -> _graph_record_transition()
+        #   - EVERY transition (probe/forward/recovery/replay/drift) -> _graph_record_transition()
         #   - Observations without clean predecessor edge -> _graph_record_observation()
-        #   - Overlay flags from NAV -> _graph_annotate(sig, overlay_kind=...)
+        #   - Page-kind metadata from NAV -> _graph_annotate(sig, page_kind=...)
 
         # WHICH state variables are authoritative:
         #   - cur_sig always matches snap["state_sig"] for the most recent authoritative snapshot.
@@ -1681,13 +1622,13 @@ class WorkflowRunner:
         #     if nav is not None and getattr(nav, "candidate_actions", None) is not None:
         #         self.state_candidates[self._family_id(cur_sig)] = list(getattr(nav, "candidate_actions") or [])
 
-        #     # Track overlay info into graph node WITHOUT inflating visit_count.
-        #     # 把 overlay 类型写回状态图节点元信息，但不增加 visit_count，避免污染统计。
+        #     # Track page_kind info into graph node WITHOUT inflating visit_count.
+        #     # 把页面形态写回状态图节点元信息，但不增加 visit_count，避免污染统计。
         #     if nav:
-        #         self._graph_annotate(cur_sig, overlay_kind=self._overlay_kind_value(nav))
+        #         self._graph_annotate(cur_sig, page_kind=self._page_kind_value(nav))
 
-        #     # 从 NAV 结果里提取当前页面的 overlay 类型，后面按类型分流处理。
-        #     overlay_kind = self._overlay_kind_value(nav)
+        #     # 从 NAV 结果里提取当前页面的 page_kind，仅用于记录。
+        #     page_kind = self._page_kind_value(nav)
 
         #     nav_exhausted = False
         #     nav_exhausted_conf = 0.0
@@ -1713,7 +1654,7 @@ class WorkflowRunner:
         #             exhausted_confidence=nav_exhausted_conf,
         #             exhausted_reason=nav_exhausted_reason[:220],
         #             ui_type=str(getattr(nav, "ui_type", "") or "") if nav else "",
-        #             overlay_kind=overlay_kind,
+        #             page_kind=page_kind,
         #             candidate_count=len(getattr(nav, "candidate_actions", []) or []) if nav else 0,
         #         )
         #         self._emit_decision(
@@ -1724,68 +1665,11 @@ class WorkflowRunner:
         #                 "confidence": nav_exhausted_conf,
         #                 "reason": nav_exhausted_reason[:220],
         #                 "ui_type": str(getattr(nav, "ui_type", "") or "") if nav else "",
-        #                 "overlay_kind": overlay_kind,
+        #                 "page_kind": page_kind,
         #             },
         #         )
 
-        #     # CONDITION: OVERLAY (blocking dismiss / loading)
-        #     # 如果当前页面被可关闭弹窗阻塞，先优先处理弹窗，而不是继续正常探索。
-        #     if overlay_kind == OverlayKind.DISMISS.value:
-        #         # 记录“发现可关闭 overlay”的信息日志。
-        #         logger.info("Overlay(DISMISS) at sig=%s: %s", cur_sig[:8], (getattr(nav, "overlay_reason", "") or "")[:140])
-        #         # 把 overlay 检测结果写入 trace / log。
-        #         self._log_event("overlay_detected", sig=cur_sig, overlay_kind=overlay_kind, reason=getattr(nav, "overlay_reason", ""))
-
-        #         # 先尝试按 LLM1 给出的 dismiss 动作去关闭弹窗。
-        #         resolved = self._dismiss_overlay_with_nav(cur_sig, snap, nav, task)
-        #         # 如果 LLM1 没能关掉弹窗，则进入更通用的恢复流程。
-        #         if not resolved:
-        #             # 记录告警，说明 overlay 处理失败，准备 recovery。
-        #             logger.warning("Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.")
-        #             # 调用 recovery 尝试把页面带回稳定非阻塞状态。
-        #             ok = self._recover(cur_sig, snap, reason=RecoveryReason.OVERLAY_UNRESOLVED, task=task, target_sig=None)
-        #             # 如果 recovery 也失败，只能通过重启 app + best-effort replay 自救。
-        #             if not ok:
-        #                 # 输出错误日志，说明进入最重的恢复分支。
-        #                 logger.error("Recovery failed. Restart app + replay best-effort.")
-        #                 # 重启应用，并尽可能回到可继续探索的位置。
-        #                 self._restart_and_replay(best_target=None, task=task, reason="overlay_unresolved_recovery_failed")
-
-        # Successful overlay dismiss already runs lightweight drift and returns the landing state.
-        # Do not force another full capture here, because visual-id extraction can reshuffle anchors.
-        #         if resolved:
-        #             cur_sig = str(resolved.next_sig or cur_sig)
-        #             snap = resolved.next_snap or snap
-        #         else:
-        # Recovery/restart can relocate the app without a clean edge, so use a full snap only there.
-        #             snap = self._capture_and_process() or snap
-        #             cur_sig = snap["state_sig"]
-        #             self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-        #             self._schedule_state(cur_sig, snap, task)
-        #         continue
-
-        #     # 如果是 loading overlay，则先等它过去，而不是盲目点页面。
-        #     if overlay_kind == OverlayKind.LOADING.value:
-        #         # 记录 loading overlay 的出现。
-        #         logger.info("Overlay(LOADING) at sig=%s: %s", cur_sig[:8], (getattr(nav, "overlay_reason", "") or "")[:140])
-        #         # 把 loading 事件写入 trace。
-        #         self._log_event("overlay_loading", sig=cur_sig, reason=getattr(nav, "overlay_reason", ""))
-        #         # 调用 loading 专用处理逻辑，例如等待页面稳定。
-        #         self._handle_loading_overlay(cur_sig, snap, task)
-        #         # loading 结束后重新抓快照，拿到真正稳定的页面状态。
-        #         snap = self._capture_and_process() or snap
-        #         # 更新当前 sig。
-        #         cur_sig = snap["state_sig"]
-        #         # 修正 DFS 栈，使其与真实当前位置一致。
-        #         self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-        #         # 重新安排后续分析。
-        #         self._schedule_state(cur_sig, snap, task)
-        #         # 当前轮结束。
-        #         continue
-
-        #     # WORKFLOW 类型 overlay 不是阻塞弹窗，而是流程提示类信息，这里先只记录下来供调试使用。
-        #     if overlay_kind == OverlayKind.WORKFLOW.value:
-        #         self._log_event("overlay_workflow", sig=cur_sig, reason=getattr(nav, "overlay_reason", ""), hints=getattr(nav, "workflow_hints", []))
+        #     # popup/loading 不再有独立 dismiss 分支；后续统一走 candidate_actions。
 
         #     # Candidates: NAV if available; heuristics ONLY if NAV timed out/cooldown.
         #     # 生成本轮可尝试的候选动作；优先使用 NAV 结果，只有 NAV 不可用时才退化到启发式。
@@ -1800,7 +1684,7 @@ class WorkflowRunner:
         #             "plan": "evaluate_candidates",
         #             "candidate_count": len(candidates or []),
         #             "using_heuristics": bool(using_heuristics),
-        #             "overlay_kind": overlay_kind,
+        #             "page_kind": page_kind,
         #         },
         #     )
         #     # 如果本轮拿到的是正常 NAV 结果，就顺手检查候选是否还有真正可用的动作。
@@ -1828,7 +1712,7 @@ class WorkflowRunner:
         #                 "nav_low_quality",
         #                 sig=cur_sig,
         #                 candidate_count=len(getattr(nav, "candidate_actions", []) or []),
-        #                 overlay_kind=self._overlay_kind_value(nav),
+        #                 page_kind=self._page_kind_value(nav),
         #                 has_page_summary=bool(getattr(nav, "page_summary", "") or ""),
         #                 tag_count=len(getattr(nav, "page_tags", []) or []),
         #             )
@@ -1889,13 +1773,9 @@ class WorkflowRunner:
         #             dst_ok = bool(dst_sig and dst_sig != cur_sig)
         #             # 目标状态不能已经被探索穷尽。
         #             if dst_ok and (not self._is_state_exhausted(str(dst_sig))):
-        #                 # 看一下目标状态是否已经被判断为 overlay 阻塞页。
+        #                 # 第一版不按 page_kind 排除目标状态。
         #                 dst_nav = self.nav_cache.get(str(dst_sig))
-        #                 # 提取目标状态的 overlay 类型。
-        #                 overlay = self._overlay_kind_value(dst_nav)
-        #                 # 只有目标状态不是 dismiss/loading 阻塞页，才采用它的本地评分。
-        #                 if overlay not in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
-        #                     local_score = float(self._last_forward_detail.get("score") or 0.0)
+        #                 local_score = float(self._last_forward_detail.get("score") or 0.0)
         #         # 如果评分计算过程中出了异常，退回到“没有可靠本地分数”。
         #         except Exception:
         #             local_score = float("-inf")
@@ -2313,13 +2193,17 @@ class WorkflowRunner:
             if nav is not None and getattr(nav, "candidate_actions", None) is not None:
                 self.state_candidates[self._family_id(cur_sig)] = list(getattr(nav, "candidate_actions") or [])
 
-            # Track overlay info into graph node WITHOUT inflating visit_count.
-            # 把 overlay 类型写回状态图节点元信息，但不增加 visit_count，避免污染统计。
+            # Track page_kind info into graph node WITHOUT inflating visit_count.
+            # 把页面形态写回状态图节点元信息，但不增加 visit_count，避免污染统计。
             if nav:
-                self._graph_annotate(cur_sig, overlay_kind=self._overlay_kind_value(nav))
+                self._graph_annotate(
+                    cur_sig,
+                    page_kind=self._page_kind_value(nav),
+                    meta={"page_kind_reason": str(getattr(nav, "page_kind_reason", "") or "")},
+                )
 
-            # 从 NAV 结果里提取当前页面的 overlay 类型，后面按类型分流处理。
-            overlay_kind = self._overlay_kind_value(nav)
+            # 从 NAV 结果里提取当前页面形态，仅用于记录和调试，不做 dismiss 特权分支。
+            page_kind = self._page_kind_value(nav)
 
             nav_exhausted = False
             nav_exhausted_conf = 0.0
@@ -2345,7 +2229,7 @@ class WorkflowRunner:
                     exhausted_confidence=nav_exhausted_conf,
                     exhausted_reason=nav_exhausted_reason[:220],
                     ui_type=str(getattr(nav, "ui_type", "") or "") if nav else "",
-                    overlay_kind=overlay_kind,
+                    page_kind=page_kind,
                     candidate_count=len(getattr(nav, "candidate_actions", []) or []) if nav else 0,
                 )
                 self._emit_decision(
@@ -2356,71 +2240,9 @@ class WorkflowRunner:
                         "confidence": nav_exhausted_conf,
                         "reason": nav_exhausted_reason[:220],
                         "ui_type": str(getattr(nav, "ui_type", "") or "") if nav else "",
-                        "overlay_kind": overlay_kind,
+                        "page_kind": page_kind,
                     },
                 )
-
-            # CONDITION: OVERLAY (blocking dismiss / loading)
-            # 如果当前页面被可关闭弹窗阻塞，先优先处理弹窗，而不是继续正常探索。
-            if overlay_kind == OverlayKind.DISMISS.value:
-                # 记录“发现可关闭 overlay”的信息日志。
-                logger.info("Overlay(DISMISS) at sig=%s: %s", cur_sig[:8], (getattr(nav, "overlay_reason", "") or "")[:140])
-                # 把 overlay 检测结果写入 trace / log。
-                self._log_event("overlay_detected", sig=cur_sig, overlay_kind=overlay_kind, reason=getattr(nav, "overlay_reason", ""))
-
-                # 先尝试按 LLM1 给出的 dismiss 动作去关闭弹窗。
-                resolved = self._dismiss_overlay_with_nav(cur_sig, snap, nav, task)
-                # 如果 LLM1 没能关掉弹窗，则进入更通用的恢复流程。
-                if not resolved:
-                    # 同一类 overlay 多次处理失败时直接终止本次运行，避免错误 dismiss/recovery 长循环。
-                    if not self._allow_overlay_recovery_attempt(cur_sig, nav, reason="overlay_unresolved"):
-                        continue
-                    # 记录告警，说明 overlay 处理失败，准备 recovery。
-                    logger.warning("Overlay unresolved by LLM1 overlay_dismiss_actions; invoking recovery.")
-                    # 调用 recovery 尝试把页面带回稳定非阻塞状态。
-                    ok = self._recover(cur_sig, snap, reason=RecoveryReason.OVERLAY_UNRESOLVED, task=task, target_sig=None)
-                    # 如果 recovery 也失败，只能通过重启 app + best-effort replay 自救。
-                    if not ok:
-                        # 输出错误日志，说明进入最重的恢复分支。
-                        logger.error("Recovery failed. Restart app + replay best-effort.")
-                        # 重启应用，并尽可能回到可继续探索的位置。
-                        self._restart_and_replay(best_target=None, task=task, reason="overlay_unresolved_recovery_failed")
-
-                # Successful overlay dismiss already runs lightweight drift and returns the landing state.
-                # Do not force another full capture here, because visual-id extraction can reshuffle anchors.
-                if resolved:
-                    cur_sig = str(resolved.next_sig or cur_sig)
-                    snap = resolved.next_snap or snap
-                else:
-                    # Recovery/restart can relocate the app without a clean edge, so use a full snap only there.
-                    snap = self._capture_and_process() or snap
-                    cur_sig = snap["state_sig"]
-                    self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                    self._schedule_state(cur_sig, snap, task)
-                continue
-
-            # 如果是 loading overlay，则先等它过去，而不是盲目点页面。
-            if overlay_kind == OverlayKind.LOADING.value:
-                # 记录 loading overlay 的出现。
-                logger.info("Overlay(LOADING) at sig=%s: %s", cur_sig[:8], (getattr(nav, "overlay_reason", "") or "")[:140])
-                # 把 loading 事件写入 trace。
-                self._log_event("overlay_loading", sig=cur_sig, reason=getattr(nav, "overlay_reason", ""))
-                # 调用 loading 专用处理逻辑，例如等待页面稳定。
-                self._handle_loading_overlay(cur_sig, snap, task)
-                # loading 结束后重新抓快照，拿到真正稳定的页面状态。
-                snap = self._capture_and_process() or snap
-                # 更新当前 sig。
-                cur_sig = snap["state_sig"]
-                # 修正 DFS 栈，使其与真实当前位置一致。
-                self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=False)
-                # 重新安排后续分析。
-                self._schedule_state(cur_sig, snap, task)
-                # 当前轮结束。
-                continue
-
-            # WORKFLOW 类型 overlay 不是阻塞弹窗，而是流程提示类信息，这里先只记录下来供调试使用。
-            if overlay_kind == OverlayKind.WORKFLOW.value:
-                self._log_event("overlay_workflow", sig=cur_sig, reason=getattr(nav, "overlay_reason", ""), hints=getattr(nav, "workflow_hints", []))
 
             # DFS candidate execution: NAV candidates are no longer probed and returned.
             # The first unexplored candidate is executed as the next DFS branch.
@@ -2445,7 +2267,7 @@ class WorkflowRunner:
                     "plan": "dfs_evaluate_candidates",
                     "candidate_count": len(candidates or []),
                     "using_heuristics": bool(using_heuristics),
-                    "overlay_kind": overlay_kind,
+                    "page_kind": page_kind,
                     "stack_depth": len(self.dfs_stack),
                 },
             )
@@ -3819,17 +3641,17 @@ class WorkflowRunner:
         self._record_state_trace(dst)
         self._emit_transition(dst, {"kind": kind, "src": src, "dst": dst, "action": action, "dst_was_new": bool(dst_was_new)})
 
-    def _graph_annotate(self, sig: str, overlay_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+    def _graph_annotate(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
         """
         IPO:
-          in : sig and flags/meta
+          in : sig and page_kind/meta
           out: graph.annotate(sig) -> DOES NOT increment visit_count
 
         WHEN called:
-          - After NAV results to store overlay state as a graph hint
+          - After NAV results to store page_kind as a graph hint
         """
         try:
-            self.graph.annotate(sig, overlay_kind=overlay_kind, meta=meta)
+            self.graph.annotate(sig, page_kind=page_kind, meta=meta)
         except Exception:
             pass
 
@@ -4056,8 +3878,8 @@ class WorkflowRunner:
         """
         if nav is None:
             return False
-        overlay = self._overlay_kind_value(nav)
-        if overlay in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
+        page_kind = self._page_kind_value(nav)
+        if page_kind == PageKind.LOADING.value:
             return False
         summary = str(getattr(nav, "page_summary", "") or "").lower()
         ui_type = str(getattr(nav, "ui_type", "") or "").lower()
@@ -4540,9 +4362,9 @@ class WorkflowRunner:
                     except Exception:
                         pass
                     logger.debug(
-                        "NAV ready sig=%s overlay=%s cand=%d page_return_actions=%d",
+                        "NAV ready sig=%s page_kind=%s cand=%d page_return_actions=%d",
                         sig[:8],
-                        self._overlay_kind_value(nav),
+                        self._page_kind_value(nav),
                         len(getattr(nav, "candidate_actions", []) or []),
                         len(getattr(nav, "page_return_actions", []) or []),
                     )
@@ -4551,7 +4373,7 @@ class WorkflowRunner:
                     self._log_event(
                         "nav_ready",
                         sig=sig,
-                        overlay_kind=self._overlay_kind_value(nav),
+                        page_kind=self._page_kind_value(nav),
                         candidate_count=len(getattr(nav, "candidate_actions", []) or []),
                         duration_s=duration_s,
                     )
@@ -4979,155 +4801,6 @@ class WorkflowRunner:
         return None, False
 
     # ---------------------------
-    # Overlay handling
-    # ---------------------------
-
-    def _fallback_overlay_dismiss_actions(self, nav: NavigationProposal) -> List[ActionStep]:
-        """
-        Input: one NavigationProposal whose overlay_kind is dismiss but overlay_dismiss_actions may be empty.
-        Output: candidate ActionStep values that look like safe overlay dismissal controls.
-        Function: tolerates LLM schema mistakes where NO/Close/Cancel is placed in candidate_actions instead of overlay_dismiss_actions.
-        """
-        dismiss_patterns = (
-            r"\bno\b",
-            r"\bcancel\b",
-            r"\bclose\b",
-            r"\bdismiss\b",
-            r"\bdecline\b",
-            r"\bnot\s+now\b",
-            r"\blater\b",
-            r"\bskip\b",
-        )
-        out: List[ActionStep] = []
-        for cand in list(getattr(nav, "candidate_actions", []) or []):
-            for step in list(getattr(cand, "actions", []) or []):
-                label = " ".join(
-                    str(x or "").strip()
-                    for x in (
-                        getattr(step, "anchor_label", ""),
-                        getattr(step, "text", ""),
-                        getattr(step, "reasoning", ""),
-                    )
-                    if str(x or "").strip()
-                ).lower()
-                if not label:
-                    continue
-                if any(re.search(pattern, label) for pattern in dismiss_patterns):
-                    out.append(step)
-                    break
-        return out[:3]
-
-    def _dismiss_overlay_with_nav(self, sig: str, snap: Dict[str, Any], nav: NavigationProposal, task: str) -> OverlayDismissOutcome:
-        """
-        IPO:
-          in : sig+snap (overlay state), nav (LLM1 overlay plan)
-          out: OverlayDismissOutcome with landing state when overlay cleared
-
-        WHEN called:
-          - main loop when nav.overlay_kind==dismiss
-          - backtrace when encountering overlay
-
-        WHICH state:
-          - sig must match the snapshot the overlay is on
-        """
-        actions = getattr(nav, "overlay_dismiss_actions", []) or []
-        if not actions:
-            actions = self._fallback_overlay_dismiss_actions(nav)
-            if actions:
-                logger.info("Overlay at sig=%s has no dismiss_actions; using %d candidate fallback action(s).", sig[:8], len(actions))
-                self._log_event("overlay_dismiss_candidate_fallback", sig=sig, count=len(actions))
-            else:
-                logger.debug("LLM1 says overlay at sig=%s but gave no overlay_dismiss_actions.", sig[:8])
-                self._log_event("overlay_dismiss_missing_actions", sig=sig)
-                return OverlayDismissOutcome(resolved=False, next_sig=sig, next_snap=snap, reason="missing_actions")
-        self._attach_action_anchors(actions, snap.get("vid_map") or {})
-
-        for step in actions[:5]:
-            prev_sig = sig
-            prev_snap = snap
-            logger.info("Overlay action at sig=%s: %s (%s)", sig[:8], self._action_key(step), (step.reasoning or "")[:70])
-            self._log_event("overlay_dismiss_attempt", sig=sig, action=self._action_signature(step))
-            if not self._execute_action(step, snap["vid_map"], sig):
-                self._log_event("overlay_dismiss_action_failed", sig=sig, action_key=self._action_key(step))
-                continue
-            self._record_successful_action_step(step, sig, source="overlay_dismiss")
-            time.sleep(self.budget.post_action_settle_s)
-
-            drift = self._check_drift_lightweight(prev_snap, timeout_s=0.8)
-            if drift.kind == "same_state":
-                self._log_event("overlay_dismiss_no_effect", sig=prev_sig, action_key=self._action_key(step), reason=drift.reason)
-                continue
-            if drift.kind == "external":
-                drift = self._handle_external_after_action(prev_sig, self._action_key(step))
-            ns = self._snap_from_drift_result(drift, timeout_s=0.8)
-            if not ns:
-                self._log_event("overlay_dismiss_refresh_failed", sig=prev_sig, action_key=self._action_key(step), drift_kind=drift.kind)
-                continue
-
-            new_sig = ns["state_sig"]
-            self._graph_record_transition(
-                prev_sig,
-                new_sig,
-                self._actions_signature([step], vid_map=prev_snap.get("vid_map") or {}),
-                src_snap=prev_snap,
-                dst_snap=ns,
-            )
-            self._enter_state(from_sig=sig, to_sig=new_sig, via_action=self._action_key(step))
-
-            sig, snap = new_sig, ns
-
-            self._schedule_state(sig, snap, task)
-            logger.info("Overlay dismiss changed state; defer new UI classification to main loop: %s -> %s", prev_sig[:8], sig[:8])
-            self._emit_decision(
-                sig,
-                "overlay_resolved_state_changed",
-                {
-                    "via_action": self._action_signature(step),
-                    "from_sig": prev_sig,
-                    "to_sig": sig,
-                    "drift_kind": drift.kind,
-                },
-            )
-            self._mark_progress("overlay_resolved_state_changed", {"sig": sig})
-            return OverlayDismissOutcome(
-                resolved=True,
-                next_sig=sig,
-                next_snap=snap,
-                drift_kind=drift.kind,
-                action_key=self._action_key(step),
-                reason="state_changed_after_dismiss",
-            )
-
-        self._emit_decision(sig, "overlay_unresolved", {"actions_tried": len(actions)})
-        return OverlayDismissOutcome(resolved=False, next_sig=sig, next_snap=snap, reason="unresolved")
-
-    def _handle_loading_overlay(self, sig: str, snap: Dict[str, Any], task: str) -> None:
-        """
-        Bounded wait for transient loading overlays; recapture and replan.
-        """
-        t0 = time.time()
-        last_sig = sig
-        while time.time() - t0 < self.budget.loading_wait_s:
-            time.sleep(0.5)
-            ns = self._capture_and_process()
-            if not ns:
-                continue
-            new_sig = ns["state_sig"]
-            if new_sig != last_sig:
-                wait_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.5", priority=1, reasoning="loading_wait")
-                self._graph_record_transition(last_sig, new_sig, self._actions_signature([wait_step]), src_snap=snap, dst_snap=ns)
-                self._enter_state(from_sig=last_sig, to_sig=new_sig, via_action="wait:None:loading")
-                last_sig = new_sig
-                sig = new_sig
-                snap = ns
-                self._schedule_state(sig, snap, task)
-                self._drain_futures()
-
-            nav = self.nav_cache.get(sig)
-            if nav and self._overlay_kind_value(nav) != OverlayKind.LOADING.value:
-                return
-
-    # ---------------------------
     # Candidate selection
     # ---------------------------
 
@@ -5174,7 +4847,7 @@ class WorkflowRunner:
     def _candidate_actions(self, nav: Optional[NavigationProposal], snap: Dict[str, Any], allow_heuristics: bool) -> List[ActionCandidate]:
         """
         WHEN called:
-          - main loop after overlay gate to decide which actions to probe
+          - main loop to decide which unified action candidates to execute
 
         POLICY:
           - Prefer NAV candidates
@@ -6589,8 +6262,7 @@ class WorkflowRunner:
     def _pick_global_frontier(self) -> Optional[str]:
         """
         Global frontier:
-          - when no ancestor has remaining work, choose an unfinished state that is:
-              * non-overlay
+        - when no ancestor has remaining work, choose an unfinished state that is:
               * low visit_count
               * likely to yield questionnaire updates (if known)
         """
@@ -6598,8 +6270,6 @@ class WorkflowRunner:
         best_score = -1e9
 
         for sig, node in (self.graph.nodes or {}).items():
-            if getattr(node, "overlay_kind", "none") in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
-                continue
             if self._is_state_exhausted(sig):
                 continue
 
@@ -6770,8 +6440,6 @@ class WorkflowRunner:
             return None
 
         node = self.graph.get_node(target_sig)
-        if node and getattr(node, "overlay_kind", "none") in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
-            return None
         if self._is_state_exhausted(target_sig):
             return None
 
@@ -6853,8 +6521,6 @@ class WorkflowRunner:
                 continue
             if sig in self.dfs_stack:
                 # Ancestors are handled by deterministic backtrace; avoid restart thrash.
-                continue
-            if getattr(node, "overlay_kind", "none") in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
                 continue
             if self._is_state_exhausted(sig):
                 continue
@@ -6967,11 +6633,6 @@ class WorkflowRunner:
             if self._is_state_exhausted(ct):
                 self._clear_beam_commit(cur_sig=cur_sig, reason="target_exhausted")
                 commit_active = False
-            else:
-                n = self.graph.get_node(ct)
-                if n and getattr(n, "overlay_kind", "none") in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
-                    self._clear_beam_commit(cur_sig=cur_sig, reason="target_overlay")
-                    commit_active = False
 
         best = self._beam_best_target(cur_sig)
         if not best:
@@ -7071,21 +6732,6 @@ class WorkflowRunner:
             if cur_sig == target_sig:
                 return True
 
-            # Overlay during backtrace: resolve before continuing
-            nav, _ = self._wait_nav_or_fallback(cur_sig, snap2, task)
-            if nav and self._overlay_kind_value(nav) == OverlayKind.DISMISS.value:
-                logger.info("Overlay during backtrace at sig=%s -> resolve.", cur_sig[:8])
-                resolved = self._dismiss_overlay_with_nav(cur_sig, snap2, nav, task)
-                if not resolved:
-                    if not self._allow_overlay_recovery_attempt(cur_sig, nav, reason="overlay_during_backtrace"):
-                        return False
-                    ok2 = self._recover(cur_sig, snap2, reason=RecoveryReason.OVERLAY_DURING_BACKTRACE, task=task, target_sig=target_sig)
-                    if not ok2:
-                        return False
-                snap3 = resolved.next_snap if resolved else self._capture_and_process()
-                if snap3 and str(snap3.get("state_sig") or "") == target_sig:
-                    return True
-
             snap = snap2
 
         return False
@@ -7165,11 +6811,6 @@ class WorkflowRunner:
 
             # probe 结果如果显示“目标页还是当前页”，说明这个候选基本没带来前进价值，跳过。
             if dst_sig == src_sig:
-                continue
-
-            # 如果目标页已经被识别成 dismiss / loading 这类 overlay，就不把它当作正式 forward 目标。
-            dst_nav = self.nav_cache.get(dst_sig)
-            if dst_nav and self._overlay_kind_value(dst_nav) in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value):
                 continue
 
             # 如果目标子页面本身已经 exhausted（没有可继续探索的价值），就不要再 commit 过去。
@@ -7293,10 +6934,21 @@ class WorkflowRunner:
     # ---------------------------
 
     def _is_nonblocking_state(self, sig: str) -> bool:
+        """
+        Return whether a state has a cached navigation proposal.
+
+        Input:
+        - sig: state signature.
+
+        Output:
+        - True when the state has been analyzed and can participate in generic recovery/replay.
+
+        Function:
+        - The old implementation filtered dismiss/loading overlays. Page-kind is now descriptive only,
+          so this helper no longer filters by page shape.
+        """
         nav = self.nav_cache.get(sig)
-        if not nav:
-            return False
-        return self._overlay_kind_value(nav) not in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value)
+        return bool(nav)
 
     def _validate_recovery_step(self, step: ActionStep, snap: Dict[str, Any]) -> Tuple[bool, str]:
         vid_map = snap.get("vid_map") or {}
@@ -7427,26 +7079,6 @@ class WorkflowRunner:
                     return True, sig, snap
             return False, sig, snap
 
-        if reason in (RecoveryReason.OVERLAY_UNRESOLVED, RecoveryReason.OVERLAY_DURING_BACKTRACE):
-            close_ids = self._heuristic_close_elements(snap["vid_map"])
-            for eid in close_ids[:3]:
-                st = ActionStep(action=ActionType.CLICK, element_id=eid, priority=1, reasoning="recovery_close")
-                self._log_event("recovery_deterministic_step", sig=sig, action=self._action_signature(st))
-                ok, sig, snap = self._apply_recovery_step(st, sig, snap, task)
-                if not ok:
-                    continue
-                if self._is_nonblocking_state(sig):
-                    return True, sig, snap
-            for _ in range(2):
-                st = ActionStep(action=ActionType.BACK, element_id=None, priority=1, reasoning="recovery_back")
-                self._log_event("recovery_deterministic_step", sig=sig, action=self._action_signature(st))
-                ok, sig, snap = self._apply_recovery_step(st, sig, snap, task)
-                if not ok:
-                    continue
-                if self._is_nonblocking_state(sig):
-                    return True, sig, snap
-            return False, sig, snap
-
         if reason == RecoveryReason.STUCK_NO_PROGRESS:
             target = self._nearest_ancestor_with_remaining_work(sig)
             if target:
@@ -7483,7 +7115,7 @@ class WorkflowRunner:
         """
         IPO:
           in : current sig+snap, reason, optional target_sig
-          out: True if we reach a stable non-overlay state or target_sig
+          out: True if recovery reaches an analyzable state or target_sig
         """
         if not isinstance(reason, RecoveryReason):
             try:
@@ -7547,7 +7179,7 @@ class WorkflowRunner:
             logger.info("LLM3 recovery steps=%d why=%s", len(steps), (getattr(rec, "why", "") or "")[:140])
 
             no_effect_steps = 0
-            prev_overlay = self._overlay_kind_for_sig(sig)
+            prev_page_kind = self._page_kind_for_sig(sig)
             for st in steps[:5]:
                 valid, why = self._validate_recovery_step(st, snap)
                 if not valid:
@@ -7556,13 +7188,13 @@ class WorkflowRunner:
                 self._log_event("recovery_step_accept", sig=sig, action=self._action_signature(st))
 
                 prev_sig = sig
-                prev_overlay = self._overlay_kind_for_sig(sig, fallback=prev_overlay)
+                prev_page_kind = self._page_kind_for_sig(sig, fallback=prev_page_kind)
                 ok, sig, snap = self._apply_recovery_step(st, sig, snap, task)
                 if not ok:
                     continue
 
-                new_overlay = self._overlay_kind_for_sig(sig, fallback=prev_overlay)
-                if sig == prev_sig and new_overlay == prev_overlay:
+                new_page_kind = self._page_kind_for_sig(sig, fallback=prev_page_kind)
+                if sig == prev_sig and new_page_kind == prev_page_kind:
                     no_effect_steps += 1
                 else:
                     no_effect_steps = 0
@@ -7916,16 +7548,6 @@ class WorkflowRunner:
                 reached = True
                 self._log_event("replay_reached", sig=cur, target_sig=best_target)
                 break
-
-            # Overlay during replay: attempt resolve; if fails, stop replay
-            nav = self.nav_cache.get(cur)
-            if nav and self._overlay_kind_value(nav) == OverlayKind.DISMISS.value:
-                resolved_overlay = self._dismiss_overlay_with_nav(cur, snap, nav, task)
-                if not resolved_overlay:
-                    self._log_event("replay_diverged", sig=cur, step_index=i + 1, reason="overlay_unresolved")
-                    break
-                cur = str(resolved_overlay.next_sig or cur)
-                snap = resolved_overlay.next_snap or snap
 
             if not ok:
                 self._log_event("replay_diverged", sig=cur, step_index=i + 1, reason="action_failed")
@@ -8411,19 +8033,12 @@ class WorkflowRunner:
                         self._emit_action(sig_for_trace, action_sig, "after", {"success": True, "via": "navigate_up", **common_extra})
                         return True
 
-                # Settings root safety: never press system BACK from the top activity (would exit to launcher),
-                # unless we're clearly dismissing an overlay.
+                # Settings root safety: never press system BACK from the top activity because it can exit to launcher.
                 if self._is_settings_root_state(vid_map):
-                    try:
-                        nav = self.nav_cache.get(sig_for_trace)
-                        ok_overlay = nav and (self._overlay_kind_value(nav) in (OverlayKind.DISMISS.value, OverlayKind.LOADING.value))
-                    except Exception:
-                        ok_overlay = False
-                    if not ok_overlay:
-                        self.last_action_failure = {"reason": "back_blocked_settings_root", "action": self._action_signature(step)}
-                        self._log_event("back_blocked_settings_root", sig=sig_for_trace, action=self._action_signature(step))
-                        self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "back_blocked_settings_root", **common_extra})
-                        return False
+                    self.last_action_failure = {"reason": "back_blocked_settings_root", "action": self._action_signature(step)}
+                    self._log_event("back_blocked_settings_root", sig=sig_for_trace, action=self._action_signature(step))
+                    self._emit_action(sig_for_trace, action_sig, "after", {"success": False, "reason": "back_blocked_settings_root", **common_extra})
+                    return False
 
                 self.appium.back()
 
@@ -8658,8 +8273,6 @@ class WorkflowRunner:
     def _stop_condition_reason(self, start: float) -> str:
         if (time.time() - start) >= self.budget.time_budget_s:
             return "time_budget_reached"
-        if self.overlay_recovery_exhausted:
-            return "overlay_recovery_exhausted"
         if self.recovery_route_exhausted:
             return "recovery_route_exhausted"
         # Hard stop if we haven't made strong progress for too long (prevents infinite recover loops).

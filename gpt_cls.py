@@ -58,11 +58,12 @@ class ActionType(str, Enum):
     COMPLETE = "complete"
     NONE = "none"
 
-class OverlayKind(str, Enum):
-    NONE = "none"
-    DISMISS = "dismiss"      # permission/rate/cookie/etc
-    WORKFLOW = "workflow"    # login/search/filter/form/otp
-    LOADING = "loading"      # spinner / transition
+class PageKind(str, Enum):
+    """High-level current UI shape used for task-aware planning and UTG metadata."""
+
+    STABLE = "stable"
+    POPUP = "popup"
+    LOADING = "loading"
 
 
 class PageReturnStatus(str, Enum):
@@ -133,18 +134,19 @@ class ActionStep(BaseModel):
 
 class ActionCandidate(BaseModel):
     """
-    LLM navigation candidate for exploration only.
+    LLM navigation candidate for the current UI action pool.
 
     Input:
-    - Ordered action steps that may reveal new UI/evidence.
+    - Ordered action steps that may reveal evidence, advance the active task,
+      start a child task, or remove a blocker.
 
     Output:
-    - A scored candidate that should not include page return/close/back controls.
+    - A scored candidate that workflow can execute while exploring this page.
     """
 
     actions: List[ActionStep] = Field(
         ...,
-        description="Ordered exploration steps for this candidate. Must not be empty. Do not include page-return controls.",
+        description="Ordered steps for this candidate. Must not be empty.",
         min_items=1,
     )
     score: float = Field(
@@ -169,24 +171,26 @@ class ActionCandidate(BaseModel):
 
 class NavigationProposal(BaseModel):
     """
-    LLM1 output: compact overlay handling, exploration candidates, and page-level return plan.
+    LLM1 output: page classification, unified action candidates, and page-level return plan.
     """
     state_sig: str = Field(..., description="Echo input state_sig for staleness/debug")
 
     page_summary: str = Field(..., description="One-line summary of current page")
 
-    overlay_kind: OverlayKind = Field(OverlayKind.NONE, description="Overlay type classification")
-    overlay_reason: str = Field("", description="Short reason for overlay_kind")
-    overlay_dismiss_actions: List[ActionStep] = Field(
-        default_factory=list,
-        description="Actions to dismiss blocking overlays; only for overlay_kind=dismiss.",
+    page_kind: PageKind = Field(
+        PageKind.STABLE,
+        description=(
+            "Current UI shape. Use stable for normal complete pages, popup for dialogs/overlays/bottom sheets, "
+            "and loading for incomplete loading screens."
+        ),
     )
+    page_kind_reason: str = Field("", description="Short reason for page_kind.")
 
     candidate_actions: List[ActionCandidate] = Field(
         default_factory=list,
         description=(
-            "Exploration candidates only. Do not include back, close, up, or already-visited "
-            "tab-switch controls unless they are likely to reveal new content."
+            "Unified action candidates for this UI. Actions may continue the active task, start a child task, "
+            "or remove a blocker so the active task can continue."
         ),
     )
 
@@ -195,7 +199,8 @@ class NavigationProposal(BaseModel):
         description=(
             "Visible page-level return/exit actions to use after candidate_actions are completed. "
             "Examples: visible back arrow, close button, or tab switch to a previous/root page. "
-            "Do not duplicate candidate_actions. If no visible return control exists, keep empty."
+            "The same action may also appear in candidate_actions when it has both meanings. "
+            "If no visible return control exists, keep empty."
         ),
     )
     page_return_status: PageReturnStatus = Field(
@@ -218,8 +223,8 @@ class RecoveryProposal(BaseModel):
 
     page_summary: str = Field(..., description="What screen looks like and why stuck")
     target_hint: str = Field("", description="Frontier/goal hint")
-    overlay_kind: OverlayKind = Field(OverlayKind.NONE, description="Overlay type classification")
-    overlay_reason: str = Field("", description="Why overlay_kind was chosen")
+    page_kind: PageKind = Field(PageKind.STABLE, description="Current UI shape classification")
+    page_kind_reason: str = Field("", description="Why page_kind was chosen")
     candidate_actions: List[ActionStep] = Field(default_factory=list, description="Up to 5 steps to escape")
     why: str = Field("", description="Short explanation of recovery strategy (no hidden CoT)")
 
@@ -470,12 +475,22 @@ INPUTS:
 - xml_reliable: whether XML-derived structure is reliable. If false, trust screenshot evidence more than labels/tree semantics.
 - screenshot: primary visual evidence.
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- ui_digest/XML is auxiliary evidence for element ids and possible structure; use it to align visible screenshot controls to actionable element_id values.
+- Do not over-rely on ui_digest/XML labels when they conflict with the screenshot.
+- If xml_reliable=false, treat UI tree labels and structure as weak hints only.
+- If the screenshot shows that the main content is blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete, treat the page as not fully loaded even if ui_digest/XML lists buttons or labels.
+- Peripheral chrome such as a top bar, bottom toolbar, or ad banner is not enough to classify a page as stable when the central/main content area is blank, black, or visually unavailable.
+- A stable page requires the primary task/content area to be visibly complete and usable, not merely that some toolbar controls are detected.
+- Only propose actions on controls that are visually present and plausibly usable in the screenshot.
+- For page_kind, return actions, candidate actions, router answers, and questionnaire evidence, prefer screenshot evidence over UI-tree-only evidence.
+
 OUTPUT (strict JSON matching NavigationProposal):
 - state_sig
 - page_summary
-- overlay_kind
-- overlay_reason
-- overlay_dismiss_actions
+- page_kind
+- page_kind_reason
 - candidate_actions
 - page_return_actions
 - page_return_status
@@ -488,21 +503,23 @@ ACTION STEP RULES:
 - text is used only for input actions.
 - reasoning should be short, preferably <=6 words.
 
-OVERLAY RULES:
-- overlay_kind must be one of: none | dismiss | workflow | loading.
-- If overlay_kind=dismiss, you MUST provide overlay_dismiss_actions.
-- If overlay_kind=dismiss, put ALL safe close/deny/not-now/OK/skip/continue-past-popup actions in overlay_dismiss_actions, ordered safest first.
-- If overlay_kind=dismiss, candidate_actions MUST be empty because the screen is blocked until the overlay is gone.
-- Do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
-- Prefer explicit X, Close, Cancel, No thanks, Not now, Later, Skip, Continue, Agree, OK, or Got it controls.
-- If overlay_kind is not dismiss, keep overlay_dismiss_actions empty.
+PAGE KIND RULES:
+- Set page_kind for the current UI:
+  * stable: a normal complete page or a stable screen that can be analyzed as its own UI state.
+  * popup: a dialog, modal, bottom sheet, overlay, subscription panel, permission prompt, rating prompt, ad panel, login prompt, policy panel, or similar layer over another page.
+  * loading: the page or its main content is still loading, incomplete, skeleton-like, spinner-based, or waiting for content.
+- page_kind is descriptive metadata. It does not decide actions by itself.
+- Do not automatically close a popup just because page_kind=popup.
+- Do not automatically explore a popup just because it has buttons.
+- Select actions by task, history, router/questionnaire relevance, and visible UI evidence.
 
-CANDIDATE ACTION RULES:
-- candidate_actions are exploration actions only.
-- If overlay_kind=dismiss, candidate_actions MUST be [].
-- Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+UNIFIED ACTION PLANNING:
+- For every UI, including stable pages, popups, dialogs, overlays, bottom sheets, and loading screens, candidate_actions is the unified action pool.
+- Include actions that serve the active task, collect questionnaire evidence, or remove a blocker so the active task can continue.
+- Exclude irrelevant, repetitive, unsafe, external, or purely distracting actions.
+- If an action removes an irrelevant blocker and returns to the underlying task, include it in candidate_actions with action_role=continue_current_task.
+- If an action serves the active task directly, include it with action_role=continue_current_task.
 - Do not include login/sign-in/social-login actions unless the task explicitly requires account login or no other useful non-auth exploration exists.
-- Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
 - Prefer visible primary actions, menus, tabs, settings, shop/purchase, profile/account, help/about, game start/level, rewards, or other evidence-bearing surfaces.
 - Each candidate should have 1..3 actions and score in [-1, 1].
 
@@ -516,12 +533,19 @@ PAGE RETURN RULES:
 - Always explain the status in page_return_reason.
 - If page_return_status=has_visible_return, fill page_return_actions with the visible controls.
 - If page_return_status=no_return_needed or needs_return_but_no_visible_control, keep page_return_actions=[].
-- Do not duplicate any element_id/action already listed in candidate_actions or overlay_dismiss_actions.
+- The same UI action may appear in both candidate_actions and page_return_actions when it both serves the current task and acts as a valid page-level return action.
+- Do not remove an action merely because it appears in both lists.
 - If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
+
+LOADING PAGE RULES:
+- If the central/main content area is blank, black, heavily dimmed, or visually unavailable while only peripheral controls remain visible, set page_kind=loading.
+- If page_kind=loading, prefer a wait action in candidate_actions.
+- Do not propose deep actions based on incomplete loading content.
+- Do not answer questionnaire evidence from placeholders or incomplete loading content.
+- Do not output page_return_actions unless there is a clear visible cancel/back control.
 
 CONSISTENCY RULES:
 - Every referenced element_id must exist in ui_digest.
-- Never put the same element_id in candidate_actions and page_return_actions.
 - Keep uncertain actions omitted rather than guessed.
 - Do not spam random clicks.
 - Do not intentionally leave the app unless clearly necessary for questionnaire evidence.
@@ -594,6 +618,12 @@ INPUTS:
   }
 - screenshot: the current UI screenshot; this is the primary evidence source
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- Structured UI/page-source data is auxiliary evidence; do not use it to answer questions when the screenshot does not visibly support the answer.
+- If the screenshot shows blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete main content, skip router answers based on that incomplete content.
+- app_intro/focus_hints are weak priors only; current-screen screenshot evidence has priority.
+
 OUTPUT (strict JSON matching RouterResult):
 - router_updates: 0..12 router answers, each with:
   - question_id (prefer full_id from router_questions; local id is acceptable only if full_id is absent)
@@ -632,6 +662,17 @@ INPUTS:
 - xml_reliable: tells whether XML-derived UI structure is reliable for this snap.
 - screenshot: current UI screenshot; primary visual evidence.
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- ui_digest/XML is auxiliary evidence for element ids and possible structure; use it to align visible screenshot controls to actionable element_id values.
+- Do not over-rely on ui_digest/XML labels when they conflict with the screenshot.
+- If xml_reliable=false, treat UI tree labels and structure as weak hints only.
+- If the screenshot shows that the main content is blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete, treat the page as not fully loaded even if ui_digest/XML lists buttons or labels.
+- Peripheral chrome such as a top bar, bottom toolbar, or ad banner is not enough to classify a page as stable when the central/main content area is blank, black, or visually unavailable.
+- A stable page requires the primary task/content area to be visibly complete and usable, not merely that some toolbar controls are detected.
+- Only propose actions on controls that are visually present and plausibly usable in the screenshot.
+- For navigation.page_kind, page_return_actions, candidate_actions, task decisions, router answers, and questionnaire evidence, prefer screenshot evidence over UI-tree-only evidence.
+
 OUTPUT (strict JSON matching NavigationRouterResult):
 - state_sig
 - task_id: echo current_task.task_id when present.
@@ -653,15 +694,24 @@ DECISION ORDER:
 
 NAVIGATION RULES:
 - Use utg_context to understand where CURRENT is in the known UI transition graph before selecting actions.
-- If navigation.overlay_kind=dismiss, put all close/deny/not-now/OK/skip/continue-past-popup actions in navigation.overlay_dismiss_actions and set navigation.candidate_actions=[].
-- If navigation.overlay_kind=dismiss, do not choose fullscreen/root/container elements as dismiss targets unless that element is the only clearly tappable close/continue control.
+- Set navigation.page_kind for the current UI:
+  - stable: a normal complete page or stable screen.
+  - popup: a dialog, modal, bottom sheet, overlay, subscription panel, permission prompt, ad panel, policy panel, or similar layer over another page.
+  - loading: the page or its main content is still loading, incomplete, skeleton-like, spinner-based, or waiting for content.
+- When judging navigation.page_kind, look at the screenshot in a human, visual way first.
+- If the main content area looks like it has not really appeared yet--for example it is mostly black, mostly white, empty, or only shows surrounding bars/tools while the real content is missing--treat it as loading or visually incomplete.
+- In that situation, do not call the page stable just because ui_digest/XML contains some buttons, labels, or clickable elements.
+- navigation.page_kind is descriptive metadata. It does not decide actions by itself.
+- Do not automatically close a popup just because page_kind=popup.
+- Do not automatically explore a popup just because it has buttons.
 - navigation.candidate_actions are the current UI action pool. They may continue the active task or start child tasks.
 - For actions that continue the active task, set action_role=continue_current_task and starts_task_type="".
 - For actions that enter proposed_tasks, set action_role=start_child_task, starts_task_type to that proposed task's task_type, and starts_task_depth to that proposed task's exploration_depth.
 - If task_decision.current_task_done=true, do not output continue_current_task candidate_actions unless a necessary final close/return action is required.
-- Do not include back, close, up, return, or already-visited tab-switch controls in candidate_actions unless they likely open genuinely new content.
+- Include actions that serve the active task, create a useful child task, collect router evidence, or remove a blocker so the active task can continue.
+- If an action removes an irrelevant blocker and returns to the underlying task, include it in candidate_actions with action_role=continue_current_task.
+- If an action opens relevant evidence or a meaningful branch for a different goal, include it in candidate_actions with action_role=start_child_task.
 - Do not include login/sign-in/social-login actions unless the task explicitly requires account login or no other useful non-auth exploration exists.
-- Actions whose main effect is returning to a previous/visited page should be omitted or receive very low priority.
 - navigation.page_return_actions are page-level return/exit actions to use only after all candidate_actions on this page are completed.
 - Typical page_return_actions: visible back arrow, close/X button, or tab switch back to a previous/root page.
 - PAGE RETURN RULES WITH UTG:
@@ -680,8 +730,15 @@ NAVIGATION RULES:
   - Do not generate page_return_actions back to splash/loading/startup pages.
   - If CURRENT was reached by bottom-tab switching, prefer switching back to the previous/home tab instead of Android back.
   - If no visible return, close, up, or tab-return control exists, keep page_return_actions=[].
-- Do not duplicate any element_id/action between candidate_actions, overlay_dismiss_actions, and page_return_actions.
+- The same UI action may appear in both candidate_actions and page_return_actions when it has both meanings:
+  1. it actively serves the current task or starts a useful child task, and
+  2. it is also a valid page-level return action to a parent, ancestor, or home state.
+- Do not remove an action merely because it appears in both lists.
 - If no visible return/close/up/tab-return control exists, output page_return_actions=[]. Do not invent a return action.
+- If navigation.page_kind=loading, prefer a wait action in navigation.candidate_actions.
+- If the central/main content area is blank, black, heavily dimmed, or visually unavailable while only peripheral controls remain visible, set navigation.page_kind=loading.
+- If navigation.page_kind=loading, do not propose child tasks or router answers based on incomplete loading content.
+- If navigation.page_kind=loading, do not output page_return_actions unless there is a clear visible cancel/back control.
 - Do not output screenshot coordinates or bounding boxes.
 - Navigation action element_id values MUST come from ui_digest ids.
 - If xml_reliable is false, trust screenshot evidence more than labels/tree semantics.
@@ -696,7 +753,7 @@ TASK RULES:
 - First-version executable proposed tasks require entry_action. If no entry action is visible, do not propose that task.
 - If proposed_tasks includes an entry_action, include the same action in navigation.candidate_actions with action_role=start_child_task.
 - Do not use internal task ids in candidate actions. Workflow creates ids like task_0002 after your response.
-- Useful task_type values include enter_main_page, explore_policy, explore_payment, explore_settings, explore_account, explore_core_feature, dismiss_overlay, and generic.
+- Useful task_type values include enter_main_page, explore_policy, explore_payment, explore_settings, explore_account, explore_core_feature, and generic.
 - Use explore_core_feature for ordinary important app/game features such as play, online mode, statistics, feature pages, content browsing, or other primary app functions.
 - proposed_tasks.priority is a 0-1 importance score. Use values near 1.0 for core app features and strong questionnaire-relevant entries; use lower values for minor or weakly relevant entries.
 - proposed_tasks.exploration_depth controls detail level only. It does not change the numeric step budget.
@@ -825,6 +882,12 @@ INPUTS:
   }
 - screenshot: current UI screenshot; this is the primary evidence source
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- Structured UI/page-source data is auxiliary evidence; do not use it to answer questions when the screenshot does not visibly support the answer.
+- If the screenshot shows blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete main content, skip questionnaire updates based on that incomplete content.
+- app_intro/focus_hints are weak priors only; current-screen screenshot evidence has priority.
+
 OUTPUT (strict JSON matching QuestionnaireUpdate):
 - proposed_updates: only include updates justified by this screen.
 - For single-select questions: new_answer should be ONE option id/value string.
@@ -874,6 +937,12 @@ INPUTS:
   }
 - screenshot: current UI screenshot
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- Structured UI/page-source data is auxiliary evidence; do not use it to answer questions when the screenshot does not visibly support the answer.
+- If the screenshot shows blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete main content, skip questionnaire updates based on that incomplete content.
+- app_intro/focus_hints are weak priors only; current-screen screenshot evidence has priority.
+
 OUTPUT (strict JSON matching BlocksFillResult):
 - block_results: one item per block that has answerable questions:
   - block_id: must be one of the provided block ids
@@ -910,11 +979,20 @@ OUTPUT (strict JSON matching RecoveryProposal):
 - ui_view required (concise)
 - candidate_actions <= 5
 - Allowed actions: click, input, back, wait, restart, none, complete
-- Choose overlay_kind from: none | dismiss | workflow | loading
+- Choose page_kind from: stable | popup | loading
+- page_kind is descriptive context; recovery actions still depend on the visible UI and target_hint.
 - For visible recovery controls, use element_id from ui_digest. Do not output screenshot coordinates or bounding boxes.
 
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- ui_digest/XML is auxiliary evidence for element ids and possible structure; use it to align visible screenshot controls to actionable element_id values.
+- Do not over-rely on ui_digest/XML labels when they conflict with the screenshot.
+- If xml_reliable=false, treat UI tree labels and structure as weak hints only.
+- If the screenshot shows blank, black, dimmed, skeleton-like, partially rendered, or visually incomplete main content, prefer wait/recovery for loading or incomplete content rather than acting on UI-tree-only controls.
+- Only propose recovery actions on controls that are visually present and plausibly usable in the screenshot.
+
 STRATEGY:
-1) If overlay likely, propose click actions on Close/X/Cancel/Deny/Not now/OK (safe first).
+1) If a popup/dialog/blocking layer is likely, propose click actions on Close/X/Cancel/Deny/Not now/OK (safe first).
 2) If return failed, propose actions to return to stable state (close dialog, back, or click top-left back icon).
 3) If truly stuck, propose restart as last resort.
 """
@@ -1008,7 +1086,7 @@ class GPTClient:
         - Persist the exact payload when debug_payload_path is provided.
 
         Output:
-        - NavigationProposal with overlay handling and candidate actions.
+        - NavigationProposal with page classification, candidate actions, and page return actions.
         """
         ui_digest = _compact_digest(ui_json, limit=240)
         payload = {
@@ -1042,7 +1120,6 @@ class GPTClient:
         ]
 
         out = self._call_structured(messages, NavigationProposal, opname="propose_navigation")
-        out.overlay_dismiss_actions = list(out.overlay_dismiss_actions or [])[:5]
         out.candidate_actions = list(out.candidate_actions or [])[:10]
         for c in out.candidate_actions:
             c.actions = list(c.actions or [])[:3]
@@ -1275,7 +1352,6 @@ class GPTClient:
         out.navigation.state_sig = state_sig or out.navigation.state_sig
         out.router.state_sig = state_sig or out.router.state_sig
 
-        out.navigation.overlay_dismiss_actions = list(out.navigation.overlay_dismiss_actions or [])[:5]
         out.navigation.candidate_actions = list(out.navigation.candidate_actions or [])[:10]
         for candidate in out.navigation.candidate_actions:
             candidate.actions = list(candidate.actions or [])[:3]
@@ -1776,7 +1852,7 @@ __all__ = [
     "ActionStep",
     "ActionCandidate",
     "ActionType",
-    "OverlayKind",
+    "PageKind",
     "NavigationProposal",
     "NavigationRouterResult",
     "TaskDecision",

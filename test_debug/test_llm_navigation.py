@@ -181,13 +181,9 @@ def draw_labeled_box(draw: ImageDraw.ImageDraw, frame: Dict[str, int], label: st
 def iter_action_steps_for_overlay(result: Dict[str, Any]) -> List[tuple[str, Dict[str, Any], tuple[int, int, int]]]:
     """
     Input: NavigationProposal JSON payload.
-    Output: labeled overlay/candidate/page-return action steps with colors for rendering.
+    Output: labeled candidate/page-return action steps with colors for rendering.
     """
     items: List[tuple[str, Dict[str, Any], tuple[int, int, int]]] = []
-    for idx, step in enumerate(result.get("overlay_dismiss_actions") or [], start=1):
-        if isinstance(step, dict):
-            items.append((f"O{idx}", step, (220, 50, 47)))
-
     for cand_idx, candidate in enumerate(result.get("candidate_actions") or [], start=1):
         if not isinstance(candidate, dict):
             continue
@@ -392,8 +388,8 @@ def process_one_snap(gpt: GPTClient, snap_path: Path, output_run_dir: Path) -> b
     draw_llm_actions_overlay(snap, result if isinstance(result, dict) else {}, out_dir / "llm_navigation_actions_overlay.png")
 
     candidate_count = len((result or {}).get("candidate_actions") or []) if isinstance(result, dict) else 0
-    overlay_kind = (result or {}).get("overlay_kind") if isinstance(result, dict) else ""
-    print(f"[OK] {snap_path.parent.name} elapsed_s={elapsed_s:.3f} overlay={overlay_kind} candidates={candidate_count}")
+    page_kind = (result or {}).get("page_kind") if isinstance(result, dict) else "legacy_unknown"
+    print(f"[OK] {snap_path.parent.name} elapsed_s={elapsed_s:.3f} page_kind={page_kind} candidates={candidate_count}")
     return True
 
 

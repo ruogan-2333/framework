@@ -24,17 +24,19 @@ def test_home_paths_follow_shortest_known_edges() -> None:
     Function: confirms text UTG paths follow known graph edges.
     """
     graph = StateGraph()
-    graph.record_observation("xml:home", meta={"page_summary": "Main home screen."})
+    graph.record_observation("xml:home", page_kind="stable", meta={"page_summary": "Main home screen."})
     graph.record_transition(
         "xml:home",
         "xml:personal",
         {"actions": [{"action": "click", "text": "Personal"}]},
+        dst_page_kind="popup",
         dst_meta={"page_summary": "Personal tab."},
     )
     graph.record_transition(
         "xml:personal",
         "xml:settings",
         {"actions": [{"action": "click", "text": "Settings"}]},
+        dst_page_kind="stable",
         dst_meta={"page_summary": "Settings page."},
     )
 
@@ -47,6 +49,8 @@ def test_home_paths_follow_shortest_known_edges() -> None:
     assert "HOME: UI1" in result.text
     assert "CURRENT: UI3" in result.text
     assert "PARENT: UI2" in result.text
+    assert "page_kind=popup" in result.text
+    assert "page_kind=stable" in result.text
     assert "UI3: home > click Personal > click Settings" in result.text
     assert result.home_paths["xml:settings"] == "home > click Personal > click Settings"
 
