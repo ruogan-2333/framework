@@ -698,6 +698,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     f"- page_summary: {str(nav_body.get('page_summary') or '')}",
                     f"- page_kind: {str(nav_body.get('page_kind') or 'legacy_unknown')}",
                     f"- page_kind_reason: {str(nav_body.get('page_kind_reason') or '')}",
+                    f"- page_tags: {', '.join([str(x) for x in (nav_body.get('page_tags') or [])])}",
                     f"- candidate_actions: {len(nav_body.get('candidate_actions') or [])}",
                     f"- page_return_status: {str(nav_body.get('page_return_status') or 'legacy_unknown')}",
                     f"- page_return_reason: {str(nav_body.get('page_return_reason') or '')}",
@@ -759,7 +760,8 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     entry = task.get("entry_action") if isinstance(task.get("entry_action"), dict) else {}
                     label = str(entry.get("anchor_label") or entry.get("text") or entry.get("reasoning") or "")
                     lines.append(
-                        f"- T{idx}: priority={task.get('priority')}, depth={task.get('exploration_depth')}, type={task.get('task_type')}, "
+                        f"- T{idx}: priority={task.get('priority')}, type_priority={task.get('type_priority')}, llm_priority={task.get('llm_priority')}, "
+                        f"depth={task.get('exploration_depth')}, type={task.get('task_type')}, "
                         f"entry={entry.get('action')}:{entry.get('element_id')} {label}, "
                         f"prompt={str(task.get('prompt') or '')}"
                     )

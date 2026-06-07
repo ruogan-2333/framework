@@ -16,10 +16,182 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 
 EXPLORATION_DEPTHS = {"shallow", "normal", "deep"}
+
+
+class TaskType(str, Enum):
+    """
+    Predefined task categories for task-oriented UI exploration.
+
+    Input:
+    - LLM proposed task_type strings.
+
+    Output:
+    - Stable enum values accepted by workflow and prompt schema.
+
+    Function:
+    - Keeps task creation constrained to navigation goals instead of arbitrary questionnaire topics.
+    """
+
+    ENTER_MAIN_PAGE = "enter_main_page"
+    EXPLORE_MAIN_FUNCTION = "explore_main_function"
+    EXPLORE_PAYMENT = "explore_payment"
+    EXPLORE_POLICY = "explore_policy"
+    EXPLORE_SETTINGS = "explore_settings"
+    GENERIC = "generic"
+
+
+@dataclass(frozen=True)
+class TaskTypeSpec:
+    """
+    Configuration for one predefined task type.
+
+    Input:
+    - Task type enum plus human-authored description, completion goal, and defaults.
+
+    Output:
+    - Prompt-facing task metadata and workflow defaults.
+
+    Function:
+    - Separates task taxonomy from task-stack runtime state while keeping both in task_manager.py.
+    """
+
+    task_type: TaskType
+    description: str
+    completion_goal: str
+    default_priority: float
+    default_depth: str
+
+
+TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
+    TaskType.ENTER_MAIN_PAGE: TaskTypeSpec(
+        task_type=TaskType.ENTER_MAIN_PAGE,
+        description="进入 APP 的稳定主界面，跳过登录、注册、广告、引导页和无关弹窗。",
+        completion_goal="到达可以正常使用 APP 主要功能的稳定页面；如果已经到达主界面，则结束该任务，并基于主界面提出后续探索任务。",
+        default_priority=1.0,
+        default_depth="normal",
+    ),
+    TaskType.EXPLORE_MAIN_FUNCTION: TaskTypeSpec(
+        task_type=TaskType.EXPLORE_MAIN_FUNCTION,
+        description="探索 APP 的主要内容、主要功能或游戏核心玩法，并在过程中观察问卷相关证据。",
+        completion_goal="覆盖 APP 的代表性主功能页面，理解 APP 主要用途；在探索过程中记录问卷可见证据，例如内容风险、用户互动、位置分享、广告、年龄验证、防沉迷、AI 功能、儿童接触风险等。",
+        default_priority=0.75,
+        default_depth="normal",
+    ),
+    TaskType.EXPLORE_PAYMENT: TaskTypeSpec(
+        task_type=TaskType.EXPLORE_PAYMENT,
+        description="探索 APP 的支付、订阅、商店、premium、虚拟货币、随机奖励、loot box、现金兑换、NFT 或可转移数字资产等相关功能。",
+        completion_goal="找到能够回答支付相关问卷问题的页面证据，例如是否存在内购、订阅、随机奖励、虚拟货币、现金兑换或 NFT/可转移数字资产；不要执行真实购买或不可逆操作。",
+        default_priority=0.90,
+        default_depth="normal",
+    ),
+    TaskType.EXPLORE_POLICY: TaskTypeSpec(
+        task_type=TaskType.EXPLORE_POLICY,
+        description="找到并打开隐私政策、服务条款、用户协议、数据政策、儿童隐私或类似政策页面。",
+        completion_goal="记录政策页面及其入口；任务完成时应将当前页面标记为 policy 类页面，便于后续对政策页面做额外处理；当前任务不需要深入阅读全文。",
+        default_priority=0.70,
+        default_depth="shallow",
+    ),
+    TaskType.EXPLORE_SETTINGS: TaskTypeSpec(
+        task_type=TaskType.EXPLORE_SETTINGS,
+        description="探索和问卷相关的设置、控制或安全入口，重点包括隐私/安全设置、用户屏蔽、举报、聊天审核、好友/互动限制、位置分享控制、家长控制、防沉迷、儿童安全、广告/隐私控制等。",
+        completion_goal="找到和问卷关注点相关的设置项或控制项，或确认设置页没有明显相关入口；不需要深入语言、主题、声音、震动等无关设置。",
+        default_priority=0.80,
+        default_depth="normal",
+    ),
+    TaskType.GENERIC: TaskTypeSpec(
+        task_type=TaskType.GENERIC,
+        description="无法归入以上类型但可能有少量问卷价值的入口。",
+        completion_goal="只做轻度确认；如果与问卷关注点无关，应快速结束或跳过。",
+        default_priority=0.20,
+        default_depth="shallow",
+    ),
+}
+
+
+def normalize_task_type(value: Any) -> TaskType:
+    """
+    Input: raw task type value from LLM output or internal code.
+    Output: valid TaskType enum.
+    Function: falls back to generic when the value is empty, unknown, or malformed.
+    """
+    if isinstance(value, TaskType):
+        return value
+    enum_value = getattr(value, "value", None)
+    if enum_value is not None:
+        value = enum_value
+    try:
+        return TaskType(str(value or "").strip())
+    except ValueError:
+        return TaskType.GENERIC
+
+
+def normalize_depth(value: Any, default: str = "normal") -> str:
+    """
+    Input: raw exploration depth and fallback value.
+    Output: one of shallow, normal, or deep.
+    Function: keeps task depth stable when LLM omits or misspells it.
+    """
+    fallback = str(default or "normal").strip().lower()
+    if fallback not in EXPLORATION_DEPTHS:
+        fallback = "normal"
+    text = str(value or fallback).strip().lower()
+    return text if text in EXPLORATION_DEPTHS else fallback
+
+
+def clamp_priority(value: Any) -> float:
+    """
+    Input: raw priority value from config or LLM output.
+    Output: priority clamped to [0.0, 1.0].
+    Function: protects scheduling math from malformed priority values.
+    """
+    try:
+        score = float(value)
+    except Exception:
+        score = 0.5
+    return max(0.0, min(1.0, score))
+
+
+def compose_task_priority(type_priority: Any, llm_priority: Any) -> float:
+    """
+    Input: task-type default priority and LLM local priority.
+    Output: final runtime task priority in [0.0, 1.0].
+    Function: first version uses equal weights for global type importance and local LLM judgment.
+    """
+    return round(0.5 * clamp_priority(type_priority) + 0.5 * clamp_priority(llm_priority), 6)
+
+
+def get_task_type_spec(value: Any) -> TaskTypeSpec:
+    """
+    Input: raw task type value.
+    Output: TaskTypeSpec for that type, falling back to generic.
+    Function: centralizes lookup for workflow and prompt construction.
+    """
+    return TASK_TYPE_SPECS[normalize_task_type(value)]
+
+
+def task_type_prompt_rows() -> List[Dict[str, Any]]:
+    """
+    Input: global task type specs.
+    Output: JSON-safe rows for LLM prompt input.
+    Function: exposes only the fields the LLM needs to choose task types.
+    """
+    rows: List[Dict[str, Any]] = []
+    for spec in TASK_TYPE_SPECS.values():
+        rows.append(
+            {
+                "task_type": spec.task_type.value,
+                "description": spec.description,
+                "completion_goal": spec.completion_goal,
+                "default_priority": clamp_priority(spec.default_priority),
+                "default_depth": normalize_depth(spec.default_depth),
+            }
+        )
+    return rows
 
 
 INITIAL_TASK_PROMPT = (
@@ -50,6 +222,8 @@ class Task:
     task_type: str
     status: str
     priority: float
+    type_priority: float
+    llm_priority: float
     exploration_depth: str
     parent_task_id: str
     origin_state_sig: str
@@ -74,6 +248,8 @@ class Task:
             "task_type": self.task_type,
             "status": self.status,
             "priority": self.priority,
+            "type_priority": self.type_priority,
+            "llm_priority": self.llm_priority,
             "exploration_depth": self.exploration_depth,
             "parent_task_id": self.parent_task_id,
             "origin_state_sig": self.origin_state_sig,
@@ -136,6 +312,8 @@ class TaskManager:
             step_budget=max(self.default_steps, 1),
             created_by="system_init",
             priority=1.0,
+            type_priority=1.0,
+            llm_priority=1.0,
             exploration_depth="normal",
             notes="initial main task",
         )
@@ -167,6 +345,8 @@ class TaskManager:
         prompt: str,
         task_type: str = "generic",
         priority: float = 0.5,
+        type_priority: float = 0.5,
+        llm_priority: float = 0.5,
         exploration_depth: str = "normal",
         initial_steps: Optional[int] = None,
         entry_action: Optional[Dict[str, Any]] = None,
@@ -204,13 +384,15 @@ class TaskManager:
 
         task = self._new_task(
             prompt=clean_prompt,
-            task_type=str(task_type or "generic"),
+            task_type=normalize_task_type(task_type).value,
             parent_task_id=str(parent_id or ""),
             origin_state_sig=origin_state_sig,
             entry_action=clean_action,
             step_budget=int(initial_steps if initial_steps is not None else self.default_steps),
             created_by="llm_proposed",
             priority=float(priority if priority is not None else 0.5),
+            type_priority=clamp_priority(type_priority),
+            llm_priority=clamp_priority(llm_priority),
             exploration_depth=self._normalize_depth(exploration_depth),
             notes=reason,
         )
@@ -290,6 +472,8 @@ class TaskManager:
                     "task_type": task.task_type,
                     "status": task.status,
                     "priority": task.priority,
+                    "type_priority": task.type_priority,
+                    "llm_priority": task.llm_priority,
                     "exploration_depth": task.exploration_depth,
                     "step_budget": task.step_budget,
                     "used_steps": max(0, int(task.used_steps)),
@@ -324,6 +508,8 @@ class TaskManager:
         step_budget: int,
         created_by: str,
         priority: float,
+        type_priority: float,
+        llm_priority: float,
         exploration_depth: str,
         notes: str,
     ) -> Task:
@@ -340,6 +526,8 @@ class TaskManager:
             task_type=task_type or "generic",
             status="pending",
             priority=float(priority),
+            type_priority=clamp_priority(type_priority),
+            llm_priority=clamp_priority(llm_priority),
             exploration_depth=self._normalize_depth(exploration_depth),
             parent_task_id=parent_task_id,
             origin_state_sig=origin_state_sig,
@@ -358,8 +546,7 @@ class TaskManager:
         Output: one of shallow, normal, or deep.
         Function: keeps task JSON stable when the model omits or misspells the field.
         """
-        text = str(value or "normal").strip().lower()
-        return text if text in EXPLORATION_DEPTHS else "normal"
+        return normalize_depth(value)
 
     @staticmethod
     def _now_ms() -> int:

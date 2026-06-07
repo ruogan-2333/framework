@@ -78,11 +78,53 @@ from gpt_cls import (
 )
 from questionnaire_state2 import QuestionnaireState as QuestionnaireState2
 from state_graph import StateGraph
-from task_manager import TaskManager
+from task_manager import (
+    TaskManager,
+    compose_task_priority,
+    get_task_type_spec,
+    normalize_depth,
+    normalize_task_type,
+)
 from ui_cls import BaseUI
 from trace_callbacks import Callbacks, StepCtx, NoOpCallbacks
 
 logger = logging.getLogger(__name__)
+
+
+def _prepare_proposed_task_for_push(item_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Input: JSON-safe proposed task dictionary from LLM.
+    Output: normalized task dictionary with type, LLM, and composed priorities.
+    Function: centralizes task priority composition before pushing into TaskManager.
+    """
+    task_type = normalize_task_type(item_dict.get("task_type"))
+    spec = get_task_type_spec(task_type)
+    llm_priority = item_dict.get("priority", spec.default_priority)
+    type_priority = spec.default_priority
+    priority = compose_task_priority(type_priority, llm_priority)
+    depth = normalize_depth(item_dict.get("exploration_depth"), default=spec.default_depth)
+    out = dict(item_dict)
+    out["task_type"] = task_type.value
+    out["type_priority"] = type_priority
+    out["llm_priority"] = llm_priority
+    out["priority"] = priority
+    out["exploration_depth"] = depth
+    return out
+
+
+def _page_tags_for_completed_task(task_type: str) -> List[str]:
+    """
+    Input: completed task type string.
+    Output: semantic page tags implied by task completion.
+    Function: marks special destination pages without treating broad main-function exploration as a tag.
+    """
+    mapping = {
+        "enter_main_page": ["home"],
+        "explore_policy": ["policy"],
+        "explore_payment": ["payment"],
+        "explore_settings": ["settings"],
+    }
+    return list(mapping.get(str(task_type or ""), []))
 
 
 @dataclass
@@ -1137,6 +1179,7 @@ class WorkflowRunner:
                     "first_ts": float(getattr(node, "first_ts", 0.0) or 0.0),
                     "last_ts": float(getattr(node, "last_ts", 0.0) or 0.0),
                     "page_kind": str(getattr(node, "page_kind", "stable") or "stable"),
+                    "page_tags": sorted([str(x) for x in (getattr(node, "page_tags", set()) or []) if str(x or "").strip()]),
                     "meta": self._jsonable(getattr(node, "meta", {}) or {}),
                     "home_path": str(graph_home_paths.get(sig) or ""),
                     "outgoing_count": len(getattr(node, "outgoing", set()) or set()),
@@ -2200,6 +2243,7 @@ class WorkflowRunner:
                     cur_sig,
                     page_kind=self._page_kind_value(nav),
                     meta={"page_kind_reason": str(getattr(nav, "page_kind_reason", "") or "")},
+                    page_tags=list(getattr(nav, "page_tags", []) or []),
                 )
 
             # 从 NAV 结果里提取当前页面形态，仅用于记录和调试，不做 dismiss 特权分支。
@@ -3378,7 +3422,13 @@ class WorkflowRunner:
             payload.update(extra)
         return payload
 
-    def _graph_record_observation(self, sig: str, meta: Optional[Dict[str, Any]] = None, snap: Optional[Dict[str, Any]] = None) -> None:
+    def _graph_record_observation(
+        self,
+        sig: str,
+        meta: Optional[Dict[str, Any]] = None,
+        snap: Optional[Dict[str, Any]] = None,
+        page_tags: Optional[List[Any]] = None,
+    ) -> None:
         """
         IPO:
           in : sig observed without a meaningful predecessor edge
@@ -3394,10 +3444,10 @@ class WorkflowRunner:
         graph_meta = self._graph_state_meta(snap, meta)
         was_new = not self.graph.has_state(sig)
         try:
-            self.graph.record_observation(sig, meta=graph_meta)
+            self.graph.record_observation(sig, meta=graph_meta, page_tags=page_tags)
         except Exception:
             # fallback to touch
-            self.graph.touch(sig, meta=graph_meta)
+            self.graph.touch(sig, meta=graph_meta, page_tags=page_tags)
         self._record_state_trace(sig)
         self._emit_transition(sig, {"kind": "observation", "sig": sig, "meta": graph_meta})
         if was_new:
@@ -3641,17 +3691,23 @@ class WorkflowRunner:
         self._record_state_trace(dst)
         self._emit_transition(dst, {"kind": kind, "src": src, "dst": dst, "action": action, "dst_was_new": bool(dst_was_new)})
 
-    def _graph_annotate(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+    def _graph_annotate(
+        self,
+        sig: str,
+        page_kind: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        page_tags: Optional[List[Any]] = None,
+    ) -> None:
         """
         IPO:
-          in : sig and page_kind/meta
+          in : sig and page_kind/meta/page_tags
           out: graph.annotate(sig) -> DOES NOT increment visit_count
 
         WHEN called:
           - After NAV results to store page_kind as a graph hint
         """
         try:
-            self.graph.annotate(sig, page_kind=page_kind, meta=meta)
+            self.graph.annotate(sig, page_kind=page_kind, meta=meta, page_tags=page_tags)
         except Exception:
             pass
 
@@ -3907,11 +3963,13 @@ class WorkflowRunner:
         if task_type == "enter_main_page" and bool(decision.get("current_task_done")) and not bool(decision.get("current_task_failed")):
             self.home_sig = sig
             self.graph.annotate_meta(sig, is_home=True)
+            self._graph_annotate(sig, page_tags=["home"])
             self._log_event("home_state_inferred", sig=sig, reason="enter_main_page_done")
             return
         if self._looks_like_home_page(nav):
             self.home_sig = sig
             self.graph.annotate_meta(sig, is_home=True)
+            self._graph_annotate(sig, page_tags=["home"])
             self._log_event("home_state_inferred", sig=sig, reason="page_summary_heuristic")
 
     def _infer_utg_parent_sig(self, sig: str) -> Optional[str]:
@@ -4233,6 +4291,10 @@ class WorkflowRunner:
             self._save_tasks_snapshot(reason="task_decision_stale")
             return
 
+        nav = getattr(combined, "navigation", None)
+        if nav is not None:
+            self._graph_annotate(sig, page_tags=list(getattr(nav, "page_tags", []) or []))
+
         self._maybe_record_home_state(sig, getattr(combined, "navigation", None), combined, current_task)
 
         def candidate_key_from_step_dict(step_dict: Dict[str, Any]) -> str:
@@ -4251,6 +4313,10 @@ class WorkflowRunner:
             )
 
         proposed = list(getattr(combined, "proposed_tasks", []) or [])[: max(0, int(self.max_proposed_tasks))]
+        prepared_proposed: List[Dict[str, Any]] = []
+        for item in proposed:
+            prepared_proposed.append(_prepare_proposed_task_for_push(self._model_to_json_dict(item)))
+        prepared_proposed.sort(key=lambda row: float(row.get("priority", 0.0) or 0.0))
         created_task_ids: List[str] = []
         entry_candidates: List[ActionCandidate] = []
         existing_candidates = list(getattr(combined.navigation, "candidate_actions", []) or [])
@@ -4263,13 +4329,14 @@ class WorkflowRunner:
             existing_by_key[candidate_key_from_step_dict(step_dict)] = cand
 
         parent_task_id = current_task_id
-        for item in reversed(proposed):
-            item_dict = self._model_to_json_dict(item)
+        for item_dict in prepared_proposed:
             entry_action = item_dict.get("entry_action") if isinstance(item_dict.get("entry_action"), dict) else {}
             task_obj = self.task_manager.push_child_task(
                 prompt=str(item_dict.get("prompt") or ""),
                 task_type=str(item_dict.get("task_type") or "generic"),
                 priority=float(item_dict.get("priority", 0.5) or 0.5),
+                type_priority=float(item_dict.get("type_priority", 0.5) or 0.5),
+                llm_priority=float(item_dict.get("llm_priority", 0.5) or 0.5),
                 exploration_depth=str(item_dict.get("exploration_depth") or "normal"),
                 initial_steps=int(item_dict.get("initial_steps", 4) or 4),
                 entry_action=entry_action,
@@ -4281,8 +4348,7 @@ class WorkflowRunner:
             if task_obj:
                 created_task_ids.append(task_obj.task_id)
                 try:
-                    entry_step_obj = getattr(item, "entry_action", None)
-                    entry_step = entry_step_obj if isinstance(entry_step_obj, ActionStep) else ActionStep(**entry_action)
+                    entry_step = ActionStep(**entry_action)
                     entry_key = candidate_key_from_step_dict(self._model_to_json_dict(entry_step))
                     existing = existing_by_key.get(entry_key)
                     if existing:
@@ -4292,7 +4358,7 @@ class WorkflowRunner:
                     else:
                         synthesized = ActionCandidate(
                             actions=[entry_step],
-                            score=float(item_dict.get("priority", 0.5) or 0.5),
+                            score=float(item_dict.get("llm_priority", item_dict.get("priority", 0.5)) or 0.5),
                             action_role="start_child_task",
                             starts_task_type=str(item_dict.get("task_type") or "generic"),
                             starts_task_depth=str(item_dict.get("exploration_depth") or "normal"),
@@ -4314,6 +4380,8 @@ class WorkflowRunner:
         # If new child tasks were created from this page, keep the parent task on
         # stack so the depth-first child can return to it after completion.
         if should_finish and not created_task_ids:
+            if current_task:
+                self._graph_annotate(sig, page_tags=_page_tags_for_completed_task(str(getattr(current_task, "task_type", "") or "")))
             self.task_manager.finish_current_task(finish_status, finish_reason, state_sig=sig)
 
         self._log_event(

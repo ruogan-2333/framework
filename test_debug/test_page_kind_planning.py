@@ -5,7 +5,7 @@ Output: assertions about popup candidates and page return actions.
 Function: locks the expected schema behavior before workflow changes.
 """
 
-from gpt_cls import ActionCandidate, ActionStep, ActionType, NavigationProposal, PageKind
+from gpt_cls import ActionCandidate, ActionStep, ActionType, NavigationProposal, PageKind, PageTag, ProposedTask
 
 
 def test_popup_can_have_close_and_payment_candidate_actions():
@@ -53,3 +53,23 @@ def test_popup_can_have_close_and_payment_candidate_actions():
     assert nav.candidate_actions[0].action_role == "continue_current_task"
     assert nav.candidate_actions[1].starts_task_type == "explore_payment"
     assert nav.page_return_actions[0].anchor_label == "Close"
+
+
+def test_navigation_proposal_accepts_page_tags():
+    """NavigationProposal can mark special semantic page tags for UTG nodes."""
+
+    nav = NavigationProposal(
+        state_sig="xml:policy",
+        page_summary="Privacy policy page",
+        page_tags=[PageTag.POLICY],
+    )
+
+    assert nav.page_tags == [PageTag.POLICY]
+
+
+def test_proposed_task_accepts_predefined_task_type():
+    """ProposedTask.task_type is constrained to predefined task types."""
+
+    task = ProposedTask(prompt="Open store", task_type="explore_payment", priority=0.9)
+
+    assert task.task_type == "explore_payment"

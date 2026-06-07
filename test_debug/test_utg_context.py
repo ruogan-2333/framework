@@ -95,3 +95,21 @@ def test_unknown_home_degrades_to_unknown_header() -> None:
     assert "HOME: unknown" in result.text
     assert "CURRENT: UI1" in result.text
     assert result.home_paths["xml:first"] == "unknown_home"
+
+
+def test_text_utg_context_includes_page_tags() -> None:
+    """
+    Input: StateGraph node annotated with page_tags.
+    Output: text UTG includes the tags on that node.
+    Function: lets the navigation/router LLM see semantic page markers such as home or policy.
+    """
+    graph = StateGraph()
+    graph.record_observation("xml:home", page_kind="stable", meta={"page_summary": "Main home screen."})
+    graph.annotate("xml:home", page_tags=["home"])
+
+    result = graph.build_text_utg_context(
+        current_sig="xml:home",
+        home_sig="xml:home",
+    )
+
+    assert "tags=home" in result.text

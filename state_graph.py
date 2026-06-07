@@ -53,6 +53,7 @@ class Node:
     first_ts: float = 0.0
     last_ts: float = 0.0
     page_kind: str = "stable"
+    page_tags: Set[str] = field(default_factory=set)
     meta: Dict[str, Any] = field(default_factory=dict)
 
     outgoing: Set[str] = field(default_factory=set)
@@ -119,6 +120,7 @@ class StateGraph:
                     first_ts=float(row.get("first_ts", 0.0) or 0.0),
                     last_ts=float(row.get("last_ts", 0.0) or 0.0),
                     page_kind=str(row.get("page_kind", "stable") or "stable"),
+                    page_tags=cls._norm_page_tags(row.get("page_tags") or []),
                     meta=dict(row.get("meta") or {}) if isinstance(row.get("meta"), Mapping) else {},
                 )
                 graph.nodes[str(sig)] = node
@@ -179,6 +181,28 @@ class StateGraph:
             return str(getattr(page_kind, "value"))
         return str(page_kind)
 
+    @staticmethod
+    def _norm_page_tags(page_tags: Optional[List[Any]]) -> Set[str]:
+        """
+        Normalize page_tags values stored on StateGraph nodes.
+
+        Input:
+        - page_tags: raw strings or enum-like objects from LLM schema/workflow.
+
+        Output:
+        - Deduplicated non-empty string set.
+
+        Function:
+        - Keeps StateGraph independent from the Pydantic PageTag enum class.
+        """
+        out: Set[str] = set()
+        for item in page_tags or []:
+            value = getattr(item, "value", item)
+            text = str(value or "").strip()
+            if text:
+                out.add(text)
+        return out
+
     def has_state(self, sig: str) -> bool:
         """
         IPO:
@@ -196,7 +220,13 @@ class StateGraph:
     # Node touch / annotate
     # -------------------------
 
-    def touch(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
+    def touch(
+        self,
+        sig: str,
+        page_kind: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        page_tags: Optional[List[Any]] = None,
+    ) -> Node:
         """
         IPO:
           in : sig; optional page_kind/meta
@@ -214,11 +244,20 @@ class StateGraph:
         n.last_ts = now
         if page_kind is not None:
             n.page_kind = self._norm_page_kind(page_kind)
+        tags = self._norm_page_tags(page_tags)
+        if tags:
+            n.page_tags.update(tags)
         if meta:
             n.meta.update(meta)
         return n
 
-    def annotate(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+    def annotate(
+        self,
+        sig: str,
+        page_kind: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        page_tags: Optional[List[Any]] = None,
+    ) -> None:
         """
         IPO:
           in : sig; optional page_kind/meta
@@ -233,12 +272,23 @@ class StateGraph:
         n = self.nodes.get(sig)
         if n is None:
             # If node doesn't exist, we DO want to create it, but still do NOT count as a visit.
-            n = Node(sig=sig, visit_count=0, first_ts=now, last_ts=now, page_kind=self._norm_page_kind(page_kind), meta=meta or {})
+            n = Node(
+                sig=sig,
+                visit_count=0,
+                first_ts=now,
+                last_ts=now,
+                page_kind=self._norm_page_kind(page_kind),
+                page_tags=self._norm_page_tags(page_tags),
+                meta=meta or {},
+            )
             self.nodes[sig] = n
             return
         n.last_ts = now
         if page_kind is not None:
             n.page_kind = self._norm_page_kind(page_kind)
+        tags = self._norm_page_tags(page_tags)
+        if tags:
+            n.page_tags.update(tags)
         if meta:
             n.meta.update(meta)
 
@@ -409,7 +459,11 @@ class StateGraph:
             if node is not None:
                 summary = self._clip_text((node.meta or {}).get("page_summary") or "no page summary", summary_chars)
                 page_kind = str(node.page_kind or "stable")
-            lines.append(f"- {aliases[sig]}: {summary} [sig={sig}, page_kind={page_kind}]")
+            page_tags: List[str] = []
+            if node is not None:
+                page_tags = sorted(getattr(node, "page_tags", set()) or [])
+            tags_text = f", tags={','.join(page_tags)}" if page_tags else ""
+            lines.append(f"- {aliases[sig]}: {summary} [sig={sig}, page_kind={page_kind}{tags_text}]")
 
         lines.extend(["", "Edges:"])
         edge_count = 0
@@ -549,7 +603,13 @@ class StateGraph:
         self.nodes[src].outgoing.add(dst)
         self.nodes[dst].incoming.add(src)
 
-    def record_observation(self, sig: str, page_kind: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> Node:
+    def record_observation(
+        self,
+        sig: str,
+        page_kind: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        page_tags: Optional[List[Any]] = None,
+    ) -> Node:
         """
         IPO:
           in : sig observed without a clean predecessor action edge
@@ -559,7 +619,7 @@ class StateGraph:
           - post-restart landing state
           - post-recovery reconciliation when we can't safely label the move as an action edge
         """
-        return self.touch(sig, page_kind=page_kind, meta=meta)
+        return self.touch(sig, page_kind=page_kind, meta=meta, page_tags=page_tags)
 
     def record_transition(
         self,

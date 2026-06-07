@@ -760,6 +760,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         visit = int(node.get("visit_count", 0) or 0)
         page_kind = str(node.get("page_kind") or nav_result.get("page_kind") or "legacy_unknown")
         page_kind_reason = str((nav_result or {}).get("page_kind_reason") or meta.get("page_kind_reason") or "")
+        page_tags = list(node.get("page_tags") or nav_result.get("page_tags") or meta.get("page_tags") or [])
         fg_pkg = str(meta.get("foreground_package") or "")
         is_external = bool(target_pkg and fg_pkg and fg_pkg != target_pkg)
 
@@ -808,6 +809,7 @@ def build_interactive_html(run_dir: Path) -> Path:
             "foreground_activity": str(meta.get("foreground_activity") or ""),
             "page_kind": page_kind,
             "page_kind_reason": page_kind_reason,
+            "page_tags": page_tags,
             "xml_reliable": meta.get("xml_reliable"),
             "candidate_summary": {
                 "candidate_count": cand_ct,
@@ -1044,6 +1046,9 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div class="card"><div class="k">节点</div><div class="mono">${{esc(d.alias)}} | ${{esc(d.state_sig)}}</div>`;
       html += `<div style="margin-top:6px">${{tag}}`;
       html += `<span class="pill warn">page_kind=${{esc(d.page_kind)}}</span>`;
+      if ((d.page_tags || []).length) {{
+        html += `<span class="pill ok">tags=${{esc((d.page_tags || []).join(','))}}</span>`;
+      }}
       html += `<span class="pill warn">visit=${{esc(d.visit_count)}}</span>`;
       html += `<span class="pill warn">remaining=${{esc((d.candidate_summary || {{}}).remaining_count)}}</span>`;
       if (currentTask.task_id) {{
@@ -1057,6 +1062,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       if (currentTask.task_id) {{
         html += `<div>current_task: <span class="mono">${{esc(currentTask.task_id)}} / ${{esc(currentTask.task_type || '')}}</span></div>`;
         html += `<div>exploration_depth: <span class="mono">${{esc(currentTask.exploration_depth || '-')}}</span></div>`;
+        html += `<div>priority: <span class="mono">${{esc(currentTask.priority ?? '')}}</span>, type_priority: <span class="mono">${{esc(currentTask.type_priority ?? '')}}</span>, llm_priority: <span class="mono">${{esc(currentTask.llm_priority ?? '')}}</span></div>`;
         html += `<div>step_budget: <span class="mono">${{esc(currentTask.step_budget ?? '')}}</span>, used_steps: <span class="mono">${{esc(currentTask.used_steps ?? '')}}</span></div>`;
         html += `<div>prompt: <span class="mono">${{esc(currentTask.prompt || '')}}</span></div>`;
       }} else {{
@@ -1069,11 +1075,11 @@ def build_interactive_html(run_dir: Path) -> Path:
         html += `<div>reason: <span class="mono">${{esc(taskDecision.reason || '')}}</span></div>`;
       }}
       if (proposedTasks.length) {{
-        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>depth</th><th>type</th><th>entry</th><th>prompt</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>type_priority</th><th>llm_priority</th><th>depth</th><th>type</th><th>entry</th><th>prompt</th></tr></thead><tbody>`;
         proposedTasks.forEach((t, idx) => {{
           const a = t.entry_action || {{}};
           const entry = `${{a.action || ''}}:${{a.element_id ?? 'None'}} ${{a.anchor_label || a.text || ''}}`;
-          html += `<tr><td>T${{idx + 1}}</td><td>${{esc(t.priority ?? '')}}</td><td>${{esc(t.exploration_depth || '-')}}</td><td class="mono">${{esc(t.task_type || '')}}</td><td class="mono">${{esc(entry)}}</td><td>${{esc(t.prompt || '')}}</td></tr>`;
+          html += `<tr><td>T${{idx + 1}}</td><td>${{esc(t.priority ?? '')}}</td><td>${{esc(t.type_priority ?? '')}}</td><td>${{esc(t.llm_priority ?? '')}}</td><td>${{esc(t.exploration_depth || '-')}}</td><td class="mono">${{esc(t.task_type || '')}}</td><td class="mono">${{esc(entry)}}</td><td>${{esc(t.prompt || '')}}</td></tr>`;
         }});
         html += `</tbody></table></details>`;
       }}
@@ -1099,6 +1105,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
       html += `<div>page_kind: <span class="mono">${{esc(nav.page_kind ?? d.page_kind ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_kind_reason: <span class="mono">${{esc(nav.page_kind_reason ?? d.page_kind_reason ?? '')}}</span></div>`;
+      html += `<div>page_tags: <span class="mono">${{esc((nav.page_tags || d.page_tags || []).join(', '))}}</span></div>`;
       html += `<div>candidate_count: <span class="mono">${{esc((nav.candidate_actions || []).length)}}</span></div>`;
       html += `<div>page_return_status: <span class="mono">${{esc(nav.page_return_status ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_return_reason: <span class="mono">${{esc(nav.page_return_reason ?? '')}}</span></div>`;

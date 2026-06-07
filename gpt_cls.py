@@ -39,6 +39,7 @@ logging.getLogger("httpcore").setLevel(logging.ERROR)
 
 
 from utils import time_consumed, token_record  # do NOT modify user's utils.py
+from task_manager import TaskType, task_type_prompt_rows
 
 
 R = TypeVar("R", bound=BaseModel)
@@ -64,6 +65,16 @@ class PageKind(str, Enum):
     STABLE = "stable"
     POPUP = "popup"
     LOADING = "loading"
+
+
+class PageTag(str, Enum):
+    """Semantic tags stored on UTG nodes for special page types."""
+
+    HOME = "home"
+    HOME_LIKE = "home_like"
+    POLICY = "policy"
+    PAYMENT = "payment"
+    SETTINGS = "settings"
 
 
 class PageReturnStatus(str, Enum):
@@ -185,6 +196,13 @@ class NavigationProposal(BaseModel):
         ),
     )
     page_kind_reason: str = Field("", description="Short reason for page_kind.")
+    page_tags: List[PageTag] = Field(
+        default_factory=list,
+        description=(
+            "Optional semantic tags for the current UI. Use only when the page clearly matches one of: "
+            "home, home_like, policy, payment, settings. Keep empty for ordinary pages."
+        ),
+    )
 
     candidate_actions: List[ActionCandidate] = Field(
         default_factory=list,
@@ -348,7 +366,7 @@ class ProposedTask(BaseModel):
     """
 
     prompt: str = Field("", description="Natural-language child task prompt")
-    task_type: str = Field("generic", description="Coarse task type such as explore_policy or explore_payment")
+    task_type: TaskType = Field(TaskType.GENERIC, description="Predefined child task type")
     priority: float = Field(0.5, ge=0.0, le=1.0, description="Task importance in [0, 1]; first version records it but does not sort by it")
     exploration_depth: Literal["shallow", "normal", "deep"] = Field(
         "normal",
@@ -654,6 +672,7 @@ INPUTS:
 - current_task: structured active task context. Its task_id should be echoed as task_id.
 - task_stack: compact depth-first task stack. The last item is the active task.
 - utg_context: text UI transition graph context. It may be unavailable early in a run, but when present it describes known UI nodes, edges, aliases, home path, CURRENT, PARENT, and HOME.
+- allowed_task_types: predefined task types. proposed_tasks[*].task_type MUST come from this list.
 - app_intro/focus_hints: weak app-level priors; current-screen evidence has priority.
 - history: recent action/context strings.
 - block_status: existing block runtime status for navigation context.
@@ -743,6 +762,17 @@ NAVIGATION RULES:
 - Navigation action element_id values MUST come from ui_digest ids.
 - If xml_reliable is false, trust screenshot evidence more than labels/tree semantics.
 
+PAGE TAG RULES:
+- Set navigation.page_tags only when the current page clearly matches one of the allowed tags.
+- Allowed page_tags:
+  * home: the actual main/home page of the app.
+  * home_like: a major app section or dashboard that behaves like a main page, but is not necessarily the single home page.
+  * policy: a visible privacy policy, terms of service, user agreement, data policy, child privacy, or similar document page.
+  * payment: a visible payment, subscription, premium, store, virtual currency, random reward, loot box, or purchase-related page.
+  * settings: a visible settings/control page relevant to privacy, safety, interaction limits, location, ads/privacy, parental controls, or anti-addiction.
+- For ordinary pages, return navigation.page_tags=[].
+- Do not set home_like merely because current_task.task_type is explore_main_function. Use home_like only when the page itself looks like a main section or important dashboard.
+
 ROUTER RULES:
 - Router question_id values MUST come from router_questions; prefer full_id when present.
 - Answer router questions only when the current screen provides clear evidence.
@@ -753,9 +783,12 @@ TASK RULES:
 - First-version executable proposed tasks require entry_action. If no entry action is visible, do not propose that task.
 - If proposed_tasks includes an entry_action, include the same action in navigation.candidate_actions with action_role=start_child_task.
 - Do not use internal task ids in candidate actions. Workflow creates ids like task_0002 after your response.
-- Useful task_type values include enter_main_page, explore_policy, explore_payment, explore_settings, explore_account, explore_core_feature, and generic.
-- Use explore_core_feature for ordinary important app/game features such as play, online mode, statistics, feature pages, content browsing, or other primary app functions.
-- proposed_tasks.priority is a 0-1 importance score. Use values near 1.0 for core app features and strong questionnaire-relevant entries; use lower values for minor or weakly relevant entries.
+- proposed_tasks[*].task_type must be one of allowed_task_types[*].task_type.
+- Use allowed_task_types[*].description to decide what entry each task type covers.
+- Use allowed_task_types[*].completion_goal to decide whether a task should be created and when it should stop.
+- default_priority is the global importance prior for that task type.
+- Do not invent new task_type values.
+- proposed_tasks.priority is the LLM local importance score for the concrete visible entry in [0, 1]. Use values near 1.0 for direct, strong questionnaire-relevant entries; use lower values for minor or weakly relevant entries.
 - proposed_tasks.exploration_depth controls detail level only. It does not change the numeric step budget.
 - Use exploration_depth=deep for questionnaire/router-relevant tasks that need enough evidence to answer questions, such as privacy, permissions, payment/subscription, account, data, ads, or safety.
 - Use exploration_depth=normal for important settings/account/store/core paths where one or two key subpages may be useful.
@@ -1316,6 +1349,7 @@ class GPTClient:
             "current_task": current_task or {},
             "task_stack": task_stack or [],
             "utg_context": utg_context or {},
+            "allowed_task_types": task_type_prompt_rows(),
             "max_proposed_tasks": int(max_proposed_tasks),
             "app_intro": app_intro,
             "focus_hints": focus_hints,
@@ -1356,6 +1390,7 @@ class GPTClient:
         for candidate in out.navigation.candidate_actions:
             candidate.actions = list(candidate.actions or [])[:3]
         out.navigation.page_return_actions = list(out.navigation.page_return_actions or [])[:3]
+        out.navigation.page_tags = list(out.navigation.page_tags or [])[:5]
         out.router.router_updates = list(out.router.router_updates or [])[:12]
         proposed_limit = max(0, int(max_proposed_tasks))
         out.proposed_tasks = list(out.proposed_tasks or [])[:proposed_limit]
@@ -1853,6 +1888,7 @@ __all__ = [
     "ActionCandidate",
     "ActionType",
     "PageKind",
+    "PageTag",
     "NavigationProposal",
     "NavigationRouterResult",
     "TaskDecision",
