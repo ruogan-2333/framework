@@ -54,10 +54,10 @@ class TaskTypeSpec:
     - Task type enum plus human-authored description, completion goal, and defaults.
 
     Output:
-    - Prompt-facing task metadata and workflow defaults.
+    - Prompt-facing task metadata and workflow scheduling defaults.
 
     Function:
-    - Separates task taxonomy from task-stack runtime state while keeping both in task_manager.py.
+    - Separates task taxonomy, creation quota, and step budget from task-stack runtime state.
     """
 
     task_type: TaskType
@@ -65,6 +65,8 @@ class TaskTypeSpec:
     completion_goal: str
     default_priority: float
     default_depth: str
+    max_created: int
+    step_budget: int
 
 
 TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
@@ -74,6 +76,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="到达可以正常使用 APP 主要功能的稳定页面；如果已经到达主界面，则结束该任务，并基于主界面提出后续探索任务。",
         default_priority=1.0,
         default_depth="normal",
+        max_created=1,
+        step_budget=8,
     ),
     TaskType.EXPLORE_MAIN_FUNCTION: TaskTypeSpec(
         task_type=TaskType.EXPLORE_MAIN_FUNCTION,
@@ -81,6 +85,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="覆盖 APP 的代表性主功能页面，理解 APP 主要用途；在探索过程中记录问卷可见证据，例如内容风险、用户互动、位置分享、广告、年龄验证、防沉迷、AI 功能、儿童接触风险等。",
         default_priority=0.75,
         default_depth="normal",
+        max_created=8,
+        step_budget=5,
     ),
     TaskType.EXPLORE_PAYMENT: TaskTypeSpec(
         task_type=TaskType.EXPLORE_PAYMENT,
@@ -88,6 +94,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="找到能够回答支付相关问卷问题的页面证据，例如是否存在内购、订阅、随机奖励、虚拟货币、现金兑换或 NFT/可转移数字资产；不要执行真实购买或不可逆操作。",
         default_priority=0.90,
         default_depth="normal",
+        max_created=3,
+        step_budget=3,
     ),
     TaskType.EXPLORE_POLICY: TaskTypeSpec(
         task_type=TaskType.EXPLORE_POLICY,
@@ -95,6 +103,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="记录政策页面及其入口；任务完成时应将当前页面标记为 policy 类页面，便于后续对政策页面做额外处理；当前任务不需要深入阅读全文。",
         default_priority=0.70,
         default_depth="shallow",
+        max_created=3,
+        step_budget=3,
     ),
     TaskType.EXPLORE_SETTINGS: TaskTypeSpec(
         task_type=TaskType.EXPLORE_SETTINGS,
@@ -102,6 +112,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="找到和问卷关注点相关的设置项或控制项，或确认设置页没有明显相关入口；不需要深入语言、主题、声音、震动等无关设置。",
         default_priority=0.80,
         default_depth="normal",
+        max_created=3,
+        step_budget=3,
     ),
     TaskType.GENERIC: TaskTypeSpec(
         task_type=TaskType.GENERIC,
@@ -109,6 +121,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="只做轻度确认；如果与问卷关注点无关，应快速结束或跳过。",
         default_priority=0.20,
         default_depth="shallow",
+        max_created=3,
+        step_budget=4,
     ),
 }
 
@@ -189,6 +203,8 @@ def task_type_prompt_rows() -> List[Dict[str, Any]]:
                 "completion_goal": spec.completion_goal,
                 "default_priority": clamp_priority(spec.default_priority),
                 "default_depth": normalize_depth(spec.default_depth),
+                "max_created": max(0, int(spec.max_created)),
+                "step_budget": max(1, int(spec.step_budget)),
             }
         )
     return rows
@@ -339,6 +355,15 @@ class TaskManager:
             self.stack.pop()
         return None
 
+    def created_count_by_type(self, task_type: str) -> int:
+        """
+        Input: task type string.
+        Output: number of already-created tasks for this normalized task type.
+        Function: supports first-version per-task-type creation quotas.
+        """
+        normalized = normalize_task_type(task_type).value
+        return sum(1 for task in self.tasks_by_id.values() if task.task_type == normalized)
+
     def push_child_task(
         self,
         *,
@@ -377,6 +402,27 @@ class TaskManager:
             self.ignored_proposed_tasks.append(ignored)
             return None
 
+        normalized_task_type = normalize_task_type(task_type)
+        spec = get_task_type_spec(normalized_task_type)
+        configured_step_budget = max(1, int(spec.step_budget))
+        created_count = self.created_count_by_type(normalized_task_type.value)
+        max_created = max(0, int(spec.max_created))
+        if max_created > 0 and created_count >= max_created:
+            ignored = {
+                "prompt": clean_prompt,
+                "task_type": normalized_task_type.value,
+                "exploration_depth": self._normalize_depth(exploration_depth),
+                "entry_action": clean_action,
+                "reason": reason,
+                "origin_state_sig": origin_state_sig,
+                "ignored_reason": "max_created_per_type_exceeded",
+                "created_count": created_count,
+                "max_created": max_created,
+                "ts_ms": self._now_ms(),
+            }
+            self.ignored_proposed_tasks.append(ignored)
+            return None
+
         parent_id = parent_task_id
         if parent_id is None:
             parent = self.current_task()
@@ -384,11 +430,11 @@ class TaskManager:
 
         task = self._new_task(
             prompt=clean_prompt,
-            task_type=normalize_task_type(task_type).value,
+            task_type=normalized_task_type.value,
             parent_task_id=str(parent_id or ""),
             origin_state_sig=origin_state_sig,
             entry_action=clean_action,
-            step_budget=int(initial_steps if initial_steps is not None else self.default_steps),
+            step_budget=configured_step_budget,
             created_by="llm_proposed",
             priority=float(priority if priority is not None else 0.5),
             type_priority=clamp_priority(type_priority),
