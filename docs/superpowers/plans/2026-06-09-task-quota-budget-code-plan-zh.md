@@ -791,3 +791,309 @@ Plan complete and saved to `F:/workplace/framework/docs/superpowers/plans/2026-0
 2. 通过后再跑 Task 7 的一个 APP 在线验证。
 3. 验证结果给用户看，确认后再写更新日志并提交。
 
+---
+
+## 8. 本阶段执行结果
+
+本阶段已经完成第一版任务数量和步长预算控制。
+
+代码改动：
+
+- `F:/workplace/framework/task_manager.py`
+  - `TaskTypeSpec` 增加 `max_created`。
+  - `TaskTypeSpec` 增加 `step_budget`。
+  - `task_type_prompt_rows()` 输出 `max_created` 和 `step_budget`。
+  - `TaskManager.created_count_by_type(...)` 用于统计某类任务已经创建了多少个。
+  - `TaskManager.push_child_task(...)` 在创建任务前检查 `max_created`。
+  - 超过数量上限的任务写入 `ignored_proposed_tasks`，不进入任务栈。
+  - child task 的真实 `step_budget` 改为使用本地任务类型配置，不再直接使用 LLM 的 `initial_steps`。
+
+- `F:/workplace/framework/test_debug/test_task_manager.py`
+  - 增加任务类型 quota / budget 配置测试。
+  - 增加 `task_type_prompt_rows()` 输出字段测试。
+  - 增加按任务类型覆盖步长预算测试。
+  - 增加同类型任务创建数量上限测试。
+  - 增加 `ignored_proposed_tasks` 快照记录测试。
+
+当前配置：
+
+| task_type | max_created | step_budget |
+|---|---:|---:|
+| `enter_main_page` | 1 | 8 |
+| `explore_main_function` | 8 | 5 |
+| `explore_payment` | 3 | 3 |
+| `explore_policy` | 3 | 3 |
+| `explore_settings` | 3 | 3 |
+| `generic` | 3 | 4 |
+
+变量说明：
+
+- `max_created`：某类任务在一次 APP 运行中最多创建多少个。
+- `step_budget`：某类任务每个任务最多执行多少步。
+- `created_count`：当前已经创建的同类型任务数量。
+- `ignored_proposed_tasks`：被拒绝创建的任务记录列表。
+- `initial_steps`：LLM 给出的建议步数；当前第一版不再直接作为真实任务步长。
+
+---
+
+## 9. 验证结果
+
+本阶段使用项目虚拟环境执行测试：
+
+```text
+F:\workplace\framework\.venv\Scripts\python.exe
+```
+
+单元测试：
+
+```text
+test_debug/test_task_manager.py: 14 passed
+```
+
+核心测试集合：
+
+```text
+test_debug/test_task_manager.py
+test_debug/test_task_report.py
+test_debug/test_page_kind_planning.py
+test_debug/test_utg_context.py
+
+结果：25 passed
+```
+
+语法检查：
+
+```text
+task_manager.py
+workflow.py
+task_router_brief_report.py
+
+结果：通过
+```
+
+非阻塞 warning：
+
+- Pydantic `min_items` deprecated warning。
+- requests dependency version warning。
+
+在线验证：
+
+- APP: `com.bd.nproject`
+- run: `F:/workplace/framework/traces/20260609_180918_com.bd.nproject`
+- HTML: `F:/workplace/framework/traces/20260609_180918_com.bd.nproject/index.html`
+- `exit=0`
+- `stop_reason=root_exhausted`
+- 实际耗时约 `242s`
+- LLM calls: `10`
+- total tokens: `190956`
+
+任务统计：
+
+```text
+总任务数: 4
+ignored_proposed_tasks: 0
+
+enter_main_page:
+- count=1
+- status=running 1
+- step_budget=8
+- used_steps=4
+
+explore_main_function:
+- count=2
+- status=expired 2
+- step_budget=5
+- used_steps=5, 5
+
+explore_settings:
+- count=1
+- status=expired 1
+- step_budget=3
+- used_steps=3
+```
+
+结论：
+
+- `step_budget` 已确认按任务类型配置生效。
+- 本次 run 没有触发 `max_created`，因为创建任务数量较少，所以 `ignored_proposed_tasks=0`。
+- `max_created` 逻辑已由单元测试覆盖。
+
+---
+
+## 10. 当前保留问题
+
+### 10.1 简单 quota 可能误杀有价值任务
+
+当前第一版逻辑是：
+
+```text
+同类任务数量达到 max_created
+    -> 新任务直接拒绝
+    -> 记录到 ignored_proposed_tasks
+```
+
+这个逻辑可控，但比较粗糙。
+
+风险：
+
+- 如果一个 APP 有多个主要功能入口，LLM 可能先在前几个入口上创建同类任务。
+- 后续更有价值的同类入口可能因为数量上限被拒绝。
+- 单纯按 `task_type` 限制数量不能保证功能覆盖面。
+
+### 10.2 同类型未执行任务替换策略
+
+后续可以考虑替换策略。
+
+思路：
+
+```text
+新任务超过 max_created
+    -> 查找同 task_type 的未执行任务
+    -> 如果旧任务 used_steps == 0 且 priority 更低
+    -> 用新任务替换旧任务
+```
+
+变量说明：
+
+- `used_steps`：任务已经消耗的步数。`used_steps == 0` 可以近似表示任务还没真正执行。
+- `priority`：任务最终优先级，由 `type_priority` 和 `llm_priority` 合成。
+- `type_priority`：任务类型默认重要性。
+- `llm_priority`：LLM 对当前具体入口给出的局部重要性。
+
+第一版没有实现该策略，原因：
+
+- 需要改任务栈删除和替换逻辑。
+- 需要定义被替换任务的状态，例如 `replaced`。
+- 需要避免替换已经执行过、已有历史路径的任务。
+
+### 10.3 home 页面总体任务规划
+
+这是后续更重要的方向。
+
+当前流程偏局部反应式：
+
+```text
+看到一个 UI
+    -> LLM 分析当前 UI
+    -> 提出当前可见子任务
+    -> DFS 执行
+```
+
+后续希望加入 home-level planner：
+
+```text
+确认 home 页面
+    -> 结合 app metadata、home 截图、UI digest、文本 UTG、问卷目标和人工探索模板
+    -> 规划一组覆盖全面的高层任务
+    -> 后续探索围绕这些任务执行
+```
+
+人工探索模板可以按 APP 类型整理，例如：
+
+- 游戏类 APP：
+  - 先确认主玩法入口。
+  - 再看商店、订阅、虚拟货币、随机奖励。
+  - 再看设置、隐私、家长控制。
+  - 如果有社交、排行榜、聊天，再轻度探索。
+
+- 社交类 APP：
+  - 先确认内容流和发布入口。
+  - 再看聊天、好友、关注、评论。
+  - 再看账号、隐私、安全设置。
+  - 再看付费会员或订阅。
+
+- 内容/生活方式类 APP：
+  - 先看首页推荐流。
+  - 再看搜索、分类、内容详情页。
+  - 再看发布、互动、账号页。
+  - 再看设置、隐私、广告、订阅。
+
+home-level planner 输入建议：
+
+- `app_metadata`：包名、应用名、类别、问卷类型等。
+- home 页面截图。
+- home 页面 UI digest。
+- 当前文本 UTG。
+- 任务类型定义表。
+- 问卷关注点摘要。
+- 人工探索模板。
+
+home-level planner 输出建议：
+
+- 一组覆盖主要功能入口的高层任务。
+- 每个任务包含：
+  - `task_type`
+  - `prompt`
+  - `entry_action`
+  - `priority`
+  - `exploration_depth`
+  - `reason`
+
+后续页面仍可以提出新任务，但需要和总体计划去重或合并。
+
+### 10.4 外部政策页面采集
+
+隐私政策或服务条款可能打开外部浏览器或外部 WebView。
+
+当前问题：
+
+- 工作流检测到前台包名不是目标 APP 时，可能会把流程拉回 APP。
+- 因此外部政策页内容可能无法采集。
+
+后续方向：
+
+- 对 `explore_policy` 类型任务增加特殊处理。
+- 允许进入可信外部政策页面。
+- 或者在进入外部页面前记录 URL / 页面文本。
+- 后续可能需要单独实现政策页文本抽取，例如复制全文、读 WebView 文本或读取浏览器 URL。
+
+### 10.5 动态页面状态膨胀
+
+部分 APP 页面内容会持续变化。
+
+当前问题：
+
+- 动态内容可能导致多个相似但不同的 state。
+- 任务步数可能被动态页面快速耗尽。
+
+后续方向：
+
+- 给动态页面增加更粗粒度 state 合并策略。
+- 或者对动态 feed 页面减少深挖，只记录代表性证据。
+
+### 10.6 多设备 force_stop warning
+
+本次在线验证中出现非致命 warning：
+
+```text
+adbutils.errors.AdbError: more than one device/emulator, please specify the serial number
+```
+
+原因：
+
+- 当前机器同时存在多个 ADB 设备。
+- `force_stop` 使用 `adbutils.adb.device()` 时没有传 serial。
+
+当前影响：
+
+- Appium 主流程已完成。
+- trace 和报告正常生成。
+- 结束时 force_stop 失败被忽略。
+
+后续方向：
+
+- 在 `AndroidAppiumClient` 中保存 device serial。
+- `force_stop` 使用指定 serial 获取 device。
+
+### 10.7 run 结束时任务状态语义
+
+当前问题：
+
+- 因 run 结束未显式关闭的任务仍可能显示 `running`。
+- 语义上它们更接近“运行结束时未完成”，不是还在真实执行。
+
+后续方向：
+
+- 区分 `pending`、`interrupted`、`running`。
+- 在 run 结束时对未完成任务做一次终态整理。
+
