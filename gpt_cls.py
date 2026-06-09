@@ -178,6 +178,15 @@ class ActionCandidate(BaseModel):
         "",
         description="When action_role is start_child_task, the proposed child task exploration depth.",
     )
+    action_intent: str = Field(
+        "",
+        description=(
+            "One-sentence human-readable intent for this candidate action. "
+            "Explain how the whole candidate advances the active task, starts a child task, "
+            "removes a blocker, returns to useful context, or reveals questionnaire-relevant evidence. "
+            "Keep concise and do not include hidden chain-of-thought."
+        ),
+    )
 
 
 class NavigationProposal(BaseModel):
@@ -387,6 +396,13 @@ class NavigationRouterResult(BaseModel):
     """
     state_sig: str = Field(..., description="Echo input state_sig for staleness/debug")
     task_id: str = Field("", description="Echo current_task.task_id when provided")
+    task_progress: str = Field(
+        "",
+        description=(
+            "One-sentence human-readable progress summary for the current task on this UI. "
+            "Explain what was observed, how it relates to the active task, and what should happen next."
+        ),
+    )
     navigation: NavigationProposal = Field(..., description="LLM1-compatible navigation proposal")
     router: RouterResult = Field(..., description="LLM2-1-compatible router answer result")
     task_decision: TaskDecision = Field(default_factory=TaskDecision, description="Decision about the active task")
@@ -695,6 +711,7 @@ EVIDENCE PRIORITY RULES:
 OUTPUT (strict JSON matching NavigationRouterResult):
 - state_sig
 - task_id: echo current_task.task_id when present.
+- task_progress: one concise sentence describing current task progress on this UI.
 - navigation: strict JSON matching NavigationProposal.
 - router: strict JSON matching RouterResult.
 - task_decision: whether the active task is done/failed/should return, with a short reason.
@@ -726,6 +743,12 @@ NAVIGATION RULES:
 - navigation.candidate_actions are the current UI action pool. They may continue the active task or start child tasks.
 - For actions that continue the active task, set action_role=continue_current_task and starts_task_type="".
 - For actions that enter proposed_tasks, set action_role=start_child_task, starts_task_type to that proposed task's task_type, and starts_task_depth to that proposed task's exploration_depth.
+- For every navigation.candidate_actions item, fill action_intent.
+- action_intent should explain the whole candidate's usefulness for the active task or proposed child task.
+- Keep ActionStep.reasoning short. Use action_intent for the longer human-readable task/action explanation.
+- If action_role=continue_current_task, explain how this action advances or unblocks the current task.
+- If action_role=start_child_task, explain why this action is the entry into that child task.
+- If the action is wait, close, back, or return, explain why that helps the current task continue or return to useful context.
 - If task_decision.current_task_done=true, do not output continue_current_task candidate_actions unless a necessary final close/return action is required.
 - Include actions that serve the active task, create a useful child task, collect router evidence, or remove a blocker so the active task can continue.
 - If an action removes an irrelevant blocker and returns to the underlying task, include it in candidate_actions with action_role=continue_current_task.

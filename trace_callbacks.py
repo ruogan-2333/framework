@@ -673,12 +673,14 @@ class JsonlTraceCallbacks(NoOpCallbacks):
         router_body = {}
         task_decision_body = {}
         proposed_tasks_body = []
+        task_progress_body = ""
         if isinstance(nav_router, dict):
             result = nav_router.get("result") if isinstance(nav_router.get("result"), dict) else nav_router
             nav_body = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
             router_body = result.get("router") if isinstance(result.get("router"), dict) else {}
             task_decision_body = result.get("task_decision") if isinstance(result.get("task_decision"), dict) else {}
             proposed_tasks_body = result.get("proposed_tasks") if isinstance(result.get("proposed_tasks"), list) else []
+            task_progress_body = str(result.get("task_progress") or "")
         block_body = blocks_fill.get("result") if isinstance(blocks_fill.get("result"), dict) else {}
 
         lines = [
@@ -703,6 +705,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     f"- page_return_status: {str(nav_body.get('page_return_status') or 'legacy_unknown')}",
                     f"- page_return_reason: {str(nav_body.get('page_return_reason') or '')}",
                     f"- page_return_actions: {len(nav_body.get('page_return_actions') or [])}",
+                    f"- task_progress: {task_progress_body}",
                 ]
             )
             candidates = list(nav_body.get("candidate_actions") or [])
@@ -718,10 +721,11 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                     role = str(cand.get("action_role") or "")
                     starts = str(cand.get("starts_task_type") or "")
                     starts_depth = str(cand.get("starts_task_depth") or "")
+                    intent = str(cand.get("action_intent") or "")
                     label = str(step.get("anchor_label") or step.get("text") or step.get("reasoning") or "")
                     lines.append(
                         f"- C{idx}: role={role}, starts_task_type={starts}, starts_task_depth={starts_depth}, score={cand.get('score')}, "
-                        f"action={step.get('action')}:{step.get('element_id')} {label}"
+                        f"action={step.get('action')}:{step.get('element_id')} {label}, intent={intent}"
                     )
             return_actions = list(nav_body.get("page_return_actions") or [])
             if return_actions:

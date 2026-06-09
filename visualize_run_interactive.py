@@ -305,6 +305,7 @@ def _load_state_llm_artifacts(run_dir: Path) -> Tuple[Dict[str, Dict[str, Any]],
                     "state_sig": sig,
                     "nav_result": navigation,
                     "task_id": str(result.get("task_id") or ""),
+                    "task_progress": str(result.get("task_progress") or ""),
                     "task_decision": task_decision,
                     "proposed_tasks": proposed_tasks,
                     "navigation_router_result_path": str(nav_router_path),
@@ -451,6 +452,7 @@ def _match_action_candidate(
             "action_role": cand.get("action_role") or "",
             "starts_task_type": cand.get("starts_task_type") or "",
             "starts_task_depth": cand.get("starts_task_depth") or "",
+            "action_intent": cand.get("action_intent") or "",
             "reasoning": c0.get("reasoning"),
         }
         break
@@ -474,6 +476,7 @@ def _match_action_candidate(
             "action_role": cand.get("action_role") or "",
             "starts_task_type": cand.get("starts_task_type") or "",
             "starts_task_depth": cand.get("starts_task_depth") or "",
+            "action_intent": cand.get("action_intent") or "",
             "reasoning": c0.get("reasoning"),
             "return_method": cand.get("return_method"),
         }
@@ -761,6 +764,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         page_kind = str(node.get("page_kind") or nav_result.get("page_kind") or "legacy_unknown")
         page_kind_reason = str((nav_result or {}).get("page_kind_reason") or meta.get("page_kind_reason") or "")
         page_tags = list(node.get("page_tags") or nav_result.get("page_tags") or meta.get("page_tags") or [])
+        task_progress = str(nav.get("task_progress") or "")
         fg_pkg = str(meta.get("foreground_package") or "")
         is_external = bool(target_pkg and fg_pkg and fg_pkg != target_pkg)
 
@@ -835,6 +839,7 @@ def build_interactive_html(run_dir: Path) -> Path:
             "snapshot_meta": trace_state.get("snapshot_meta") or {},
             "task_context": trace_state.get("task_context") or {},
             "task_decision": nav.get("task_decision") or {},
+            "task_progress": task_progress,
             "proposed_tasks": nav.get("proposed_tasks") or [],
             "task_id": nav.get("task_id") or "",
             "nav_result": nav_result,
@@ -908,7 +913,19 @@ def build_interactive_html(run_dir: Path) -> Path:
         "edge_details": edge_detail_map,
         "timeline": timeline,
         "alias_map": alias,
+        "report_paths": {
+            "task_report_json": _relpath_or_raw(str(run_dir / "task_report.json"), interactive_dir) if (run_dir / "task_report.json").exists() else "",
+            "task_report_md": _relpath_or_raw(str(run_dir / "task_report.md"), interactive_dir) if (run_dir / "task_report.md").exists() else "",
+        },
     }
+    report_links_html = ""
+    report_paths = page_payload.get("report_paths") or {}
+    if report_paths.get("task_report_md") or report_paths.get("task_report_json"):
+        report_links_html = (
+            f"<div><span class=\"k\">task_report</span>: "
+            f"<a class=\"mono\" href=\"{report_paths.get('task_report_md') or ''}\" target=\"_blank\">md</a> / "
+            f"<a class=\"mono\" href=\"{report_paths.get('task_report_json') or ''}\" target=\"_blank\">json</a></div>"
+        )
 
     html = f"""<!doctype html>
 <html lang="zh-CN">
@@ -975,6 +992,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         <div><span class="k">stop_reason</span>: <span class="mono">{page_payload['stop_reason']}</span></div>
         <div><span class="k">nodes</span>: <span class="mono">{page_payload['node_count']}</span></div>
         <div><span class="k">edges</span>: <span class="mono">{page_payload['edge_count']}</span></div>
+        {report_links_html}
         <label><input id="hideNoop" type="checkbox" /> Hide noop edges</label>
       </div>
       <div id="network"></div>
@@ -1106,16 +1124,17 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div>page_kind: <span class="mono">${{esc(nav.page_kind ?? d.page_kind ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_kind_reason: <span class="mono">${{esc(nav.page_kind_reason ?? d.page_kind_reason ?? '')}}</span></div>`;
       html += `<div>page_tags: <span class="mono">${{esc((nav.page_tags || d.page_tags || []).join(', '))}}</span></div>`;
+      html += `<div>task_progress: <span class="mono">${{esc(d.task_progress || '')}}</span></div>`;
       html += `<div>candidate_count: <span class="mono">${{esc((nav.candidate_actions || []).length)}}</span></div>`;
       html += `<div>page_return_status: <span class="mono">${{esc(nav.page_return_status ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_return_reason: <span class="mono">${{esc(nav.page_return_reason ?? '')}}</span></div>`;
       html += `<div>exhausted: <span class="mono">${{esc(nav.exhausted)}}</span>, confidence: <span class="mono">${{esc(nav.exhausted_confidence)}}</span></div>`;
       html += `<div>why_these_actions: <span class="mono">${{esc(nav.why_these_actions ?? '')}}</span></div>`;
       if (cands.length) {{
-        html += `<details style="margin-top:8px" open><summary>Candidate Actions (LLM + state_action_snapshot)</summary><table><thead><tr><th>status</th><th>key</th><th>role</th><th>starts</th><th>depth</th><th>score</th><th>action</th><th>reason</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px" open><summary>Candidate Actions (LLM + state_action_snapshot)</summary><table><thead><tr><th>status</th><th>key</th><th>role</th><th>starts</th><th>depth</th><th>score</th><th>action</th><th>reason</th><th>intent</th></tr></thead><tbody>`;
         for (const c of cands) {{
           const a = (c.actions || [])[0] || {{}};
-          html += `<tr><td>${{esc(c.status || '-')}}</td><td class="mono">${{esc(c.candidate_key || '-')}}</td><td>${{esc(c.action_role || '-')}}</td><td>${{esc(c.starts_task_type || '-')}}</td><td>${{esc(c.starts_task_depth || '-')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td></tr>`;
+          html += `<tr><td>${{esc(c.status || '-')}}</td><td class="mono">${{esc(c.candidate_key || '-')}}</td><td>${{esc(c.action_role || '-')}}</td><td>${{esc(c.starts_task_type || '-')}}</td><td>${{esc(c.starts_task_depth || '-')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td><td>${{esc(c.action_intent || '')}}</td></tr>`;
         }}
         html += `</tbody></table></details>`;
       }}

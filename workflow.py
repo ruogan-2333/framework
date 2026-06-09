@@ -85,6 +85,7 @@ from task_manager import (
     normalize_depth,
     normalize_task_type,
 )
+from task_report import write_task_report
 from ui_cls import BaseUI
 from trace_callbacks import Callbacks, StepCtx, NoOpCallbacks
 
@@ -820,6 +821,62 @@ class WorkflowRunner:
         except Exception:
             logger.debug("on_transition failed", exc_info=True)
 
+    def _emit_task_ui_observation(self, sig: str, combined: NavigationRouterResult, task_id: str) -> None:
+        """
+        Input: state signature, combined LLM result, and active task id captured at enqueue time.
+        Output: emits one task_ui_observation transition event.
+        Function: records how the LLM interpreted this UI for the active task.
+        """
+        nav = getattr(combined, "navigation", None)
+        decision = self._model_to_json_dict(getattr(combined, "task_decision", None))
+        page_tags = []
+        if nav is not None:
+            page_tags = [str(getattr(tag, "value", tag)) for tag in (getattr(nav, "page_tags", []) or [])]
+        self._emit_transition(
+            sig,
+            {
+                "kind": "task_ui_observation",
+                "task_id": str(task_id or getattr(combined, "task_id", "") or ""),
+                "state_sig": sig,
+                "page_summary": str(getattr(nav, "page_summary", "") or "") if nav is not None else "",
+                "page_kind": self._page_kind_value(nav),
+                "page_tags": page_tags,
+                "task_progress": str(getattr(combined, "task_progress", "") or ""),
+                "task_decision": decision,
+            },
+        )
+
+    def _emit_task_action_selected(self, sig: str, cand: ActionCandidate, *, source: str) -> None:
+        """
+        Input: state signature, selected candidate, and source label.
+        Output: emits one task_action_selected transition event.
+        Function: records the selected action and its human-readable task intent before execution.
+        """
+        current_task = self.task_manager.current_task()
+        steps = list(getattr(cand, "actions", []) or [])
+        first = steps[0] if steps else None
+        first_dict = self._model_to_json_dict(first) if first is not None else {}
+        self._emit_transition(
+            sig,
+            {
+                "kind": "task_action_selected",
+                "task_id": str(getattr(current_task, "task_id", "") or ""),
+                "task_type": str(getattr(current_task, "task_type", "") or ""),
+                "state_sig": sig,
+                "candidate_key": self._candidate_key(cand),
+                "action_role": str(getattr(cand, "action_role", "") or ""),
+                "starts_task_type": str(getattr(cand, "starts_task_type", "") or ""),
+                "starts_task_depth": str(getattr(cand, "starts_task_depth", "") or ""),
+                "score": float(getattr(cand, "score", 0.0) or 0.0),
+                "action_intent": str(getattr(cand, "action_intent", "") or ""),
+                "source": source,
+                "action": first_dict.get("action"),
+                "element_id": first_dict.get("element_id"),
+                "label": first_dict.get("anchor_label") or first_dict.get("text") or "",
+                "reasoning": first_dict.get("reasoning") or "",
+            },
+        )
+
     def _emit_questionnaire_update(self, sig: str, payload: Dict[str, Any]) -> None:
         try:
             self.callbacks.on_questionnaire_update(self._mk_ctx(sig), payload)
@@ -1092,6 +1149,7 @@ class WorkflowRunner:
             "action_role": str(getattr(cand, "action_role", "") or ""),
             "starts_task_type": str(getattr(cand, "starts_task_type", "") or ""),
             "starts_task_depth": str(getattr(cand, "starts_task_depth", "") or ""),
+            "action_intent": str(getattr(cand, "action_intent", "") or ""),
             "actions": actions,
         }
 
@@ -2369,6 +2427,7 @@ class WorkflowRunner:
         try:
             final_stop_reason = str(getattr(self, "_final_stop_reason", "run_exit") or "run_exit")
             self._write_run_json(stop_reason=final_stop_reason)
+            write_task_report(self._run_output_root())
             self._export_analysis_snapshot(cur_sig=cur_sig, stop_reason=final_stop_reason)
             export_timeline = getattr(self.callbacks, "export_timeline", None)
             if callable(export_timeline):
@@ -4355,6 +4414,8 @@ class WorkflowRunner:
                         existing.action_role = "start_child_task"
                         existing.starts_task_type = str(item_dict.get("task_type") or "generic")
                         existing.starts_task_depth = str(item_dict.get("exploration_depth") or "normal")
+                        if not str(getattr(existing, "action_intent", "") or ""):
+                            existing.action_intent = str(item_dict.get("reason") or "")
                     else:
                         synthesized = ActionCandidate(
                             actions=[entry_step],
@@ -4362,6 +4423,7 @@ class WorkflowRunner:
                             action_role="start_child_task",
                             starts_task_type=str(item_dict.get("task_type") or "generic"),
                             starts_task_depth=str(item_dict.get("exploration_depth") or "normal"),
+                            action_intent=str(item_dict.get("reason") or ""),
                         )
                         entry_candidates.insert(0, synthesized)
                         existing_by_key[entry_key] = synthesized
@@ -4418,6 +4480,7 @@ class WorkflowRunner:
                     route.state_sig = sig or getattr(route, "state_sig", "")
                     requested_task_id = self._nav_task_ids.get(sig, "")
                     self._record_page_summary_for_state(sig, getattr(nav, "page_summary", "") or "")
+                    self._emit_task_ui_observation(sig, combined, requested_task_id)
                     self._apply_task_decision(sig, combined, requested_task_id)
                     self.nav_cache[sig] = nav
                     self.nav_ready_once = True
@@ -5474,6 +5537,7 @@ class WorkflowRunner:
             "next_step",
             {"plan": "dfs_candidate_commit", "candidate_key": action_key, "actions": action_payload},
         )
+        self._emit_task_action_selected(src_sig, cand, source="dfs_candidate_commit")
         ok = self._execute_action_sequence(cand.actions, snap)
         self._mark_attempted(src_sig, cand)
         if not ok:

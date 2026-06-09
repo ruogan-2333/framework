@@ -5,7 +5,17 @@ Output: assertions about popup candidates and page return actions.
 Function: locks the expected schema behavior before workflow changes.
 """
 
-from gpt_cls import ActionCandidate, ActionStep, ActionType, NavigationProposal, PageKind, PageTag, ProposedTask
+from gpt_cls import (
+    ActionCandidate,
+    ActionStep,
+    ActionType,
+    NavigationProposal,
+    NavigationRouterResult,
+    PageKind,
+    PageTag,
+    ProposedTask,
+    RouterResult,
+)
 
 
 def test_popup_can_have_close_and_payment_candidate_actions():
@@ -73,3 +83,30 @@ def test_proposed_task_accepts_predefined_task_type():
     task = ProposedTask(prompt="Open store", task_type="explore_payment", priority=0.9)
 
     assert task.task_type == "explore_payment"
+
+
+def test_action_candidate_accepts_action_intent():
+    """ActionCandidate stores the human-readable intent for task reports."""
+
+    candidate = ActionCandidate(
+        actions=[ActionStep(action=ActionType.CLICK, element_id=1, reasoning="Open settings")],
+        score=0.8,
+        action_role="continue_current_task",
+        action_intent="Open settings to inspect controls related to the active task.",
+    )
+
+    assert candidate.action_intent.startswith("Open settings")
+
+
+def test_navigation_router_result_accepts_task_progress():
+    """NavigationRouterResult stores UI-level progress for the active task."""
+
+    result = NavigationRouterResult(
+        state_sig="xml:test",
+        task_id="task_0001",
+        task_progress="The current page appears to be the home page, so the entry task is complete.",
+        navigation=NavigationProposal(state_sig="xml:test", page_summary="Home page"),
+        router=RouterResult(state_sig="xml:test"),
+    )
+
+    assert result.task_progress.startswith("The current page")
