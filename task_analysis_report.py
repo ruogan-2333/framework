@@ -412,10 +412,10 @@ def _find_proposed_task(llm_result: Dict[str, Any], task: Dict[str, Any]) -> Dic
     """
     Input: origin LLM result and task row from tasks.json.
     Output: matching proposed task dictionary, or empty dict.
-    Function: recovers proposed task reason/prompt for the origin section.
+    Function: recovers proposed task reason/goal for the origin section.
     """
     target_type = str(task.get("task_type") or "")
-    target_prompt = str(task.get("prompt") or "")
+    target_goal = str(task.get("initial_goal") or task.get("prompt") or "")
     target_action_key = _action_match_key(task.get("entry_action") if isinstance(task.get("entry_action"), dict) else {})
     for proposed in list(llm_result.get("proposed_tasks") or []):
         if not isinstance(proposed, dict):
@@ -423,7 +423,8 @@ def _find_proposed_task(llm_result: Dict[str, Any], task: Dict[str, Any]) -> Dic
         entry = proposed.get("entry_action") if isinstance(proposed.get("entry_action"), dict) else {}
         if _action_match_key(entry) == target_action_key:
             return proposed
-        if target_type and str(proposed.get("task_type") or "") == target_type and str(proposed.get("prompt") or "") == target_prompt:
+        proposed_goal = str(proposed.get("initial_goal") or proposed.get("prompt") or "")
+        if target_type and str(proposed.get("task_type") or "") == target_type and proposed_goal == target_goal:
             return proposed
     return {}
 
@@ -510,12 +511,15 @@ def build_task_analysis_report(run_dir: Path) -> Dict[str, Any]:
             continue
         task_id = str(task.get("task_id") or "")
         actions = actions_by_task.get(task_id, [])
+        initial_goal = str(task.get("initial_goal") or task.get("prompt") or "")
         task_reports.append(
             {
                 "task_id": task_id,
                 "task_type": str(task.get("task_type") or ""),
                 "status": str(task.get("status") or ""),
-                "prompt": str(task.get("prompt") or ""),
+                "initial_goal": initial_goal,
+                "current_goal": str(task.get("current_goal") or initial_goal),
+                "progress_summary": str(task.get("progress_summary") or ""),
                 "priority": task.get("priority"),
                 "type_priority": task.get("type_priority"),
                 "llm_priority": task.get("llm_priority"),
@@ -571,7 +575,9 @@ def render_task_analysis_markdown(report: Dict[str, Any]) -> str:
                 f"## {task.get('task_id')} / {task.get('task_type')}",
                 "",
                 f"- status: `{task.get('status', '')}`",
-                f"- prompt: {task.get('prompt', '')}",
+                f"- initial_goal: {task.get('initial_goal', '')}",
+                f"- current_goal: {task.get('current_goal', '')}",
+                f"- progress_summary: {task.get('progress_summary', '')}",
                 f"- priority: `{task.get('priority', '')}` / type `{task.get('type_priority', '')}` / llm `{task.get('llm_priority', '')}`",
                 f"- depth: `{task.get('exploration_depth', '')}`",
                 f"- steps: `{task.get('used_steps', '')}/{task.get('step_budget', '')}`",

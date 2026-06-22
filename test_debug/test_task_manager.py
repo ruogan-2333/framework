@@ -134,7 +134,7 @@ def test_child_task_pushes_on_top_and_finish_returns_to_parent() -> None:
     manager = TaskManager(default_steps=4)
     parent = manager.ensure_initial_task("xml:root")
     child = manager.push_child_task(
-        prompt="探索 Privacy Policy 页面",
+        initial_goal="探索 Privacy Policy 页面",
         task_type="explore_policy",
         entry_action={"action": "click", "element_id": 7},
         origin_state_sig="xml:root",
@@ -162,7 +162,7 @@ def test_invalid_child_without_entry_action_is_ignored() -> None:
     manager = TaskManager(default_steps=4)
     parent = manager.ensure_initial_task("xml:root")
     child = manager.push_child_task(
-        prompt="探索不明确页面",
+        initial_goal="探索不明确页面",
         task_type="generic",
         entry_action={},
         origin_state_sig="xml:root",
@@ -183,7 +183,7 @@ def test_child_task_records_priority_sources() -> None:
     manager = TaskManager(default_steps=4)
     manager.ensure_initial_task("xml:root")
     child = manager.push_child_task(
-        prompt="探索支付页面",
+        initial_goal="探索支付页面",
         task_type="explore_payment",
         priority=0.8,
         type_priority=0.9,
@@ -214,7 +214,7 @@ def test_child_task_step_budget_uses_task_type_spec() -> None:
     manager.ensure_initial_task("xml:root")
 
     child = manager.push_child_task(
-        prompt="explore payment entry",
+        initial_goal="explore payment entry",
         task_type="explore_payment",
         initial_steps=20,
         entry_action={"action": "click", "element_id": 9},
@@ -239,7 +239,7 @@ def test_child_task_creation_respects_max_created_per_type() -> None:
     for idx in range(4):
         created.append(
             manager.push_child_task(
-                prompt=f"explore payment entry {idx}",
+                initial_goal=f"explore payment entry {idx}",
                 task_type="explore_payment",
                 entry_action={"action": "click", "element_id": idx + 1},
                 origin_state_sig="xml:root",
@@ -263,7 +263,7 @@ def test_step_budget_expires_current_task() -> None:
     manager = TaskManager(default_steps=4)
     parent = manager.ensure_initial_task("xml:root")
     child = manager.push_child_task(
-        prompt="探索 Store 页面",
+        initial_goal="探索 Store 页面",
         task_type="explore_payment",
         initial_steps=1,
         entry_action={"action": "click", "element_id": 9},
@@ -283,6 +283,57 @@ def test_step_budget_expires_current_task() -> None:
     assert manager.current_task() == parent
 
 
+def test_record_task_progress_updates_current_goal_and_history() -> None:
+    """
+    Input: one active child task, one UI progress update, and one later action update.
+    Output: current goal and human-readable history row are updated.
+    Function: verifies the dynamic task-goal history format used by reports.
+    """
+    manager = TaskManager(default_steps=4)
+    manager.ensure_initial_task("xml:root")
+    child = manager.push_child_task(
+        initial_goal="Open settings and inspect privacy controls.",
+        task_type="explore_settings",
+        entry_action={"action": "click", "element_id": 3},
+        origin_state_sig="xml:root",
+        reason="settings entry is visible",
+    )
+
+    assert child is not None
+    manager.record_task_progress(
+        task_id=child.task_id,
+        state_sig="xml:settings",
+        page_summary="Settings page with privacy entries.",
+        previous_goal=child.current_goal,
+        current_goal="Inspect privacy and blocking controls.",
+        progress="Settings page reached and privacy-related options are visible.",
+    )
+    manager.record_task_progress(
+        task_id=child.task_id,
+        state_sig="xml:settings",
+        page_summary="",
+        previous_goal=child.current_goal,
+        current_goal=child.current_goal,
+        progress="",
+        selected_action="click:12 Privacy",
+        action_intent="Open Privacy settings.",
+    )
+
+    assert child.current_goal == "Inspect privacy and blocking controls."
+    assert child.progress_summary == "Settings page reached and privacy-related options are visible."
+    assert child.history == [
+        {
+            "state_sig": "xml:settings",
+            "page_summary": "Settings page with privacy entries.",
+            "previous_goal": "Open settings and inspect privacy controls.",
+            "current_goal": "Inspect privacy and blocking controls.",
+            "progress": "Settings page reached and privacy-related options are visible.",
+            "selected_action": "click:12 Privacy",
+            "action_intent": "Open Privacy settings.",
+        }
+    ]
+
+
 def test_snapshot_is_json_safe() -> None:
     """
     Input: task stack with one ignored proposal.
@@ -291,14 +342,14 @@ def test_snapshot_is_json_safe() -> None:
     """
     manager = TaskManager(default_steps=2)
     manager.ensure_initial_task("xml:root")
-    manager.push_child_task(prompt="", task_type="generic", entry_action={}, origin_state_sig="xml:root")
+    manager.push_child_task(initial_goal="", task_type="generic", entry_action={}, origin_state_sig="xml:root")
 
     snapshot = manager.snapshot()
 
     assert snapshot["current_task_id"] == "task_0001"
     assert snapshot["stack"] == ["task_0001"]
     assert snapshot["tasks"][0]["task_id"] == "task_0001"
-    assert snapshot["ignored_proposed_tasks"][0]["ignored_reason"] == "missing_prompt_or_entry_action"
+    assert snapshot["ignored_proposed_tasks"][0]["ignored_reason"] == "missing_initial_goal_or_entry_action"
 
 
 def test_snapshot_records_quota_ignored_tasks() -> None:
@@ -312,7 +363,7 @@ def test_snapshot_records_quota_ignored_tasks() -> None:
 
     for idx in range(4):
         manager.push_child_task(
-            prompt=f"explore policy entry {idx}",
+            initial_goal=f"explore policy entry {idx}",
             task_type="explore_policy",
             entry_action={"action": "click", "element_id": idx + 1},
             origin_state_sig="xml:root",

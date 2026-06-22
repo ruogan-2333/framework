@@ -91,17 +91,21 @@ def _seed_task_rows(tasks_payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         task_id = _task_id_value(task.get("task_id"))
         if not task_id:
             continue
+        initial_goal = str(task.get("initial_goal") or task.get("prompt") or "")
         rows[task_id] = {
             "task_id": task_id,
             "task_type": task.get("task_type", ""),
             "status": task.get("status", ""),
-            "prompt": task.get("prompt", ""),
+            "initial_goal": initial_goal,
+            "current_goal": str(task.get("current_goal") or initial_goal),
+            "progress_summary": str(task.get("progress_summary") or ""),
             "priority": task.get("priority"),
             "type_priority": task.get("type_priority"),
             "llm_priority": task.get("llm_priority"),
             "used_steps": task.get("used_steps"),
             "step_budget": task.get("step_budget"),
             "finish_reason": task.get("finish_reason", ""),
+            "history": list(task.get("history") or []),
             "steps": [],
         }
     return rows
@@ -179,13 +183,16 @@ def build_task_report(run_dir: Path) -> Dict[str, Any]:
                 "task_id": task_id,
                 "task_type": payload.get("task_type", ""),
                 "status": "",
-                "prompt": "",
+                "initial_goal": "",
+                "current_goal": "",
+                "progress_summary": "",
                 "priority": None,
                 "type_priority": None,
                 "llm_priority": None,
                 "used_steps": None,
                 "step_budget": None,
                 "finish_reason": "",
+                "history": [],
                 "steps": [],
             }
         state_sig = str(payload.get("state_sig") or payload.get("sig") or "")
@@ -231,12 +238,29 @@ def render_task_report_markdown(report: Dict[str, Any]) -> str:
                 f"- status: `{task.get('status', '')}`",
                 f"- priority: `{task.get('priority', '')}` / type `{task.get('type_priority', '')}` / llm `{task.get('llm_priority', '')}`",
                 f"- steps: `{task.get('used_steps', '')}/{task.get('step_budget', '')}`",
-                f"- prompt: {task.get('prompt', '')}",
+                f"- initial_goal: {task.get('initial_goal', '')}",
+                f"- current_goal: {task.get('current_goal', '')}",
+                f"- progress_summary: {task.get('progress_summary', '')}",
             ]
         )
         if task.get("finish_reason"):
             lines.append(f"- finish_reason: {task.get('finish_reason')}")
         lines.append("")
+        if task.get("history"):
+            lines.extend(["### History", ""])
+            for idx, row in enumerate(task.get("history") or [], start=1):
+                lines.extend(
+                    [
+                        f"{idx}. `{row.get('state_sig', '')}`",
+                        f"   - page: {row.get('page_summary', '')}",
+                        f"   - previous_goal: {row.get('previous_goal', '')}",
+                        f"   - current_goal: {row.get('current_goal', '')}",
+                        f"   - progress: {row.get('progress', '')}",
+                        f"   - action: {row.get('selected_action', '')}",
+                        f"   - intent: {row.get('action_intent', '')}",
+                    ]
+                )
+            lines.append("")
         for idx, step in enumerate(task.get("steps") or [], start=1):
             action = step.get("selected_action") or {}
             lines.extend(

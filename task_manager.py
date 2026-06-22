@@ -224,7 +224,7 @@ class Task:
     One exploration task tracked by the workflow.
 
     Input:
-    - Natural-language prompt, task type, parent task id, and optional entry action.
+    - Initial/current natural-language goals, task type, parent task id, and optional entry action.
 
     Output:
     - JSON-safe dictionaries for LLM payloads and trace snapshots.
@@ -234,7 +234,8 @@ class Task:
     """
 
     task_id: str
-    prompt: str
+    initial_goal: str
+    current_goal: str
     task_type: str
     status: str
     priority: float
@@ -248,6 +249,7 @@ class Task:
     used_steps: int
     created_by: str
     created_at_ms: int
+    progress_summary: str = ""
     finish_reason: str = ""
     notes: str = ""
     history: List[Dict[str, Any]] = field(default_factory=list)
@@ -260,7 +262,8 @@ class Task:
         """
         return {
             "task_id": self.task_id,
-            "prompt": self.prompt,
+            "initial_goal": self.initial_goal,
+            "current_goal": self.current_goal,
             "task_type": self.task_type,
             "status": self.status,
             "priority": self.priority,
@@ -274,6 +277,7 @@ class Task:
             "used_steps": max(0, int(self.used_steps)),
             "created_by": self.created_by,
             "created_at_ms": self.created_at_ms,
+            "progress_summary": self.progress_summary,
             "finish_reason": self.finish_reason,
             "notes": self.notes,
             "history": list(self.history),
@@ -320,7 +324,7 @@ class TaskManager:
             return cur  # type: ignore[return-value]
 
         task = self._new_task(
-            prompt=INITIAL_TASK_PROMPT,
+            initial_goal=INITIAL_TASK_PROMPT,
             task_type="enter_main_page",
             parent_task_id="",
             origin_state_sig=origin_state_sig,
@@ -336,7 +340,6 @@ class TaskManager:
         task.status = "running"
         self.tasks_by_id[task.task_id] = task
         self.stack.append(task.task_id)
-        task.history.append({"event": "created", "state_sig": origin_state_sig, "ts_ms": self._now_ms()})
         return task
 
     def current_task(self) -> Optional[Task]:
@@ -367,7 +370,7 @@ class TaskManager:
     def push_child_task(
         self,
         *,
-        prompt: str,
+        initial_goal: str,
         task_type: str = "generic",
         priority: float = 0.5,
         type_priority: float = 0.5,
@@ -384,19 +387,19 @@ class TaskManager:
         Input: LLM-proposed child task fields.
         Output: created Task, or None when the proposal is invalid.
         Function: validates the first-version requirement that child tasks must
-        have both a prompt and an entry action, then pushes the task onto stack.
+        have both an initial goal and an entry action, then pushes the task onto stack.
         """
-        clean_prompt = str(prompt or "").strip()
+        clean_goal = str(initial_goal or "").strip()
         clean_action = dict(entry_action or {})
-        if not clean_prompt or not clean_action:
+        if not clean_goal or not clean_action:
             ignored = {
-                "prompt": clean_prompt,
+                "initial_goal": clean_goal,
                 "task_type": task_type or "generic",
                 "exploration_depth": self._normalize_depth(exploration_depth),
                 "entry_action": clean_action,
                 "reason": reason,
                 "origin_state_sig": origin_state_sig,
-                "ignored_reason": "missing_prompt_or_entry_action",
+                "ignored_reason": "missing_initial_goal_or_entry_action",
                 "ts_ms": self._now_ms(),
             }
             self.ignored_proposed_tasks.append(ignored)
@@ -409,7 +412,7 @@ class TaskManager:
         max_created = max(0, int(spec.max_created))
         if max_created > 0 and created_count >= max_created:
             ignored = {
-                "prompt": clean_prompt,
+                "initial_goal": clean_goal,
                 "task_type": normalized_task_type.value,
                 "exploration_depth": self._normalize_depth(exploration_depth),
                 "entry_action": clean_action,
@@ -429,7 +432,7 @@ class TaskManager:
             parent_id = parent.task_id if parent else ""
 
         task = self._new_task(
-            prompt=clean_prompt,
+            initial_goal=clean_goal,
             task_type=normalized_task_type.value,
             parent_task_id=str(parent_id or ""),
             origin_state_sig=origin_state_sig,
@@ -443,17 +446,55 @@ class TaskManager:
             notes=reason,
         )
         task.status = "running"
-        task.history.append(
-            {
-                "event": "created",
-                "state_sig": origin_state_sig,
-                "reason": reason,
-                "related_router_questions": list(related_router_questions or []),
-                "ts_ms": self._now_ms(),
-            }
-        )
         self.tasks_by_id[task.task_id] = task
         self.stack.append(task.task_id)
+        return task
+
+    def record_task_progress(
+        self,
+        *,
+        task_id: str = "",
+        state_sig: str,
+        page_summary: str,
+        previous_goal: str,
+        current_goal: str,
+        progress: str,
+        selected_action: str = "",
+        action_intent: str = "",
+    ) -> Optional[Task]:
+        """
+        Input: one UI-level task progress record plus optional selected action.
+        Output: updated task, or None when the target task is unavailable.
+        Function: stores the human-readable task history used by reports and debugging.
+        """
+        task = self.tasks_by_id.get(task_id) if task_id else self.current_task()
+        if not task:
+            return None
+        old_goal = str(previous_goal or task.current_goal or task.initial_goal or "")
+        new_goal = str(current_goal or old_goal).strip()
+        if new_goal:
+            task.current_goal = new_goal
+        progress_text = str(progress or "").strip()
+        if progress_text:
+            task.progress_summary = progress_text
+        row = {
+            "state_sig": str(state_sig or ""),
+            "page_summary": str(page_summary or ""),
+            "previous_goal": old_goal,
+            "current_goal": task.current_goal,
+            "progress": progress_text,
+            "selected_action": str(selected_action or ""),
+            "action_intent": str(action_intent or ""),
+        }
+        action_only_update = bool(row["selected_action"] or row["action_intent"]) and not bool(row["page_summary"] or row["progress"])
+        if task.history and str(task.history[-1].get("state_sig") or "") == row["state_sig"]:
+            for key, value in row.items():
+                if action_only_update and key not in {"selected_action", "action_intent"}:
+                    continue
+                if value or key in {"previous_goal", "current_goal"}:
+                    task.history[-1][key] = value
+        else:
+            task.history.append(row)
         return task
 
     def finish_current_task(self, status: str, reason: str = "", state_sig: str = "") -> Optional[Task]:
@@ -467,7 +508,6 @@ class TaskManager:
             return None
         task.status = status if status in {"done", "failed", "blocked", "expired"} else "done"
         task.finish_reason = str(reason or "")
-        task.history.append({"event": "finished", "status": task.status, "reason": task.finish_reason, "state_sig": state_sig, "ts_ms": self._now_ms()})
         if self.stack and self.stack[-1] == task.task_id:
             self.stack.pop()
         parent = self.current_task()
@@ -485,17 +525,6 @@ class TaskManager:
         if not task:
             return None
         task.used_steps = max(0, int(task.used_steps)) + 1
-        task.history.append(
-            {
-                "event": "step_consumed",
-                "state_sig": state_sig,
-                "action_key": action_key,
-                "source": source,
-                "used_steps": task.used_steps,
-                "step_budget": task.step_budget,
-                "ts_ms": self._now_ms(),
-            }
-        )
         if task.used_steps >= task.step_budget:
             self.finish_current_task("expired", "step_budget exhausted", state_sig=state_sig)
         return task
@@ -514,7 +543,9 @@ class TaskManager:
             rows.append(
                 {
                     "task_id": task.task_id,
-                    "prompt": task.prompt,
+                    "initial_goal": task.initial_goal,
+                    "current_goal": task.current_goal,
+                    "progress_summary": task.progress_summary,
                     "task_type": task.task_type,
                     "status": task.status,
                     "priority": task.priority,
@@ -546,7 +577,7 @@ class TaskManager:
     def _new_task(
         self,
         *,
-        prompt: str,
+        initial_goal: str,
         task_type: str,
         parent_task_id: str,
         origin_state_sig: str,
@@ -566,9 +597,11 @@ class TaskManager:
         """
         task_id = f"task_{self._next_id:04d}"
         self._next_id += 1
+        clean_goal = str(initial_goal or "").strip()
         return Task(
             task_id=task_id,
-            prompt=prompt,
+            initial_goal=clean_goal,
+            current_goal=clean_goal,
             task_type=task_type or "generic",
             status="pending",
             priority=float(priority),

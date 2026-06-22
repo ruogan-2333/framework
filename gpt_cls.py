@@ -374,7 +374,7 @@ class ProposedTask(BaseModel):
     - Represents valuable side branches such as policy, payment, settings, or account pages.
     """
 
-    prompt: str = Field("", description="Natural-language child task prompt")
+    initial_goal: str = Field("", description="Natural-language initial goal for this concrete child task")
     task_type: TaskType = Field(TaskType.GENERIC, description="Predefined child task type")
     priority: float = Field(0.5, ge=0.0, le=1.0, description="Task importance in [0, 1]; first version records it but does not sort by it")
     exploration_depth: Literal["shallow", "normal", "deep"] = Field(
@@ -388,6 +388,24 @@ class ProposedTask(BaseModel):
     )
     reason: str = Field("", description="Why this task is worth exploring")
     related_router_questions: List[str] = Field(default_factory=list, description="Router question ids related to this task")
+
+
+class TaskUpdate(BaseModel):
+    """
+    LLM update for the active task's dynamic goal and progress.
+
+    Input:
+    - Current UI, current_task.initial_goal, and current_task.current_goal.
+
+    Output:
+    - Updated current goal and human-readable progress for this UI.
+
+    Function:
+    - Lets the workflow keep task goals adaptive without changing task completion logic.
+    """
+
+    current_goal: str = Field("", description="Updated current goal for the active task after analyzing this UI")
+    progress: str = Field("", description="What this UI reveals or advances for the active task")
 
 
 class NavigationRouterResult(BaseModel):
@@ -405,6 +423,7 @@ class NavigationRouterResult(BaseModel):
     )
     navigation: NavigationProposal = Field(..., description="LLM1-compatible navigation proposal")
     router: RouterResult = Field(..., description="LLM2-1-compatible router answer result")
+    task_update: TaskUpdate = Field(default_factory=TaskUpdate, description="Dynamic goal/progress update for the active task")
     task_decision: TaskDecision = Field(default_factory=TaskDecision, description="Decision about the active task")
     proposed_tasks: List[ProposedTask] = Field(default_factory=list, description="Child tasks discovered on this UI")
 
@@ -712,10 +731,11 @@ OUTPUT (strict JSON matching NavigationRouterResult):
 - state_sig
 - task_id: echo current_task.task_id when present.
 - task_progress: one concise sentence describing current task progress on this UI.
+- task_update: update current_task.current_goal and progress for this UI. Do not use task_update to decide done/failed/return.
 - navigation: strict JSON matching NavigationProposal.
 - router: strict JSON matching RouterResult.
 - task_decision: whether the active task is done/failed/should return, with a short reason.
-- proposed_tasks: child tasks discovered on this UI. Each executable task needs an entry_action and exploration_depth.
+- proposed_tasks: child tasks discovered on this UI. Each executable task needs initial_goal, entry_action, and exploration_depth.
 
 DECISION ORDER:
 1. First perform router analysis: identify direct evidence for router questions and visible entries that may lead to relevant evidence.
@@ -727,6 +747,9 @@ DECISION ORDER:
 5. If the current page already satisfies the active task, set task_decision.current_task_done=true and explain why.
 6. If current_task.task_type is enter_main_page and this is already a stable main/home/menu page, the enter_main_page task is complete; do not mark ordinary main-page feature buttons as continue_current_task.
 7. Use current_task.step_budget and current_task.used_steps to judge whether to continue. If many steps have already been used, prefer finishing the task unless a questionnaire-relevant path clearly needs more evidence.
+8. Use current_task.initial_goal as the stable overall goal and current_task.current_goal as the mutable next-step goal.
+9. Fill task_update.current_goal with the next focused goal after analyzing this UI. If the current goal is still correct, repeat or lightly refine it.
+10. Fill task_update.progress with what this UI reveals or advances for the active task. If the page disproves the original guess, say so and use task_decision to finish/fail when appropriate.
 
 NAVIGATION RULES:
 - Use utg_context to understand where CURRENT is in the known UI transition graph before selecting actions.
@@ -807,6 +830,8 @@ TASK RULES:
 - If proposed_tasks includes an entry_action, include the same action in navigation.candidate_actions with action_role=start_child_task.
 - Do not use internal task ids in candidate actions. Workflow creates ids like task_0002 after your response.
 - proposed_tasks[*].task_type must be one of allowed_task_types[*].task_type.
+- proposed_tasks[*].initial_goal is the concrete overall goal for that child task. It should mention the visible entry to click and what the task should verify or collect.
+- If multiple visible controls independently lead to different relevant evidence pages, create separate proposed_tasks for them instead of putting all of them only under continue_current_task.
 - Use allowed_task_types[*].description to decide what entry each task type covers.
 - Use allowed_task_types[*].completion_goal to decide whether a task should be created and when it should stop.
 - default_priority is the global importance prior for that task type.

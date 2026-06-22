@@ -299,6 +299,7 @@ def _load_state_llm_artifacts(run_dir: Path) -> Tuple[Dict[str, Dict[str, Any]],
             navigation = result.get("navigation") if isinstance(result.get("navigation"), dict) else {}
             router = result.get("router") if isinstance(result.get("router"), dict) else {}
             task_decision = result.get("task_decision") if isinstance(result.get("task_decision"), dict) else {}
+            task_update = result.get("task_update") if isinstance(result.get("task_update"), dict) else {}
             proposed_tasks = result.get("proposed_tasks") if isinstance(result.get("proposed_tasks"), list) else []
             if sig:
                 nav_obs[sig] = {
@@ -306,6 +307,7 @@ def _load_state_llm_artifacts(run_dir: Path) -> Tuple[Dict[str, Dict[str, Any]],
                     "nav_result": navigation,
                     "task_id": str(result.get("task_id") or ""),
                     "task_progress": str(result.get("task_progress") or ""),
+                    "task_update": task_update,
                     "task_decision": task_decision,
                     "proposed_tasks": proposed_tasks,
                     "navigation_router_result_path": str(nav_router_path),
@@ -839,6 +841,7 @@ def build_interactive_html(run_dir: Path) -> Path:
             "snapshot_meta": trace_state.get("snapshot_meta") or {},
             "task_context": trace_state.get("task_context") or {},
             "task_decision": nav.get("task_decision") or {},
+            "task_update": nav.get("task_update") or {},
             "task_progress": task_progress,
             "proposed_tasks": nav.get("proposed_tasks") or [],
             "task_id": nav.get("task_id") or "",
@@ -1054,6 +1057,7 @@ def build_interactive_html(run_dir: Path) -> Path:
       const currentTask = taskCtx.current_task || {{}};
       const taskStack = taskCtx.task_stack || [];
       const taskDecision = d.task_decision || {{}};
+      const taskUpdate = d.task_update || {{}};
       const proposedTasks = d.proposed_tasks || [];
 
       const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
@@ -1082,22 +1086,28 @@ def build_interactive_html(run_dir: Path) -> Path:
         html += `<div>exploration_depth: <span class="mono">${{esc(currentTask.exploration_depth || '-')}}</span></div>`;
         html += `<div>priority: <span class="mono">${{esc(currentTask.priority ?? '')}}</span>, type_priority: <span class="mono">${{esc(currentTask.type_priority ?? '')}}</span>, llm_priority: <span class="mono">${{esc(currentTask.llm_priority ?? '')}}</span></div>`;
         html += `<div>step_budget: <span class="mono">${{esc(currentTask.step_budget ?? '')}}</span>, used_steps: <span class="mono">${{esc(currentTask.used_steps ?? '')}}</span></div>`;
-        html += `<div>prompt: <span class="mono">${{esc(currentTask.prompt || '')}}</span></div>`;
+        html += `<div>initial_goal: <span class="mono">${{esc(currentTask.initial_goal || currentTask.prompt || '')}}</span></div>`;
+        html += `<div>current_goal: <span class="mono">${{esc(currentTask.current_goal || currentTask.initial_goal || currentTask.prompt || '')}}</span></div>`;
+        html += `<div>progress_summary: <span class="mono">${{esc(currentTask.progress_summary || '')}}</span></div>`;
       }} else {{
         html += `<div class="meta">trace ctx 中没有 current_task。</div>`;
       }}
       html += `<div>task_stack_depth: <span class="mono">${{esc(taskStack.length)}}</span></div>`;
       html += `<div>llm_task_id: <span class="mono">${{esc(d.task_id || '')}}</span></div>`;
+      if (Object.keys(taskUpdate).length) {{
+        html += `<div>task_update.current_goal: <span class="mono">${{esc(taskUpdate.current_goal || '')}}</span></div>`;
+        html += `<div>task_update.progress: <span class="mono">${{esc(taskUpdate.progress || '')}}</span></div>`;
+      }}
       if (Object.keys(taskDecision).length) {{
         html += `<div>done=<span class="mono">${{esc(taskDecision.current_task_done)}}</span>, failed=<span class="mono">${{esc(taskDecision.current_task_failed)}}</span>, should_return=<span class="mono">${{esc(taskDecision.should_return)}}</span></div>`;
         html += `<div>reason: <span class="mono">${{esc(taskDecision.reason || '')}}</span></div>`;
       }}
       if (proposedTasks.length) {{
-        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>type_priority</th><th>llm_priority</th><th>depth</th><th>type</th><th>entry</th><th>prompt</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>type_priority</th><th>llm_priority</th><th>depth</th><th>type</th><th>entry</th><th>initial_goal</th></tr></thead><tbody>`;
         proposedTasks.forEach((t, idx) => {{
           const a = t.entry_action || {{}};
           const entry = `${{a.action || ''}}:${{a.element_id ?? 'None'}} ${{a.anchor_label || a.text || ''}}`;
-          html += `<tr><td>T${{idx + 1}}</td><td>${{esc(t.priority ?? '')}}</td><td>${{esc(t.type_priority ?? '')}}</td><td>${{esc(t.llm_priority ?? '')}}</td><td>${{esc(t.exploration_depth || '-')}}</td><td class="mono">${{esc(t.task_type || '')}}</td><td class="mono">${{esc(entry)}}</td><td>${{esc(t.prompt || '')}}</td></tr>`;
+          html += `<tr><td>T${{idx + 1}}</td><td>${{esc(t.priority ?? '')}}</td><td>${{esc(t.type_priority ?? '')}}</td><td>${{esc(t.llm_priority ?? '')}}</td><td>${{esc(t.exploration_depth || '-')}}</td><td class="mono">${{esc(t.task_type || '')}}</td><td class="mono">${{esc(entry)}}</td><td>${{esc(t.initial_goal || t.prompt || '')}}</td></tr>`;
         }});
         html += `</tbody></table></details>`;
       }}

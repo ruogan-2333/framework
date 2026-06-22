@@ -80,7 +80,7 @@ def test_navigation_proposal_accepts_page_tags():
 def test_proposed_task_accepts_predefined_task_type():
     """ProposedTask.task_type is constrained to predefined task types."""
 
-    task = ProposedTask(prompt="Open store", task_type="explore_payment", priority=0.9)
+    task = ProposedTask(initial_goal="Open store", task_type="explore_payment", priority=0.9)
 
     assert task.task_type == "explore_payment"
 

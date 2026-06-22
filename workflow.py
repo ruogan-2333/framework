@@ -110,6 +110,8 @@ def _prepare_proposed_task_for_push(item_dict: Dict[str, Any]) -> Dict[str, Any]
     out["llm_priority"] = llm_priority
     out["priority"] = priority
     out["exploration_depth"] = depth
+    out["initial_goal"] = str(out.get("initial_goal") or out.get("prompt") or "").strip()
+    out.pop("prompt", None)
     return out
 
 
@@ -829,6 +831,7 @@ class WorkflowRunner:
         """
         nav = getattr(combined, "navigation", None)
         decision = self._model_to_json_dict(getattr(combined, "task_decision", None))
+        task_update = self._model_to_json_dict(getattr(combined, "task_update", None))
         page_tags = []
         if nav is not None:
             page_tags = [str(getattr(tag, "value", tag)) for tag in (getattr(nav, "page_tags", []) or [])]
@@ -842,6 +845,7 @@ class WorkflowRunner:
                 "page_kind": self._page_kind_value(nav),
                 "page_tags": page_tags,
                 "task_progress": str(getattr(combined, "task_progress", "") or ""),
+                "task_update": task_update,
                 "task_decision": decision,
             },
         )
@@ -875,6 +879,19 @@ class WorkflowRunner:
                 "label": first_dict.get("anchor_label") or first_dict.get("text") or "",
                 "reasoning": first_dict.get("reasoning") or "",
             },
+        )
+        selected_text = ""
+        if first_dict:
+            selected_text = self._action_key(first)
+        self.task_manager.record_task_progress(
+            task_id=str(getattr(current_task, "task_id", "") or ""),
+            state_sig=sig,
+            page_summary="",
+            previous_goal=str(getattr(current_task, "current_goal", "") or getattr(current_task, "initial_goal", "") or ""),
+            current_goal=str(getattr(current_task, "current_goal", "") or getattr(current_task, "initial_goal", "") or ""),
+            progress="",
+            selected_action=selected_text,
+            action_intent=str(getattr(cand, "action_intent", "") or ""),
         )
 
     def _emit_questionnaire_update(self, sig: str, payload: Dict[str, Any]) -> None:
@@ -4355,6 +4372,22 @@ class WorkflowRunner:
             self._graph_annotate(sig, page_tags=list(getattr(nav, "page_tags", []) or []))
 
         self._maybe_record_home_state(sig, getattr(combined, "navigation", None), combined, current_task)
+        task_update = self._model_to_json_dict(getattr(combined, "task_update", None))
+        nav_summary = str(getattr(nav, "page_summary", "") or "") if nav is not None else ""
+        update_goal = str(task_update.get("current_goal") or "")
+        update_progress = str(task_update.get("progress") or getattr(combined, "task_progress", "") or "")
+        if current_task:
+            previous_goal = str(getattr(current_task, "current_goal", "") or getattr(current_task, "initial_goal", "") or "")
+            self.task_manager.record_task_progress(
+                task_id=current_task.task_id,
+                state_sig=sig,
+                page_summary=nav_summary,
+                previous_goal=previous_goal,
+                current_goal=update_goal or previous_goal,
+                progress=update_progress,
+                selected_action="",
+                action_intent="",
+            )
 
         def candidate_key_from_step_dict(step_dict: Dict[str, Any]) -> str:
             """
@@ -4391,7 +4424,7 @@ class WorkflowRunner:
         for item_dict in prepared_proposed:
             entry_action = item_dict.get("entry_action") if isinstance(item_dict.get("entry_action"), dict) else {}
             task_obj = self.task_manager.push_child_task(
-                prompt=str(item_dict.get("prompt") or ""),
+                initial_goal=str(item_dict.get("initial_goal") or ""),
                 task_type=str(item_dict.get("task_type") or "generic"),
                 priority=float(item_dict.get("priority", 0.5) or 0.5),
                 type_priority=float(item_dict.get("type_priority", 0.5) or 0.5),
@@ -4542,17 +4575,7 @@ class WorkflowRunner:
                                 "state_sig": sig,
                                 "duration_s": duration_s,
                                 "matched_block_ids": [block.get("id") for block in self.block_match_cache.get(sig, [])],
-                                "result": {
-                                    "state_sig": sig,
-                                    "task_id": str(getattr(combined, "task_id", "") or requested_task_id),
-                                    "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
-                                    "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
-                                    "task_decision": self._model_to_json_dict(getattr(combined, "task_decision", None)),
-                                    "proposed_tasks": [
-                                        self._model_to_json_dict(item)
-                                        for item in (getattr(combined, "proposed_tasks", None) or [])
-                                    ],
-                                },
+                                "result": self._model_to_json_dict(combined),
                             },
                         )
                     except Exception:
@@ -4564,17 +4587,7 @@ class WorkflowRunner:
                                 "state_sig": sig,
                                 "duration_s": duration_s,
                                 "matched_block_ids": [],
-                                "result": {
-                                    "state_sig": sig,
-                                    "task_id": str(getattr(combined, "task_id", "") or requested_task_id),
-                                    "navigation": nav.model_dump(mode="json") if hasattr(nav, "model_dump") else getattr(nav, "__dict__", {}),
-                                    "router": route.model_dump(mode="json") if hasattr(route, "model_dump") else getattr(route, "__dict__", {}),
-                                    "task_decision": self._model_to_json_dict(getattr(combined, "task_decision", None)),
-                                    "proposed_tasks": [
-                                        self._model_to_json_dict(item)
-                                        for item in (getattr(combined, "proposed_tasks", None) or [])
-                                    ],
-                                },
+                                "result": self._model_to_json_dict(combined),
                                 "error": "combined_router_postprocess_failed",
                             },
                         )

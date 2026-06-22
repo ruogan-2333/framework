@@ -746,9 +746,12 @@ class JsonlTraceCallbacks(NoOpCallbacks):
             )
         lines.extend(["", "## Task", ""])
         if task_decision_body:
+            task_update_body = (nav_router.get("result") or {}).get("task_update") or {}
             lines.extend(
                 [
                     f"- task_id: {str((nav_router.get('result') or {}).get('task_id') or '')}",
+                    f"- task_update.current_goal: {str(task_update_body.get('current_goal') or '')}",
+                    f"- task_update.progress: {str(task_update_body.get('progress') or '')}",
                     f"- current_task_done: {bool(task_decision_body.get('current_task_done'))}",
                     f"- current_task_failed: {bool(task_decision_body.get('current_task_failed'))}",
                     f"- should_return: {bool(task_decision_body.get('should_return'))}",
@@ -767,7 +770,7 @@ class JsonlTraceCallbacks(NoOpCallbacks):
                         f"- T{idx}: priority={task.get('priority')}, type_priority={task.get('type_priority')}, llm_priority={task.get('llm_priority')}, "
                         f"depth={task.get('exploration_depth')}, type={task.get('task_type')}, "
                         f"entry={entry.get('action')}:{entry.get('element_id')} {label}, "
-                        f"prompt={str(task.get('prompt') or '')}"
+                        f"initial_goal={str(task.get('initial_goal') or task.get('prompt') or '')}"
                     )
         else:
             lines.append("- task_decision: no")

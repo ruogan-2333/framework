@@ -445,7 +445,9 @@ def build_task_context(state_sig: str) -> Dict[str, Any]:
     """
     current_task = {
         "task_id": CURRENT_TASK_ID,
-        "prompt": CURRENT_TASK_PROMPT,
+        "initial_goal": CURRENT_TASK_PROMPT,
+        "current_goal": CURRENT_TASK_PROMPT,
+        "progress_summary": "",
         "task_type": CURRENT_TASK_TYPE,
         "status": "running",
         "priority": 1.0,
@@ -462,7 +464,9 @@ def build_task_context(state_sig: str) -> Dict[str, Any]:
     }
     stack_item = {
         "task_id": current_task["task_id"],
-        "prompt": current_task["prompt"],
+        "initial_goal": current_task["initial_goal"],
+        "current_goal": current_task["current_goal"],
+        "progress_summary": current_task["progress_summary"],
         "task_type": current_task["task_type"],
         "status": current_task["status"],
         "priority": current_task["priority"],
