@@ -20,6 +20,7 @@ test_debug/fetch_snap/
 test_debug/utg_eval/
 test_debug/llm_replay_runs/
 test_debug/policy_document_capture/
+test_debug/install_test_outputs/
 6.11标注/
 mytest2/llm1_debug/
 mytest2/preflight_refresh_test/

@@ -77,7 +77,7 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         default_priority=1.0,
         default_depth="normal",
         max_created=1,
-        step_budget=8,
+        step_budget=10,
     ),
     TaskType.EXPLORE_MAIN_FUNCTION: TaskTypeSpec(
         task_type=TaskType.EXPLORE_MAIN_FUNCTION,
@@ -85,8 +85,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="覆盖 APP 的代表性主功能页面，理解 APP 主要用途；在探索过程中记录问卷可见证据，例如内容风险、用户互动、位置分享、广告、年龄验证、防沉迷、AI 功能、儿童接触风险等。",
         default_priority=0.75,
         default_depth="normal",
-        max_created=8,
-        step_budget=5,
+        max_created=50,
+        step_budget=8,
     ),
     TaskType.EXPLORE_PAYMENT: TaskTypeSpec(
         task_type=TaskType.EXPLORE_PAYMENT,
@@ -94,8 +94,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="找到能够回答支付相关问卷问题的页面证据，例如是否存在内购、订阅、随机奖励、虚拟货币、现金兑换或 NFT/可转移数字资产；不要执行真实购买或不可逆操作。",
         default_priority=0.90,
         default_depth="normal",
-        max_created=3,
-        step_budget=3,
+        max_created=50,
+        step_budget=8,
     ),
     TaskType.EXPLORE_POLICY: TaskTypeSpec(
         task_type=TaskType.EXPLORE_POLICY,
@@ -103,8 +103,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="记录政策页面及其入口；任务完成时应将当前页面标记为 policy 类页面，便于后续对政策页面做额外处理；当前任务不需要深入阅读全文。",
         default_priority=0.70,
         default_depth="shallow",
-        max_created=3,
-        step_budget=3,
+        max_created=50,
+        step_budget=8,
     ),
     TaskType.EXPLORE_SETTINGS: TaskTypeSpec(
         task_type=TaskType.EXPLORE_SETTINGS,
@@ -112,8 +112,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="找到和问卷关注点相关的设置项或控制项，或确认设置页没有明显相关入口；不需要深入语言、主题、声音、震动等无关设置。",
         default_priority=0.80,
         default_depth="normal",
-        max_created=3,
-        step_budget=3,
+        max_created=50,
+        step_budget=8,
     ),
     TaskType.GENERIC: TaskTypeSpec(
         task_type=TaskType.GENERIC,
@@ -121,8 +121,8 @@ TASK_TYPE_SPECS: Dict[TaskType, TaskTypeSpec] = {
         completion_goal="只做轻度确认；如果与问卷关注点无关，应快速结束或跳过。",
         default_priority=0.20,
         default_depth="shallow",
-        max_created=3,
-        step_budget=4,
+        max_created=20,
+        step_budget=6,
     ),
 }
 
@@ -244,6 +244,7 @@ class Task:
     exploration_depth: str
     parent_task_id: str
     origin_state_sig: str
+    resume_state_sig: str
     entry_action: Dict[str, Any]
     step_budget: int
     used_steps: int
@@ -272,6 +273,7 @@ class Task:
             "exploration_depth": self.exploration_depth,
             "parent_task_id": self.parent_task_id,
             "origin_state_sig": self.origin_state_sig,
+            "resume_state_sig": self.resume_state_sig,
             "entry_action": self.entry_action,
             "step_budget": self.step_budget,
             "used_steps": max(0, int(self.used_steps)),
@@ -497,6 +499,21 @@ class TaskManager:
             task.history.append(row)
         return task
 
+    def update_resume_state(self, task_id: str = "", state_sig: str = "") -> Optional[Task]:
+        """
+        Input: optional task id and state signature.
+        Output: updated task, or None when no matching task exists.
+        Function: records the UI state where a task should resume after child tasks finish.
+        """
+        clean_sig = str(state_sig or "").strip()
+        if not clean_sig:
+            return None
+        task = self.tasks_by_id.get(task_id) if task_id else self.current_task()
+        if not task:
+            return None
+        task.resume_state_sig = clean_sig
+        return task
+
     def finish_current_task(self, status: str, reason: str = "", state_sig: str = "") -> Optional[Task]:
         """
         Input: terminal status and natural-language reason.
@@ -556,6 +573,7 @@ class TaskManager:
                     "used_steps": max(0, int(task.used_steps)),
                     "parent_task_id": task.parent_task_id,
                     "origin_state_sig": task.origin_state_sig,
+                    "resume_state_sig": task.resume_state_sig,
                 }
             )
         return rows
@@ -610,6 +628,7 @@ class TaskManager:
             exploration_depth=self._normalize_depth(exploration_depth),
             parent_task_id=parent_task_id,
             origin_state_sig=origin_state_sig,
+            resume_state_sig=origin_state_sig,
             entry_action=dict(entry_action or {}),
             step_budget=max(int(step_budget), 1),
             used_steps=0,

@@ -140,19 +140,32 @@ def _pick_metadata_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     for key in _META_SELECTED_FIELDS:
         out[key] = row.get(key, "")
 
-    # New downloaded-app CSVs expose `description` and `category`, while old metadata
-    # exports may expose `summary`, `genre`, `genreId`, or serialized `categories`.
-    out["description"] = _row_first_value(row, ["description", "Description", "desc"])
-    out["descriptionHTML"] = _row_first_value(row, ["descriptionHTML", "description_html"])
-    out["summary"] = _row_first_value(row, ["summary", "app_summary", "short_description"])
-    out["contentRating"] = _row_first_value(row, ["contentRating", "content_rating"])
-    out["contentRatingDescription"] = _row_first_value(row, ["contentRatingDescription", "content_rating_description"])
-    out["offersIAP"] = _row_first_value(row, ["offersIAP", "offers_iap", "iap"])
-    out["inAppProductPrice"] = _row_first_value(row, ["inAppProductPrice", "in_app_product_price"])
-    category = _row_first_value(row, ["genre", "category", "Category"])
+    # known_dataset_200_metadata.csv is the target benchmark metadata source.
+    # Keep the downstream LLM payload shape stable: map the final dataset fields
+    # into the original compact metadata field names.
+    out["description"] = _row_first_value(row, ["details_full_description"])
+    out["descriptionHTML"] = ""
+    out["summary"] = _row_first_value(row, ["app_name", "data_safety_summary"])
+    out["contentRating"] = _row_first_value(row, ["age_rating", "details_content_rating"])
+    out["contentRatingDescription"] = _row_first_value(
+        row,
+        ["age_rating_descriptors", "details_interactive_elements", "content_descriptors"],
+    )
+    out["offersIAP"] = _row_first_value(row, ["details_in_app_purchases"])
+    out["inAppProductPrice"] = _row_first_value(row, ["details_in_app_purchases"])
+    category = _row_first_value(row, ["category_name"])
     out["genre"] = category
-    out["genreId"] = _row_first_value(row, ["genreId", "genre_id", "category_id"])
-    out["categories"] = _row_first_value(row, ["categories", "category", "Category"])
+    out["genreId"] = _row_first_value(row, ["application_category", "category_code"])
+    out["categories"] = "; ".join(
+        value
+        for value in [
+            _row_first_value(row, ["category_name"]),
+            _row_first_value(row, ["category_code"]),
+            _row_first_value(row, ["application_category"]),
+            f"is_game={_row_first_value(row, ['is_game'])}" if _row_first_value(row, ["is_game"]) else "",
+        ]
+        if value
+    )
     return out
 
 
@@ -167,22 +180,23 @@ def _normalize_questionnaire_type(value: str) -> str:
     return ""
 
 
-def _maybe_build_interactive_visualization(args: argparse.Namespace, logger: logging.Logger) -> None:
+def _maybe_build_interactive_visualization(args: argparse.Namespace, logger: logging.Logger, actual_run_id: str = "") -> None:
     """
-    Input: parsed CLI args and the main logger.
+    Input: parsed CLI args, the main logger, and optional runtime-generated run id.
     Output: writes interactive HTML artifacts when enabled, otherwise returns without side effects.
     Function: optionally runs the post-run interactive UTG/timeline visualization for the current trace run.
+    When --run-id is omitted, JsonlTraceCallbacks generates the run id; actual_run_id lets visualization find that directory.
     """
     if not bool(getattr(args, "auto_visualize_interactive", False)):
         return
 
     trace_dir = str(getattr(args, "trace_dir", "") or "").strip()
-    run_id = str(getattr(args, "run_id", "") or "").strip()
+    run_id = str(actual_run_id or getattr(args, "run_id", "") or "").strip()
     if not trace_dir:
         logger.warning("--auto-visualize-interactive requires --trace-dir; skip visualization.")
         return
     if not run_id:
-        logger.warning("--auto-visualize-interactive requires --run-id; skip visualization.")
+        logger.warning("--auto-visualize-interactive could not determine run id; skip visualization.")
         return
 
     run_dir = Path(trace_dir) / run_id
@@ -196,6 +210,118 @@ def _maybe_build_interactive_visualization(args: argparse.Namespace, logger: log
         logger.warning("Auto interactive visualization failed for run_dir=%s", run_dir, exc_info=True)
 
 
+def _safe_report_name(value: str) -> str:
+    """
+    Input: arbitrary identifier such as a package name or run id.
+    Output: filesystem-safe name fragment.
+    Function: keeps install report paths readable without allowing path separators.
+    """
+    return "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in str(value or "").strip()) or "unknown"
+
+
+def _write_install_json_report(result: Any, output_dir: Path, file_name: str) -> Path:
+    """
+    Input: an InstallResult-like object, output directory, and report file name.
+    Output: path to the JSON report written on disk.
+    Function: stores structured install/preflight results for later debugging.
+    """
+    from device_utils import install_result_to_dict
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_path = output_dir / file_name
+    report_path.write_text(
+        json.dumps(install_result_to_dict(result), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return report_path
+
+
+def _ensure_trace_run_id(args: argparse.Namespace) -> None:
+    """
+    Input: parsed CLI args for a workflow run.
+    Output: mutates args.run_id when trace output is enabled and no run id was provided.
+    Function: makes pre-workflow artifacts share the same run directory as trace.jsonl and index.html.
+    """
+    if str(getattr(args, "trace_dir", "") or "").strip() and not str(getattr(args, "run_id", "") or "").strip():
+        args.run_id = time.strftime("%Y%m%d_%H%M%S")
+
+
+def _write_metadata_result_json(result: Any, trace_dir: str, run_id: str) -> Optional[Path]:
+    """
+    Input: metadata analysis result object plus trace root and run id.
+    Output: path to metadata_result.json, or None when trace output is disabled.
+    Function: stores only the metadata LLM output in the current run directory for later inspection.
+    """
+    if not str(trace_dir or "").strip() or not str(run_id or "").strip():
+        return None
+
+    if hasattr(result, "model_dump"):
+        payload = result.model_dump(mode="json")
+    elif hasattr(result, "dict"):
+        payload = result.dict()
+    else:
+        payload = dict(getattr(result, "__dict__", {})) or {"result": str(result)}
+
+    output_dir = Path(trace_dir) / str(run_id)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "metadata_result.json"
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return output_path
+
+
+def _discover_install_package_files(apk_dir: Path, package_filter: str = "") -> list[Path]:
+    """
+    Input: directory containing APK/XAPK files and optional package-name substring filter.
+    Output: sorted APK/XAPK file list.
+    Function: provides deterministic input order for batch install smoke tests.
+    """
+    package_filter = str(package_filter or "").strip().lower()
+    files: list[Path] = []
+    for path in sorted(apk_dir.iterdir(), key=lambda item: item.name.lower()):
+        if not path.is_file() or path.suffix.lower() not in {".apk", ".xapk"}:
+            continue
+        if package_filter and package_filter not in path.stem.lower():
+            continue
+        files.append(path)
+    return files
+
+
+def _write_batch_install_reports(rows: list[dict[str, Any]], output_dir: Path) -> tuple[Path, Path]:
+    """
+    Input: batch install row dictionaries and output directory.
+    Output: paths to the CSV and JSONL reports.
+    Function: writes incremental-friendly batch smoke test reports.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "install_smoke_summary.csv"
+    jsonl_path = output_dir / "install_smoke_results.jsonl"
+    fieldnames = [
+        "package",
+        "app_file",
+        "file_type",
+        "install_status",
+        "successful_method",
+        "verify_installed_status",
+        "launch_status",
+        "launch_foreground_package",
+        "launch_error",
+        "uninstall_before_status",
+        "uninstall_after_status",
+        "uninstall_error",
+        "obb_push_status",
+        "extraction_error",
+        "duration_seconds",
+    ]
+    with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    with jsonl_path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return csv_path, jsonl_path
+
+
 def parse_args(argv) -> argparse.Namespace:
     # CLI supports the main exploration run plus lightweight device utilities.
     p = argparse.ArgumentParser(description="Run Appium + LLM exploration workflow or device utilities.")
@@ -206,6 +332,16 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument("--device-name", type=str, default=None, help="Optional device name (caps deviceName)")
     run.add_argument("--package", type=str, required=True, help="Target app package name")
     run.add_argument("--activity", type=str, default=None, help="Optional launch activity")
+    run.add_argument("--app-file", type=str, default="", help="Optional APK/XAPK file used by --install-before-run")
+    run.add_argument("--install-before-run", action="store_true", help="Install --app-file before starting Appium/LLM exploration")
+    run.add_argument("--uninstall-before-install", action="store_true", help="Uninstall target package before --install-before-run")
+    run.add_argument("--validate-launch-before-run", action="store_true", help="Launch and foreground-check the app after installing")
+    run.add_argument("--uninstall-after-run", action="store_true", help="Uninstall target package after the exploration run finishes")
+    run.add_argument("--install-timeout", type=int, default=180, help="Timeout seconds for each adb install/uninstall command")
+    run.add_argument("--install-launch-wait-seconds", type=float, default=5.0, help="Seconds to wait before checking foreground package")
+    run.add_argument("--install-temp-dir", type=str, default="", help="Optional temp directory for XAPK extraction")
+    run.add_argument("--keep-install-temp", action="store_true", help="Keep extracted XAPK temp files for debugging")
+    run.add_argument("--adb-path", type=str, default="adb", help="adb executable used for install/uninstall helpers")
     run.add_argument("--questionnaire-dir", type=str, required=True, help="Directory containing questionnaire JSON files")
     run.add_argument(
         "--questionnaire-type-source",
@@ -284,6 +420,38 @@ def parse_args(argv) -> argparse.Namespace:
     ins.add_argument("--apk", required=True)
     ins.add_argument("--debug", action="store_true")
 
+    pkg = sub.add_parser("install-package", help="Install and optionally launch-test an APK/XAPK")
+    pkg.add_argument("--device-name", default=None)
+    pkg.add_argument("--app-file", required=True)
+    pkg.add_argument("--package", required=True)
+    pkg.add_argument("--adb-path", default="adb")
+    pkg.add_argument("--temp-dir", default="")
+    pkg.add_argument("--keep-temp", action="store_true")
+    pkg.add_argument("--timeout-seconds", type=int, default=180)
+    pkg.add_argument("--launch-after-install", action="store_true")
+    pkg.add_argument("--no-foreground-check", action="store_true")
+    pkg.add_argument("--launch-wait-seconds", type=float, default=5.0)
+    pkg.add_argument("--uninstall-after-test", action="store_true")
+    pkg.add_argument("--output-dir", default="test_debug/install_test_outputs")
+    pkg.add_argument("--debug", action="store_true")
+
+    batch = sub.add_parser("batch-install-smoke", help="Batch install/launch smoke-test APK/XAPK files")
+    batch.add_argument("--device-name", default=None)
+    batch.add_argument("--apk-dir", required=True)
+    batch.add_argument("--limit", type=int, default=0, help="Max files to test; 0 means all")
+    batch.add_argument("--package-filter", default="")
+    batch.add_argument("--adb-path", default="adb")
+    batch.add_argument("--temp-dir", default="")
+    batch.add_argument("--keep-temp", action="store_true")
+    batch.add_argument("--timeout-seconds", type=int, default=180)
+    batch.add_argument("--uninstall-before-install", action="store_true")
+    batch.add_argument("--launch-after-install", action="store_true")
+    batch.add_argument("--no-foreground-check", action="store_true")
+    batch.add_argument("--launch-wait-seconds", type=float, default=5.0)
+    batch.add_argument("--uninstall-after-test", action="store_true")
+    batch.add_argument("--output-dir", default="test_debug/install_test_outputs")
+    batch.add_argument("--debug", action="store_true")
+
     return p.parse_args(argv)
 
 # #============================  # Dev-default args for quick local run; keep disabled for CLI-driven runs.
@@ -323,6 +491,67 @@ def main(argv=None):
     logger = logging.getLogger(__name__)
 
     if args.cmd == "run":
+        _ensure_trace_run_id(args)
+        install_preflight_result = None
+        install_preflight_report = None
+        if args.install_before_run:
+            if not str(getattr(args, "app_file", "") or "").strip():
+                logger.error("--install-before-run requires --app-file")
+                print("[INSTALL] failed: --install-before-run requires --app-file")
+                return 2
+            from device_utils import adb_success, install_package_file, install_result_to_dict, uninstall_package
+
+            if args.uninstall_before_install:
+                uninstall_first = uninstall_package(
+                    args.package,
+                    device_name=args.device_name,
+                    adb_path=args.adb_path,
+                    timeout_seconds=int(args.install_timeout),
+                )
+                print(
+                    "[INSTALL][pre-uninstall] package={pkg} status={status}".format(
+                        pkg=args.package,
+                        status="ok" if adb_success(uninstall_first) else "failed",
+                    )
+                )
+
+            install_preflight_result = install_package_file(
+                args.app_file,
+                args.package,
+                device_name=args.device_name,
+                adb_path=args.adb_path,
+                temp_dir=str(args.install_temp_dir or "") or None,
+                keep_temp=bool(args.keep_install_temp),
+                timeout_seconds=int(args.install_timeout),
+                launch_after_install=bool(args.validate_launch_before_run),
+                validate_launch_foreground=True,
+                launch_wait_seconds=float(args.install_launch_wait_seconds),
+                uninstall_after_test=False,
+            )
+            report_base = Path(args.trace_dir or "test_debug/install_test_outputs")
+            if args.run_id:
+                report_dir = report_base / _safe_report_name(args.run_id)
+            else:
+                report_dir = report_base / ("install_preflight_" + time.strftime("%Y%m%d_%H%M%S") + "_" + _safe_report_name(args.package))
+            install_preflight_report = _write_install_json_report(install_preflight_result, report_dir, "install_result.json")
+            install_payload = install_result_to_dict(install_preflight_result)
+            print(
+                "[INSTALL] package={pkg} install={install} verify={verify} launch={launch} foreground={fg} report={report}".format(
+                    pkg=args.package,
+                    install=install_payload.get("install_status") or "-",
+                    verify=install_payload.get("verify_installed_status") or "-",
+                    launch=install_payload.get("launch_status") or "-",
+                    fg=install_payload.get("launch_foreground_package") or "-",
+                    report=install_preflight_report,
+                )
+            )
+            install_failed = install_preflight_result.install_status != "ok"
+            verify_failed = install_preflight_result.verify_installed_status and install_preflight_result.verify_installed_status != "ok"
+            launch_failed = bool(args.validate_launch_before_run) and install_preflight_result.launch_status != "ok"
+            if install_failed or verify_failed or launch_failed:
+                logger.error("Install preflight failed: %s", json.dumps(install_payload, ensure_ascii=False))
+                return 2
+
         api_key = args.api_key or os.getenv("OPENAI_API_KEY", "")
         if not api_key:
             logging.getLogger(__name__).warning("OPENAI_API_KEY not set; GPT calls will fail.")
@@ -360,12 +589,14 @@ def main(argv=None):
                         focus_hints = (str(meta_result.focus_hints or "").strip() or None)
                         metadata_questionnaire_type = _normalize_questionnaire_type(str(meta_result.questionnaire_type or ""))
                         metadata_notes = str(meta_result.notes or "").strip()
+                        metadata_result_path = _write_metadata_result_json(meta_result, args.trace_dir, args.run_id)
                         logger.info(
-                            "Metadata analyzed app=%s questionnaire_type=%s intro=%s hints=%s",
+                            "Metadata analyzed app=%s questionnaire_type=%s intro=%s hints=%s result=%s",
                             args.package,
                             metadata_questionnaire_type or "-",
                             bool(app_intro),
                             bool(focus_hints),
+                            metadata_result_path or "-",
                         )
             except Exception as e:
                 metadata_notes = f"metadata_analysis_failed:{type(e).__name__}:{e}"
@@ -492,14 +723,35 @@ def main(argv=None):
             if args.relaunch and args.package:
                 appium.force_stop(args.package)
             appium.quit()
-            _maybe_build_interactive_visualization(args, logger)
+            if args.uninstall_after_run and args.package:
+                from device_utils import adb_success, uninstall_package
+
+                uninstall_result = uninstall_package(
+                    args.package,
+                    device_name=args.device_name,
+                    adb_path=args.adb_path,
+                    timeout_seconds=int(args.install_timeout),
+                )
+                uninstall_status = "ok" if adb_success(uninstall_result) else "failed"
+                print(f"[INSTALL][post-uninstall] package={args.package} status={uninstall_status}")
+            _maybe_build_interactive_visualization(args, logger, actual_run_id=getattr(runner, "run_id", "") or getattr(callbacks, "run_id", ""))
 
         # New workflow stores per-UI observations for later merge; there is no
         # old-style final answer export at runtime yet.
         logger.info("Final block_status:\n%s", q.block_status)
 
     else:
-        from device_utils import list_packages, list_processes, screenshot, dump_ui, install_apk
+        from device_utils import (
+            adb_success,
+            install_apk,
+            install_package_file,
+            install_result_to_dict,
+            list_packages,
+            list_processes,
+            screenshot,
+            dump_ui,
+            uninstall_package,
+        )
         if args.cmd == "list-packages":
             for pkg in list_packages(args.device_name):
                 print(pkg)
@@ -515,7 +767,104 @@ def main(argv=None):
         elif args.cmd == "install-apk":
             install_apk(args.apk, args.device_name)
             print("APK installed")
+        elif args.cmd == "install-package":
+            package_result = install_package_file(
+                args.app_file,
+                args.package,
+                device_name=args.device_name,
+                adb_path=args.adb_path,
+                temp_dir=str(args.temp_dir or "") or None,
+                keep_temp=bool(args.keep_temp),
+                timeout_seconds=int(args.timeout_seconds),
+                launch_after_install=bool(args.launch_after_install),
+                validate_launch_foreground=not bool(args.no_foreground_check),
+                launch_wait_seconds=float(args.launch_wait_seconds),
+                uninstall_after_test=bool(args.uninstall_after_test),
+            )
+            output_dir = Path(args.output_dir) / (time.strftime("%Y%m%d_%H%M%S") + "_" + _safe_report_name(args.package))
+            report_path = _write_install_json_report(package_result, output_dir, "install_result.json")
+            payload = install_result_to_dict(package_result)
+            print(
+                "[INSTALL] package={pkg} install={install} verify={verify} launch={launch} foreground={fg} uninstall={uninstall}".format(
+                    pkg=args.package,
+                    install=payload.get("install_status") or "-",
+                    verify=payload.get("verify_installed_status") or "-",
+                    launch=payload.get("launch_status") or "-",
+                    fg=payload.get("launch_foreground_package") or "-",
+                    uninstall=payload.get("uninstall_status") or "-",
+                )
+            )
+            print(f"[REPORT] {report_path}")
+            if package_result.install_status != "ok" or (
+                args.launch_after_install and package_result.launch_status != "ok"
+            ):
+                return 1
+        elif args.cmd == "batch-install-smoke":
+            apk_dir = Path(args.apk_dir)
+            if not apk_dir.exists():
+                print(f"[BATCH] failed: apk dir not found: {apk_dir}")
+                return 2
+            files = _discover_install_package_files(apk_dir, args.package_filter)
+            if args.limit and int(args.limit) > 0:
+                files = files[: int(args.limit)]
+            output_dir = Path(args.output_dir) / ("batch_" + time.strftime("%Y%m%d_%H%M%S"))
+            rows: list[dict[str, Any]] = []
+            ok_count = 0
+            for index, app_file in enumerate(files, start=1):
+                package = app_file.stem
+                row_prefix: dict[str, Any] = {
+                    "package": package,
+                    "app_file": str(app_file),
+                    "file_type": app_file.suffix.lower().lstrip("."),
+                    "uninstall_before_status": "",
+                    "uninstall_after_status": "",
+                }
+                if args.uninstall_before_install:
+                    pre_uninstall = uninstall_package(
+                        package,
+                        device_name=args.device_name,
+                        adb_path=args.adb_path,
+                        timeout_seconds=int(args.timeout_seconds),
+                    )
+                    row_prefix["uninstall_before_status"] = "ok" if adb_success(pre_uninstall) else "failed"
+
+                package_result = install_package_file(
+                    str(app_file),
+                    package,
+                    device_name=args.device_name,
+                    adb_path=args.adb_path,
+                    temp_dir=str(args.temp_dir or "") or None,
+                    keep_temp=bool(args.keep_temp),
+                    timeout_seconds=int(args.timeout_seconds),
+                    launch_after_install=bool(args.launch_after_install),
+                    validate_launch_foreground=not bool(args.no_foreground_check),
+                    launch_wait_seconds=float(args.launch_wait_seconds),
+                    uninstall_after_test=bool(args.uninstall_after_test),
+                )
+                result_row = {**install_result_to_dict(package_result), **row_prefix}
+                result_row["uninstall_after_status"] = package_result.uninstall_status
+                rows.append(result_row)
+                if package_result.install_status == "ok" and (not args.launch_after_install or package_result.launch_status == "ok"):
+                    ok_count += 1
+                csv_path, jsonl_path = _write_batch_install_reports(rows, output_dir)
+                print(
+                    "[BATCH] {idx}/{total} package={pkg} install={install} launch={launch} report={report}".format(
+                        idx=index,
+                        total=len(files),
+                        pkg=package,
+                        install=package_result.install_status,
+                        launch=package_result.launch_status or "-",
+                        report=csv_path,
+                    )
+                )
+            csv_path, jsonl_path = _write_batch_install_reports(rows, output_dir)
+            failed_count = len(rows) - ok_count
+            print(f"[BATCH] done total={len(rows)} ok={ok_count} failed={failed_count}")
+            print(f"[REPORT] csv={csv_path}")
+            print(f"[REPORT] jsonl={jsonl_path}")
+            if failed_count:
+                return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

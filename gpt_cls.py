@@ -603,7 +603,7 @@ CONSISTENCY RULES:
 - Do not spam random clicks.
 - Do not intentionally leave the app unless clearly necessary for questionnaire evidence.
 """
-#prompt调整
+
 
 _Q_SYSTEM = """You are LLM2 for questionnaire filling based on CURRENT SCREEN evidence.
 

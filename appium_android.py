@@ -205,10 +205,22 @@ class AndroidAppiumClient:
             time.sleep(wait)
 
     def force_stop(self, package: str) -> None:
-        """Use adbutils to stop app; ignores failures in CI."""
+        """Stop one package on this client's device.
+
+        Input:
+        - package: Android package name to stop.
+
+        Output:
+        - None. Failures are logged and ignored because cleanup should not hide
+          the original workflow result.
+
+        Function:
+        - Uses self.device_name when present so multi-device runs do not stop
+          the package on the wrong adb device.
+        """
         try:
-            device = adbutils.adb.device()
-            logger.info("Force-stop %s via adb", package)
+            device = adbutils.AdbClient().device(self.device_name) if self.device_name else adbutils.adb.device()
+            logger.info("Force-stop %s via adb device=%s", package, self.device_name or "<default>")
             device.shell(["am", "force-stop", package])
         except Exception:
             logger.debug("force_stop failed (ignored)", exc_info=True)

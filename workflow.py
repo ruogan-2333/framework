@@ -91,6 +91,15 @@ from trace_callbacks import Callbacks, StepCtx, NoOpCallbacks
 
 logger = logging.getLogger(__name__)
 
+POLICY_CAPTURE_MIN_TEXT_CHARS = 500
+POLICY_CAPTURE_BODY_X_RATIO = 0.50
+POLICY_CAPTURE_BODY_Y_RATIO = 0.45
+POLICY_CAPTURE_RETURN_MAX_BACKS = 3
+POLICY_CAPTURE_RETURN_WAIT_S = 2.0
+POLICY_CAPTURE_META_CTRL_ON = 4096
+POLICY_CAPTURE_KEYCODE_A = 29
+POLICY_CAPTURE_KEYCODE_C = 31
+
 
 def _prepare_proposed_task_for_push(item_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -123,7 +132,6 @@ def _page_tags_for_completed_task(task_type: str) -> List[str]:
     """
     mapping = {
         "enter_main_page": ["home"],
-        "explore_policy": ["policy"],
         "explore_payment": ["payment"],
         "explore_settings": ["settings"],
     }
@@ -622,6 +630,7 @@ class WorkflowRunner:
 
     # Candidate memory per state (DFS completion)
     state_candidates: Dict[str, List[ActionCandidate]] = field(default_factory=dict, init=False)  # keyed by family_id
+    candidate_task_bindings: Dict[str, Dict[str, str]] = field(default_factory=dict, init=False)  # family_id -> candidate_key -> task_id
     state_return_actions: Dict[str, List[ActionStep]] = field(default_factory=dict, init=False)  # keyed by family_id
     nav_candidates_noted: Set[str] = field(default_factory=set, init=False)
 
@@ -639,6 +648,9 @@ class WorkflowRunner:
 
     # Action history for LLM context
     history: List[str] = field(default_factory=list, init=False)
+    # Last stack-top task id observed by the main loop.
+    # Used to distinguish task switching from ordinary UI drift inside the same task.
+    last_active_task_id: str = field(default="", init=False)
 
     # DFS stack / parent tracking (represents the *current* navigation path)
     dfs_stack: List[str] = field(default_factory=list, init=False)
@@ -706,6 +718,10 @@ class WorkflowRunner:
     foreground_mismatch_count: int = field(default=0, init=False)
     foreground_mismatch_streak: int = field(default=0, init=False)
     foreground_recoveries: int = field(default=0, init=False)
+
+    # Policy document capture bookkeeping.
+    policy_capture_pending: bool = field(default=False, init=False)
+    policy_capture_context: Dict[str, Any] = field(default_factory=dict, init=False)
 
     # Repeat/loop control (family_id + action_key -> counts/expiry)
     action_attempt_counts: Dict[Tuple[str, str], int] = field(default_factory=dict, init=False)
@@ -977,6 +993,429 @@ class WorkflowRunner:
             pass
         return root / f"UI{int(self._step_seq):06d}_{safe}" / filename
 
+    def _should_enter_policy_capture(self, task_type: str = "") -> bool:
+        """
+        Input: current task type string.
+        Output: True when the active task should route the next page into policy capture.
+        Function: restricts first-version policy capture to explicit explore_policy tasks.
+        """
+        return str(task_type or "").strip() == "explore_policy"
+
+    def _safe_policy_document_title(self, title: str) -> str:
+        """
+        Input: raw policy document title from action label or copied text.
+        Output: Windows-safe readable file and directory title.
+        Function: keeps policy capture outputs human-readable while avoiding invalid path characters.
+        """
+        value = re.sub(r"\s+", " ", str(title or "")).strip(" .")
+        if not value:
+            value = "Policy Document"
+        value = re.sub(r'[<>:"/\\|?*]+', "_", value)
+        value = re.sub(r"\s+", " ", value).strip(" ._")
+        if not value:
+            value = "Policy Document"
+        return value[:80].strip(" ._") or "Policy Document"
+
+    def _policy_title_from_text(self, text: str) -> str:
+        """
+        Input: copied policy document text.
+        Output: a short title candidate, or an empty string when no useful line exists.
+        Function: provides a fallback document title when the source action has no label.
+        """
+        for line in str(text or "").splitlines()[:12]:
+            cleaned = re.sub(r"\s+", " ", line).strip()
+            if 4 <= len(cleaned) <= 80:
+                return cleaned
+        return ""
+
+    def _next_policy_capture_dir(self, base_title: str) -> Tuple[Path, str]:
+        """
+        Input: desired policy document title.
+        Output: unique output directory and final title.
+        Function: creates policy_captures/<title>, appending _2/_3 when the title already exists.
+        """
+        root = self._run_output_root() / "policy_captures"
+        root.mkdir(parents=True, exist_ok=True)
+        safe_title = self._safe_policy_document_title(base_title)
+        for idx in range(1, 1000):
+            final_title = safe_title if idx == 1 else f"{safe_title}_{idx}"
+            out_dir = root / final_title
+            if not out_dir.exists():
+                out_dir.mkdir(parents=True, exist_ok=False)
+                return out_dir, final_title
+        final_title = f"{safe_title}_{int(time.time() * 1000)}"
+        out_dir = root / final_title
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return out_dir, final_title
+
+    def _extract_browser_address_from_xml(self, xml_text: str) -> str:
+        """
+        Input: UiAutomator2 XML from an external browser page.
+        Output: raw browser address text without adding or normalizing the scheme.
+        Function: extracts Chromium/browser address-bar values for policy evidence metadata.
+        """
+        if not xml_text:
+            return ""
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception:
+            logger.debug("failed to parse browser XML while extracting address", exc_info=True)
+            return ""
+        fallback = ""
+        for elem in root.iter():
+            attrs = elem.attrib or {}
+            text = re.sub(r"\s+", " ", str(attrs.get("text") or "")).strip()
+            hint = re.sub(r"\s+", " ", str(attrs.get("hint") or "")).strip().casefold()
+            rid = re.sub(r"\s+", " ", str(attrs.get("resource-id") or "")).strip().casefold()
+            cls = re.sub(r"\s+", " ", str(attrs.get("class") or "")).strip()
+            if text and ("url_bar" in rid or "address" in hint or "web address" in hint):
+                return text
+            if text and not fallback and cls.endswith("EditText") and ("." in text or "/" in text):
+                fallback = text
+        return fallback
+
+    def _policy_capture_relpath(self, path: Path) -> str:
+        """
+        Input: absolute or run-root-relative file path.
+        Output: path relative to the run output root when possible.
+        Function: stores compact, portable policy capture paths in metadata and reports.
+        """
+        try:
+            return str(Path(path).resolve().relative_to(self._run_output_root().resolve())).replace("\\", "/")
+        except Exception:
+            return str(path).replace("\\", "/")
+
+    def _write_policy_capture_json(self, path: Path, payload: Dict[str, Any]) -> None:
+        """
+        Input: output JSON path and metadata payload.
+        Output: writes UTF-8 JSON to disk.
+        Function: centralizes policy capture metadata serialization.
+        """
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+    def _write_policy_capture_screenshot(self, path: Path, snap: Dict[str, Any]) -> bool:
+        """
+        Input: output screenshot path and processed snapshot.
+        Output: True when screenshot bytes are written.
+        Function: persists visual evidence for the captured policy page.
+        """
+        b64 = str(snap.get("screenshot_raw") or snap.get("screenshot") or "")
+        if not b64:
+            return False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(base64.b64decode(b64 + "=="))
+            return True
+        except Exception:
+            logger.debug("failed to write policy capture screenshot", exc_info=True)
+            return False
+
+    def _policy_capture_body_point(self) -> Tuple[int, int, Dict[str, Any]]:
+        """
+        Input: live Appium driver window.
+        Output: body tap x/y coordinate and raw window-size metadata.
+        Function: focuses document content before sending Ctrl+A/C copy shortcuts.
+        """
+        try:
+            self.appium._require_driver()
+            size = self.appium.driver.get_window_size()
+            width = int(size.get("width", 0) or 0)
+            height = int(size.get("height", 0) or 0)
+            x = int(width * float(POLICY_CAPTURE_BODY_X_RATIO))
+            y = int(height * float(POLICY_CAPTURE_BODY_Y_RATIO))
+            return x, y, dict(size)
+        except Exception:
+            logger.debug("failed to compute policy capture body point", exc_info=True)
+            return 0, 0, {}
+
+    def _press_policy_capture_ctrl_shortcut(self, keycode: int, name: str) -> Dict[str, Any]:
+        """
+        Input: Android keycode and readable key name.
+        Output: result metadata for the shortcut attempt.
+        Function: sends Ctrl+A or Ctrl+C through Appium using the Android metastate flag.
+        """
+        try:
+            self.appium._require_driver()
+            self.appium.driver.press_keycode(int(keycode), metastate=int(POLICY_CAPTURE_META_CTRL_ON))
+            return {"success": True, "key": name, "strategy": "driver.press_keycode"}
+        except TypeError:
+            try:
+                self.appium.driver.press_keycode(int(keycode), int(POLICY_CAPTURE_META_CTRL_ON))
+                return {"success": True, "key": name, "strategy": "driver.press_keycode_positional"}
+            except Exception as exc:
+                logger.debug("policy capture Ctrl+%s failed", name, exc_info=True)
+                return {"success": False, "key": name, "error": str(exc)}
+        except Exception as exc:
+            logger.debug("policy capture Ctrl+%s failed", name, exc_info=True)
+            return {"success": False, "key": name, "error": str(exc)}
+
+    def _copy_all_policy_document_text(self, out_dir: Path, document_title: str, snap: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Input: output directory, final document title, and current policy-page snapshot.
+        Output: copy metadata including copied text and character count.
+        Function: clears clipboard, taps document body, sends Ctrl+A/C, reads clipboard, and saves text.
+        """
+        out_dir.mkdir(parents=True, exist_ok=True)
+        screenshot_path = out_dir / "screenshot.png"
+        self._write_policy_capture_screenshot(screenshot_path, snap)
+        text_path = out_dir / f"{document_title}.txt"
+        x, y, window_size = self._policy_capture_body_point()
+        result: Dict[str, Any] = {
+            "copy_strategy": "keyboard_shortcut",
+            "body_tap": {"x": x, "y": y},
+            "window_size": window_size,
+            "screenshot_path": self._policy_capture_relpath(screenshot_path),
+            "document_text_path": self._policy_capture_relpath(text_path),
+            "text": "",
+            "text_char_count": 0,
+        }
+        try:
+            self.appium._require_driver()
+            try:
+                self.appium.driver.set_clipboard_text("")
+                result["clipboard_clear"] = {"success": True, "strategy": "driver.set_clipboard_text"}
+            except Exception as exc:
+                result["clipboard_clear"] = {"success": False, "error": str(exc)}
+            if x > 0 and y > 0:
+                self.appium.tap(x, y)
+                time.sleep(0.5)
+            result["ctrl_a"] = self._press_policy_capture_ctrl_shortcut(POLICY_CAPTURE_KEYCODE_A, "A")
+            time.sleep(0.8)
+            result["ctrl_c"] = self._press_policy_capture_ctrl_shortcut(POLICY_CAPTURE_KEYCODE_C, "C")
+            time.sleep(0.8)
+            text = str(self.appium.driver.get_clipboard_text() or "")
+            text_path.write_text(text, encoding="utf-8")
+            result["text"] = text
+            result["text_char_count"] = len(text)
+            result["clipboard_read"] = {"success": True, "strategy": "driver.get_clipboard_text"}
+        except Exception as exc:
+            logger.debug("policy capture copy failed", exc_info=True)
+            result["clipboard_read"] = {"success": False, "error": str(exc)}
+            text_path.write_text("", encoding="utf-8")
+        return result
+
+    def _build_policy_capture_context(self, src_sig: str, cand: ActionCandidate, action_key: str) -> Dict[str, Any]:
+        """
+        Input: source state signature, selected candidate, and candidate key.
+        Output: context dictionary used by the next policy capture step.
+        Function: preserves task/action provenance for policy output metadata.
+        """
+        current_task = self.task_manager.current_task()
+        first_step = (list(getattr(cand, "actions", []) or []) or [None])[0]
+        action_label = ""
+        if first_step is not None:
+            action_label = str(getattr(first_step, "anchor_label", "") or getattr(first_step, "text", "") or "")
+        if not action_label:
+            action_label = str(getattr(cand, "action_intent", "") or "")
+        if not action_label and first_step is not None:
+            action_label = self._action_key(first_step)
+        return {
+            "source_task_id": str(getattr(current_task, "task_id", "") or ""),
+            "source_task_type": str(getattr(current_task, "task_type", "") or ""),
+            "source_state_sig": str(src_sig or ""),
+            "source_action": action_label,
+            "source_candidate_key": str(action_key or ""),
+            "document_title": self._safe_policy_document_title(action_label),
+        }
+
+    def _capture_policy_document(self, sig: str, snap: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Input: policy page state signature and its processed snapshot.
+        Output: metadata describing capture success/failure and saved artifacts.
+        Function: captures policy/TOS document text and evidence without calling navigation/router LLM.
+        """
+        context = dict(self.policy_capture_context or {})
+        meta = snap.get("meta") or {}
+        foreground_package = str(meta.get("foreground_package") or "")
+        if not foreground_package:
+            try:
+                foreground_package = self.appium.foreground_package()
+            except Exception:
+                foreground_package = ""
+        capture_location = "external_browser" if self.target_package and foreground_package and foreground_package != self.target_package else "in_app_document"
+        url_raw = self._extract_browser_address_from_xml(str(snap.get("xml_raw") or snap.get("xml") or "")) if capture_location == "external_browser" else ""
+        desired_title = self._safe_policy_document_title(str(context.get("document_title") or context.get("source_action") or ""))
+        out_dir, final_title = self._next_policy_capture_dir(desired_title)
+        copy_result = self._copy_all_policy_document_text(out_dir, final_title, snap)
+        copied_text = str(copy_result.get("text") or "")
+        if desired_title == "Policy Document":
+            text_title = self._policy_title_from_text(copied_text)
+            if text_title:
+                final_title = self._safe_policy_document_title(text_title)
+        text_char_count = int(copy_result.get("text_char_count", 0) or 0)
+        status = "success" if text_char_count >= int(POLICY_CAPTURE_MIN_TEXT_CHARS) else "failed"
+        failure_reason = "" if status == "success" else "clipboard text too short"
+        metadata: Dict[str, Any] = {
+            "status": status,
+            "failure_reason": failure_reason,
+            "document_title": final_title,
+            "capture_location": capture_location,
+            "url_raw": url_raw,
+            "text_char_count": text_char_count,
+            "source_task_id": str(context.get("source_task_id") or ""),
+            "source_task_type": str(context.get("source_task_type") or ""),
+            "source_state_sig": str(context.get("source_state_sig") or ""),
+            "source_action": str(context.get("source_action") or ""),
+            "source_candidate_key": str(context.get("source_candidate_key") or ""),
+            "state_sig": sig,
+            "foreground_package": foreground_package,
+            "foreground_activity": str(meta.get("foreground_activity") or ""),
+            "output_dir": self._policy_capture_relpath(out_dir),
+            "document_text_path": str(copy_result.get("document_text_path") or ""),
+            "screenshot_path": str(copy_result.get("screenshot_path") or ""),
+            "copy": {k: v for k, v in copy_result.items() if k != "text"},
+        }
+        if status != "success":
+            try:
+                xml_path = out_dir / "xml.xml"
+                xml_path.write_text(str(snap.get("xml_raw") or snap.get("xml") or ""), encoding="utf-8")
+                metadata["xml_path"] = self._policy_capture_relpath(xml_path)
+            except Exception:
+                logger.debug("failed to save policy failure XML", exc_info=True)
+        self._write_policy_capture_json(out_dir / "metadata.json", metadata)
+        metadata["metadata_path"] = self._policy_capture_relpath(out_dir / "metadata.json")
+        return metadata
+
+    def _return_from_policy_document(self, source_state_sig: str, capture_location: str, policy_sig: str) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+        """
+        Input: source state signature, capture location, and policy page state signature.
+        Output: return state signature, snapshot, and return metadata.
+        Function: leaves policy/browser pages with bounded back/foreground attempts after document capture.
+        """
+        result: Dict[str, Any] = {"capture_location": capture_location, "attempts": [], "success": False}
+        if capture_location == "external_browser":
+            try:
+                if self.target_package:
+                    self.appium.ensure_foreground(self.target_package, self.target_activity, wait=POLICY_CAPTURE_RETURN_WAIT_S)
+                snap = self._capture_and_process(timeout=3.0)
+                sig = str((snap or {}).get("state_sig") or source_state_sig or "")
+                result.update({"success": bool(snap), "strategy": "ensure_foreground", "state_sig": sig})
+                return sig, snap or {}, result
+            except Exception as exc:
+                logger.debug("policy external return failed", exc_info=True)
+                result.update({"success": False, "strategy": "ensure_foreground", "error": str(exc)})
+                return source_state_sig, {}, result
+
+        latest_sig = policy_sig
+        latest_snap: Dict[str, Any] = {}
+        for idx in range(1, int(POLICY_CAPTURE_RETURN_MAX_BACKS) + 1):
+            row: Dict[str, Any] = {"attempt": idx, "action": "back"}
+            try:
+                self.appium.back()
+                time.sleep(float(POLICY_CAPTURE_RETURN_WAIT_S))
+                if self.target_package:
+                    try:
+                        self.appium.ensure_foreground(self.target_package, self.target_activity, wait=0.2)
+                    except Exception:
+                        logger.debug("ensure_foreground after policy back failed", exc_info=True)
+                latest_snap = self._capture_and_process(timeout=3.0) or {}
+                latest_sig = str(latest_snap.get("state_sig") or "")
+                row["state_sig"] = latest_sig
+                row["foreground_package"] = str((latest_snap.get("meta") or {}).get("foreground_package") or "")
+                row["success"] = bool(latest_sig and latest_sig != policy_sig)
+                result["attempts"].append(row)
+                if row["success"]:
+                    result.update({"success": True, "strategy": "bounded_back", "state_sig": latest_sig})
+                    return latest_sig, latest_snap, result
+            except Exception as exc:
+                row["success"] = False
+                row["error"] = str(exc)
+                result["attempts"].append(row)
+        result.update({"success": False, "strategy": "bounded_back", "state_sig": latest_sig})
+        return latest_sig or source_state_sig, latest_snap, result
+
+    def _handle_policy_capture_pending(self, sig: str, snap: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Input: policy page state signature and processed snapshot.
+        Output: capture metadata.
+        Function: annotates the UTG node, captures document text, finishes the policy task, and clears pending state.
+        """
+        metadata: Dict[str, Any] = {}
+        try:
+            metadata = self._capture_policy_document(sig, snap)
+            self._graph_annotate(sig, page_tags=["policy"], meta={"policy_capture_pending": True, "policy_capture": metadata})
+            event_name = "policy_capture_done" if metadata.get("status") == "success" else "policy_capture_failed"
+            self._emit_decision(sig, event_name, metadata)
+            self._log_event(event_name, sig=sig, **metadata)
+            if metadata.get("status") == "success":
+                self.task_manager.finish_current_task("done", "policy document captured", state_sig=sig)
+            else:
+                self.task_manager.finish_current_task("failed", f"policy capture failed: {metadata.get('failure_reason')}", state_sig=sig)
+            self._save_tasks_snapshot(reason=event_name)
+            return metadata
+        finally:
+            self.policy_capture_pending = False
+            self.policy_capture_context = {}
+
+    def _normal_llm_page_tags(self, page_tags: List[Any]) -> List[str]:
+        """
+        Input: page tags returned by ordinary navigation/router LLM analysis.
+        Output: sanitized tag strings safe to write as normal page metadata.
+        Function: reserves the policy tag for actual policy document capture nodes only.
+        """
+        out: List[str] = []
+        for tag in list(page_tags or []):
+            value = str(getattr(tag, "value", tag) or "").strip()
+            if not value or value == "policy":
+                continue
+            out.append(value)
+        return out
+
+    def _handle_policy_candidate_after_action(
+        self,
+        src_sig: str,
+        src_snap: Dict[str, Any],
+        cand: ActionCandidate,
+        action_payload: Dict[str, Any],
+        action_key: str,
+        task: str,
+    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """
+        Input: source state, executed candidate, action payload/key, and run task text.
+        Output: post-policy return state and snapshot, or None when this is not a policy task.
+        Function: captures policy/TOS document pages before foreground recovery can pull external browsers back to the app.
+        """
+        current_task = self.task_manager.current_task()
+        task_type = str(getattr(current_task, "task_type", "") or "")
+        if not self._should_enter_policy_capture(task_type):
+            return None
+
+        self.policy_capture_pending = True
+        self.policy_capture_context = self._build_policy_capture_context(src_sig, cand, action_key)
+        self._emit_decision(src_sig, "policy_capture_pending", dict(self.policy_capture_context))
+        self._log_event("policy_capture_pending", sig=src_sig, **self.policy_capture_context)
+
+        policy_snap = self._capture_and_process(timeout=5.0)
+        if not policy_snap:
+            self._emit_decision(src_sig, "policy_capture_failed", {"status": "failed", "failure_reason": "capture_failed_after_policy_action"})
+            self._log_event("policy_capture_failed", sig=src_sig, failure_reason="capture_failed_after_policy_action")
+            self.task_manager.finish_current_task("failed", "policy capture failed: capture failed after policy action", state_sig=src_sig)
+            self._save_tasks_snapshot(reason="policy_capture_failed")
+            self.policy_capture_pending = False
+            self.policy_capture_context = {}
+            refreshed = self._refresh_after_possible_change(src_snap)
+            return str(refreshed.get("state_sig") or src_sig), refreshed
+
+        policy_sig = str(policy_snap.get("state_sig") or "")
+        if policy_sig:
+            self._record_drift_transition(src_sig, policy_sig, action_payload, src_snap, policy_snap)
+        metadata = self._handle_policy_capture_pending(policy_sig or src_sig, policy_snap)
+        return_sig, return_snap, return_meta = self._return_from_policy_document(
+            source_state_sig=src_sig,
+            capture_location=str(metadata.get("capture_location") or ""),
+            policy_sig=policy_sig or src_sig,
+        )
+        self._emit_decision(policy_sig or src_sig, "policy_capture_return", return_meta)
+        self._log_event("policy_capture_return", sig=policy_sig or src_sig, **return_meta)
+        if not return_meta.get("success"):
+            self._emit_decision(policy_sig or src_sig, "policy_return_failed", return_meta)
+            self._log_event("policy_return_failed", sig=policy_sig or src_sig, **return_meta)
+            self._recover(policy_sig or src_sig, policy_snap, reason=RecoveryReason.RETURN_FAILED, task=task, target_sig=src_sig)
+            recovered = self._refresh_after_possible_change(src_snap)
+            return str(recovered.get("state_sig") or src_sig), recovered
+        return return_sig or src_sig, return_snap or src_snap
+
     def _write_run_json(self, *, stop_reason: str) -> Optional[Path]:
         """
         Input: current final stop reason, or an empty string while the run is active.
@@ -1195,6 +1634,8 @@ class WorkflowRunner:
                 key = str(row.get("candidate_key") or "")
                 if not key:
                     continue
+                row["bound_task_id"] = self._task_id_for_candidate(sig, cand)
+                row["binding_key"] = self._candidate_binding_key(cand)
                 candidate_rows.append(row)
                 candidate_keys.append(key)
 
@@ -2188,6 +2629,15 @@ class WorkflowRunner:
             # WHERE: main loop top; drain completed LLM futures so decisions see latest analysis.
             # 回收已经完成的异步 LLM 任务，把结果写入缓存 / 问卷状态，保证本轮决策看到的是最新信息。
             self._drain_futures()
+            current_loop_task = self.task_manager.current_task()
+            current_loop_task_id = str(getattr(current_loop_task, "task_id", "") or "")
+            task_switched = bool(
+                self.last_active_task_id
+                and current_loop_task_id
+                and current_loop_task_id != self.last_active_task_id
+            )
+            if not self.last_active_task_id and current_loop_task_id:
+                self.last_active_task_id = current_loop_task_id
 
             # # 读取当前仍未填完的问卷问题，作为主循环的目标集合。
             # block_status = getattr(self.questionnaires, "block_status", {}) or {}
@@ -2224,9 +2674,14 @@ class WorkflowRunner:
                 # We can't safely attribute this relocation to a precise UI edge.
                 # 这种“位置变更”通常不是由一个明确的业务动作引起，所以按 external move 方式修正栈结构。
                 self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=True)
+                if current_loop_task_id and not task_switched:
+                    self.task_manager.update_resume_state(current_loop_task_id, cur_sig)
+                    self._save_tasks_snapshot(reason="task_resume_state_foreground_updated")
                 # 对修复后的新页面重新安排分析任务。
                 self._schedule_state(cur_sig, snap, task)
                 print(f"检测到前台app变化了.重新抓取snap分析")
+                if current_loop_task_id:
+                    self.last_active_task_id = current_loop_task_id
                 # 本轮剩余逻辑作废，直接开始下一轮。
                 continue
 
@@ -2261,6 +2716,9 @@ class WorkflowRunner:
 
                     # 当前状态与快照都切到漂移后的页面。
                     cur_sig, snap = new_sig, snap_live
+                    if current_loop_task_id and not task_switched:
+                        self.task_manager.update_resume_state(current_loop_task_id, cur_sig)
+                        self._save_tasks_snapshot(reason="task_resume_state_drift_updated")
                     # 对新状态重新安排异步分析。
                     self._schedule_state(cur_sig, snap, task)
 
@@ -2271,12 +2729,29 @@ class WorkflowRunner:
                     # 否则说明只是跳到旧状态，“无新状态”计数继续累计。
                     else:
                         self.no_new_state_count += 1
+                    if current_loop_task_id:
+                        self.last_active_task_id = current_loop_task_id
                     # 当前轮因为页面基准已经变化，直接重开下一轮。
                     continue
 
                 # Same state_sig but raw content changed; refresh snap for accurate vid_map.
                 # 如果 sig 没变但底层内容更新了，也要用新快照替换，保证 vid_map / 元素 id 不过期。
                 snap = snap_live
+
+            # CONDITION: TASK RESUME STATE MISMATCH
+            # 栈顶任务切换后，当前设备页面可能还停留在上一个子任务的终点。
+            # 在等待 NAV 和选动作之前，先尝试回到当前任务应继续的 UI。
+            if task_switched:
+                cur_sig, snap, resume_ok = self._ensure_current_task_resume_state(cur_sig, snap, task)
+                if not resume_ok:
+                    if current_loop_task_id:
+                        self.last_active_task_id = current_loop_task_id
+                    self._schedule_state(cur_sig, snap, task)
+                    continue
+            elif current_loop_task_id and cur_sig:
+                self.task_manager.update_resume_state(current_loop_task_id, cur_sig)
+            if current_loop_task_id:
+                self.last_active_task_id = current_loop_task_id
 
             # NAV barrier:
             # - may wait; may detect drift while waiting; may timeout -> heuristics
@@ -2318,7 +2793,7 @@ class WorkflowRunner:
                     cur_sig,
                     page_kind=self._page_kind_value(nav),
                     meta={"page_kind_reason": str(getattr(nav, "page_kind_reason", "") or "")},
-                    page_tags=list(getattr(nav, "page_tags", []) or []),
+                    page_tags=self._normal_llm_page_tags(list(getattr(nav, "page_tags", []) or [])),
                 )
 
             # 从 NAV 结果里提取当前页面形态，仅用于记录和调试，不做 dismiss 特权分支。
@@ -2379,30 +2854,42 @@ class WorkflowRunner:
                 candidates = self._candidate_actions(nav=nav, snap=snap, allow_heuristics=using_heuristics)
 
             self._remember_nav_plan(cur_sig, nav, candidates)
+            executable_candidates = self._filter_candidates_for_current_task(cur_sig, candidates)
             self._emit_decision(
                 cur_sig,
                 "next_step",
                 {
                     "plan": "dfs_evaluate_candidates",
                     "candidate_count": len(candidates or []),
+                    "task_candidate_count": len(executable_candidates or []),
                     "using_heuristics": bool(using_heuristics),
                     "page_kind": page_kind,
                     "stack_depth": len(self.dfs_stack),
                 },
             )
 
-            next_candidate = self._next_unexplored_candidate(cur_sig, candidates)
+            next_candidate = self._next_unexplored_candidate(cur_sig, executable_candidates)
             if next_candidate is not None:
                 prev_sig = cur_sig
+                executing_task = self.task_manager.current_task()
+                executing_task_id = str(getattr(executing_task, "task_id", "") or "")
                 cur_sig, snap = self._execute_candidate_branch(cur_sig, snap, next_candidate, task)
                 if cur_sig != prev_sig:
+                    still_current = self.task_manager.current_task()
+                    if executing_task_id and str(getattr(still_current, "task_id", "") or "") == executing_task_id:
+                        self.task_manager.update_resume_state(executing_task_id, cur_sig)
+                        self._save_tasks_snapshot(reason="task_resume_state_updated")
                     if cur_sig not in self.dfs_stack:
                         self._reconcile_stack_on_external_move(cur_sig, snap=snap, record_observation=True)
                     self._schedule_state(cur_sig, snap, task)
                 continue
 
-            # No remaining candidate: close the current DFS branch using page_return_actions, then BACK fallback.
+            # No remaining candidate for the current task: prefer task switching before DFS page return.
             if self._is_state_exhausted(cur_sig):
+                if self._finish_current_task_if_task_exhausted(cur_sig, reason="task_candidates_exhausted"):
+                    self.last_active_task_id = ""
+                    continue
+
                 if len(self.dfs_stack) <= 1 or cur_sig == self.entry_sig:
                     self._emit_decision(cur_sig, "dfs_complete", {"reason": "root_exhausted", "stack_depth": len(self.dfs_stack)})
                     self._log_event("dfs_root_exhausted", sig=cur_sig, stack_depth=len(self.dfs_stack))
@@ -4369,7 +4856,7 @@ class WorkflowRunner:
 
         nav = getattr(combined, "navigation", None)
         if nav is not None:
-            self._graph_annotate(sig, page_tags=list(getattr(nav, "page_tags", []) or []))
+            self._graph_annotate(sig, page_tags=self._normal_llm_page_tags(list(getattr(nav, "page_tags", []) or [])))
 
         self._maybe_record_home_state(sig, getattr(combined, "navigation", None), combined, current_task)
         task_update = self._model_to_json_dict(getattr(combined, "task_update", None))
@@ -4417,6 +4904,8 @@ class WorkflowRunner:
             steps = list(getattr(cand, "actions", []) or [])
             if not steps:
                 continue
+            if str(getattr(cand, "action_role", "") or "") != "start_child_task":
+                self._bind_candidate_to_task(sig, cand, expected_task_id or current_task_id)
             step_dict = self._model_to_json_dict(steps[0])
             existing_by_key[candidate_key_from_step_dict(step_dict)] = cand
 
@@ -4449,6 +4938,7 @@ class WorkflowRunner:
                         existing.starts_task_depth = str(item_dict.get("exploration_depth") or "normal")
                         if not str(getattr(existing, "action_intent", "") or ""):
                             existing.action_intent = str(item_dict.get("reason") or "")
+                        self._bind_candidate_to_task(sig, existing, task_obj.task_id)
                     else:
                         synthesized = ActionCandidate(
                             actions=[entry_step],
@@ -4460,6 +4950,7 @@ class WorkflowRunner:
                         )
                         entry_candidates.insert(0, synthesized)
                         existing_by_key[entry_key] = synthesized
+                        self._bind_candidate_to_task(sig, synthesized, task_obj.task_id)
                 except Exception:
                     logger.debug("failed to synthesize entry action candidate for task_id=%s", task_obj.task_id, exc_info=True)
 
@@ -4947,6 +5438,192 @@ class WorkflowRunner:
     # ---------------------------
     # Candidate selection
     # ---------------------------
+
+    def _candidate_binding_key(self, cand: Any) -> str:
+        """
+        Input: an ActionCandidate-like object.
+        Output: stable key for task binding that ignores runtime visual anchors.
+        Function: keeps candidate-task ownership stable before and after anchor attachment.
+        """
+        if isinstance(cand, str):
+            return cand
+        steps = list(getattr(cand, "actions", []) or [])
+        parts: List[str] = []
+        for step in steps:
+            action_val = getattr(step, "action", "")
+            action_text = action_val.value if hasattr(action_val, "value") else str(action_val or "")
+            parts.append(
+                "|".join(
+                    [
+                        action_text,
+                        str(getattr(step, "element_id", None)),
+                        str(getattr(step, "text", "") or ""),
+                        str(getattr(step, "x", "") or ""),
+                        str(getattr(step, "y", "") or ""),
+                        str(getattr(step, "bbox", "") or ""),
+                    ]
+                )
+            )
+        return "||".join(parts)
+
+    def _bind_candidate_to_task(self, sig: str, cand: ActionCandidate, task_id: str) -> None:
+        """
+        Input: state signature, action candidate, and workflow-created task id.
+        Output: mutates candidate_task_bindings in memory.
+        Function: records which task owns one candidate without modifying the LLM schema object.
+        """
+        if not cand or not getattr(cand, "actions", None):
+            return
+        fam = self._family_id(str(sig or ""))
+        ckey = self._candidate_binding_key(cand)
+        clean_task_id = str(task_id or "").strip()
+        if not fam or not ckey or not clean_task_id:
+            return
+        self.candidate_task_bindings.setdefault(fam, {})[ckey] = clean_task_id
+
+    def _task_id_for_candidate(self, sig: str, cand: ActionCandidate) -> str:
+        """
+        Input: state signature and action candidate.
+        Output: task id bound to the candidate, or an empty string when no binding exists.
+        Function: looks up workflow-owned candidate ownership metadata.
+        """
+        if not cand or not getattr(cand, "actions", None):
+            return ""
+        fam = self._family_id(str(sig or ""))
+        ckey = self._candidate_binding_key(cand)
+        return str((self.candidate_task_bindings.get(fam) or {}).get(ckey) or "")
+
+    def _has_waiting_sibling_task_for_state(self, sig: str, current_task_id: str) -> bool:
+        """
+        Input: current UI state signature and the stack-top task id.
+        Output: True when another running task can resume from this UI.
+        Function: detects whether task scheduling can continue on the current UI instead of using DFS return/back.
+        """
+        fam = self._family_id(str(sig or ""))
+        bindings = dict(self.candidate_task_bindings.get(fam, {}) or {})
+        if not bindings:
+            return False
+        waiting_task_ids = {str(task_id or "") for task_id in bindings.values()}
+        waiting_task_ids.discard(str(current_task_id or ""))
+        waiting_task_ids.discard("")
+        return bool(waiting_task_ids)
+
+    def _finish_current_task_if_task_exhausted(self, sig: str, *, reason: str) -> bool:
+        """
+        Input: current UI state signature and task-level exhaustion reason.
+        Output: True when the current task was ended and the main loop should replan on the same UI.
+        Function: prevents a stack-top task with exhausted/no-op actions from triggering DFS page return while sibling tasks remain available.
+        """
+        current_task = self.task_manager.current_task()
+        current_task_id = str(getattr(current_task, "task_id", "") or "")
+        if not current_task_id:
+            return False
+        if not self._has_waiting_sibling_task_for_state(sig, current_task_id):
+            return False
+        self.task_manager.finish_current_task("failed", reason, state_sig=sig)
+        self._log_event(
+            "task_failed_local_exhaustion",
+            sig=sig,
+            task_id=current_task_id,
+            reason=reason,
+        )
+        self._save_tasks_snapshot(reason="task_failed_local_exhaustion")
+        return True
+
+    def _filter_candidates_for_current_task(self, sig: str, candidates: List[ActionCandidate]) -> List[ActionCandidate]:
+        """
+        Input: current state signature and all candidates available on that state.
+        Output: candidates owned by the current stack-top task, or the original list when no bindings exist.
+        Function: prevents one task from executing candidates that were created for another task.
+        """
+        current_task = self.task_manager.current_task()
+        current_task_id = str(getattr(current_task, "task_id", "") or "")
+        if not current_task_id:
+            return list(candidates or [])
+        fam = self._family_id(str(sig or ""))
+        bindings = dict(self.candidate_task_bindings.get(fam) or {})
+        if not bindings:
+            return list(candidates or [])
+        owned = [
+            cand
+            for cand in list(candidates or [])
+            if self._task_id_for_candidate(sig, cand) == current_task_id
+        ]
+        if len(owned) != len(list(candidates or [])):
+            self._log_event(
+                "task_candidate_filtered",
+                sig=sig,
+                current_task_id=current_task_id,
+                kept=len(owned),
+                original=len(list(candidates or [])),
+        )
+        return owned
+
+    def _current_task_resume_target(self) -> str:
+        """
+        Input: current task stack.
+        Output: preferred state signature for the stack-top task.
+        Function: returns the UI where the active task should continue after child tasks finish.
+        """
+        current_task = self.task_manager.current_task()
+        if not current_task:
+            return ""
+        return str(
+            getattr(current_task, "resume_state_sig", "")
+            or getattr(current_task, "origin_state_sig", "")
+            or ""
+        )
+
+    def _is_resume_state_match(self, cur_sig: str, target_sig: str) -> bool:
+        """
+        Input: current and target state signatures.
+        Output: True when the signatures or their structural families match.
+        Function: allows dynamic pages with the same family id to satisfy task resume checks.
+        """
+        if not cur_sig or not target_sig:
+            return False
+        if cur_sig == target_sig:
+            return True
+        return self._family_id(cur_sig) == self._family_id(target_sig)
+
+    def _ensure_current_task_resume_state(self, cur_sig: str, snap: Dict[str, Any], task: str) -> Tuple[str, Dict[str, Any], bool]:
+        """
+        Input: current state signature, current snapshot, and task prompt string.
+        Output: restored state signature, restored snapshot, and success flag.
+        Function: restores the device to the stack-top task's resume_state_sig before candidate selection.
+        """
+        target_sig = self._current_task_resume_target()
+        if not target_sig or self._is_resume_state_match(cur_sig, target_sig):
+            return cur_sig, snap, True
+
+        self._log_event("task_resume_restore_start", sig=cur_sig, target_sig=target_sig)
+        reached, restored = self._navigate_via_graph(start_sig=cur_sig, start_snap=snap, target_sig=target_sig, task=task)
+        if reached:
+            restored_sig = str(restored.get("state_sig") or target_sig)
+            return restored_sig, restored, True
+
+        returned_sig, returned_snap = self._return_from_current_state(cur_sig, snap, task)
+        if self._is_resume_state_match(returned_sig, target_sig):
+            return returned_sig, returned_snap, True
+
+        replay_ok = self._restart_and_replay(best_target=target_sig, task=task, reason="resume_state_unreachable")
+        if replay_ok:
+            refreshed = self._capture_and_process(timeout=8.0) or returned_snap
+            refreshed_sig = str(refreshed.get("state_sig") or "")
+            if self._is_resume_state_match(refreshed_sig, target_sig):
+                return refreshed_sig, refreshed, True
+
+        current_task = self.task_manager.current_task()
+        current_task_id = str(getattr(current_task, "task_id", "") or "")
+        if current_task:
+            self.task_manager.finish_current_task(
+                "failed",
+                f"resume_state_unreachable:{target_sig}",
+                state_sig=cur_sig,
+            )
+            self._save_tasks_snapshot(reason="resume_state_unreachable")
+        self._log_event("task_resume_restore_failed", sig=cur_sig, target_sig=target_sig, task_id=current_task_id)
+        return cur_sig, snap, False
 
     def _filter_nav_candidates(self, sig: str, candidates: List[ActionCandidate]) -> List[ActionCandidate]:
         threshold = float(self.budget.min_candidate_score)
@@ -5559,6 +6236,11 @@ class WorkflowRunner:
             refreshed = self._refresh_after_possible_change(snap)
             return str(refreshed.get("state_sig") or src_sig), refreshed
 
+        policy_result = self._handle_policy_candidate_after_action(src_sig, snap, cand, action_payload, action_key, task)
+        if policy_result is not None:
+            self._mark_explored(src_sig, cand)
+            return policy_result
+
         drift = self._check_drift_lightweight(snap, timeout_s=0.8)
         if drift.kind == "external":
             try:
@@ -5572,6 +6254,13 @@ class WorkflowRunner:
         if drift.kind == "same_state":
             if self._candidate_noop_retry_exhausted(src_sig, action_payload, action_key):
                 self._mark_explored(src_sig, cand)
+                current_task = self.task_manager.current_task()
+                self._log_event(
+                    "task_candidate_noop_exhausted",
+                    sig=src_sig,
+                    task_id=str(getattr(current_task, "task_id", "") or ""),
+                    action_key=action_key,
+                )
         else:
             self._mark_explored(src_sig, cand)
         return next_sig, next_snap
@@ -6359,10 +7048,11 @@ class WorkflowRunner:
     # Exhaustion / backtrace / frontier
     # ---------------------------
 
-    def _is_state_exhausted(self, sig: str) -> bool:
+    def _is_state_exhausted(self, sig: str, task_id: str = "") -> bool:
         """
-        A state is exhausted when every candidate branch is explored (completed or proven no-effect).
-        Attempted != explored.
+        Input: state signature and optional task id.
+        Output: True when every candidate branch visible to that task is explored.
+        Function: performs task-aware DFS exhaustion while preserving legacy unbound candidate behavior.
         """
         fam = self._family_id(sig)
         if fam in self.state_candidates:
@@ -6379,6 +7069,14 @@ class WorkflowRunner:
         # NAV returned but gave no candidates (or all filtered upstream): exhausted for this family.
         if not candidates:
             return True
+
+        current_task = self.task_manager.current_task()
+        target_task_id = str(task_id or getattr(current_task, "task_id", "") or "")
+        bindings = dict(self.candidate_task_bindings.get(fam) or {})
+        if target_task_id and bindings:
+            candidates = [c for c in candidates if self._task_id_for_candidate(sig, c) == target_task_id]
+            if not candidates:
+                return True
 
         explored = self.explored_actions.get(fam, set())
         keys: List[str] = []

@@ -144,6 +144,7 @@ def _load_trace_data(
                             "screenshot_raw_path": str(data.get("screenshot_raw_path") or ""),
                             "vidmap_overlay_path": str(data.get("vidmap_overlay_path") or ""),
                             "uist_overlay_path": str(data.get("uist_overlay_path") or ""),
+                            "llm_actions_overlay_path": str(data.get("llm_actions_overlay_path") or ""),
                             "xml_path": str(data.get("xml_path") or ""),
                             "xml_raw_path": str(data.get("xml_raw_path") or ""),
                             "uist_path": str(data.get("uist_path") or ""),
@@ -785,11 +786,18 @@ def build_interactive_html(run_dir: Path) -> Path:
             }
         )
 
+        screenshot_path = str(snap_paths.get("screenshot_path") or "")
+        screenshot_raw_path = str(snap_paths.get("screenshot_raw_path") or "")
+        ui_dir_path = Path(screenshot_path).parent if screenshot_path else Path(screenshot_raw_path).parent if screenshot_raw_path else None
+        derived_llm_overlay = ui_dir_path / "overlays" / "llm_actions_overlay.png" if ui_dir_path else None
+        llm_actions_overlay_path = (
+            str(snap_paths.get("llm_actions_overlay_path") or "")
+            or (str(derived_llm_overlay) if derived_llm_overlay and derived_llm_overlay.exists() else "")
+        )
         preview_path = (
-            snap_paths.get("vidmap_overlay_path")
-            or snap_paths.get("uist_overlay_path")
-            or snap_paths.get("screenshot_path")
-            or snap_paths.get("screenshot_raw_path")
+            llm_actions_overlay_path
+            or screenshot_path
+            or screenshot_raw_path
             or ""
         )
         utg_context_path = ""
@@ -825,11 +833,14 @@ def build_interactive_html(run_dir: Path) -> Path:
             },
             "snapshot_paths": {
                 "preview": _relpath_or_raw(str(preview_path), interactive_dir),
+                "ui_dir_abs": str(ui_dir_path.resolve()) if ui_dir_path and ui_dir_path.exists() else str(ui_dir_path or ""),
+                "ui_dir_rel": _relpath_or_raw(str(ui_dir_path or ""), interactive_dir),
                 "screenshot_path": _relpath_or_raw(str(snap_paths.get("screenshot_path") or ""), interactive_dir),
                 "screenshot_raw_path": _relpath_or_raw(str(snap_paths.get("screenshot_raw_path") or ""), interactive_dir),
                 "xml_path": _relpath_or_raw(str(snap_paths.get("xml_path") or ""), interactive_dir),
                 "xml_raw_path": _relpath_or_raw(str(snap_paths.get("xml_raw_path") or ""), interactive_dir),
                 "uist_path": _relpath_or_raw(str(snap_paths.get("uist_path") or ""), interactive_dir),
+                "llm_actions_overlay_path": _relpath_or_raw(str(llm_actions_overlay_path), interactive_dir),
                 "uist_overlay_path": _relpath_or_raw(str(snap_paths.get("uist_overlay_path") or ""), interactive_dir),
                 "vidmap_overlay_path": _relpath_or_raw(str(snap_paths.get("vidmap_overlay_path") or ""), interactive_dir),
                 "navigation_router_result_path": _relpath_or_raw(str((nav.get("navigation_router_result_path") or "")), interactive_dir),
@@ -849,6 +860,7 @@ def build_interactive_html(run_dir: Path) -> Path:
             "candidate_rows": candidate_rows,
             "router_observation": router_obs.get(sig) or {},
             "blocks_observation": blocks_obs.get(sig) or {},
+            "policy_capture": meta.get("policy_capture") if isinstance(meta.get("policy_capture"), dict) else {},
             "graph_meta": meta,
             "state_action": row_action,
         }
@@ -976,6 +988,10 @@ def build_interactive_html(run_dir: Path) -> Path:
     th, td {{ border: 1px solid #e5eaf3; padding: 6px; vertical-align: top; text-align: left; }}
     th {{ background: #f6f9ff; }}
     img.preview {{ width: 100%; border: 1px solid #dde5f3; border-radius: 8px; }}
+    .path-row {{ display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }}
+    .path-text {{ flex: 1; word-break: break-all; background: #f7f9fc; border: 1px solid #e4e9f2; border-radius: 6px; padding: 6px; }}
+    button.copy-btn {{ border: 1px solid #cbd6e7; background: #fff; border-radius: 6px; padding: 5px 8px; cursor: pointer; }}
+    button.copy-btn:hover {{ background: #f3f7ff; }}
     details > summary {{ cursor: pointer; color: #2d5fa8; }}
     pre {{ white-space: pre-wrap; word-break: break-word; background:#f7f9fc; padding:8px; border-radius:6px; }}
     a {{ color: #2a66b0; text-decoration: none; }}
@@ -1001,8 +1017,6 @@ def build_interactive_html(run_dir: Path) -> Path:
       <div id="network"></div>
     </div>
     <div id="right">
-      <h3 style="margin:4px 0 6px 0;">Details</h3>
-      <div class="meta">Click a node or edge to inspect details. Click blank graph space to return to the global timeline.</div>
       <div id="detail"></div>
     </div>
   </div>
@@ -1045,6 +1059,45 @@ def build_interactive_html(run_dir: Path) -> Path:
       return `<div><span class="k">${{esc(label)}}:</span> <a class="mono" href="${{esc(p)}}" target="_blank">${{esc(p)}}</a></div>`;
     }}
 
+    function copyText(value, btn) {{
+      const text = String(value || '');
+      const done = () => {{
+        if (btn) {{
+          const old = btn.textContent;
+          btn.textContent = 'Copied';
+          setTimeout(() => {{ btn.textContent = old; }}, 1200);
+        }}
+      }};
+      if (navigator.clipboard && navigator.clipboard.writeText) {{
+        navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopyText(text, done));
+      }} else {{
+        fallbackCopyText(text, done);
+      }}
+    }}
+
+    function fallbackCopyText(text, done) {{
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', 'readonly');
+      area.style.position = 'fixed';
+      area.style.left = '-9999px';
+      document.body.appendChild(area);
+      area.select();
+      try {{ document.execCommand('copy'); }} catch (e) {{}}
+      document.body.removeChild(area);
+      if (done) done();
+    }}
+
+    function renderCopyPath(label, p) {{
+      if (!p) return `<div><span class="k">${{esc(label)}}:</span> -</div>`;
+      const encoded = encodeURIComponent(p);
+      return `<div><span class="k">${{esc(label)}}:</span></div>
+        <div class="path-row">
+          <div class="mono path-text">${{esc(p)}}</div>
+          <button class="copy-btn" onclick="copyText(decodeURIComponent('${{encoded}}'), this)">Copy</button>
+        </div>`;
+    }}
+
     function renderNode(sig) {{
       const d = nodeDetails[sig];
       if (!d) return '<div class="card">节点详情不存在。</div>';
@@ -1059,12 +1112,21 @@ def build_interactive_html(run_dir: Path) -> Path:
       const taskDecision = d.task_decision || {{}};
       const taskUpdate = d.task_update || {{}};
       const proposedTasks = d.proposed_tasks || [];
+      const sp = d.snapshot_paths || {{}};
 
       const tag = d.foreground_package && d.target_package && d.foreground_package !== d.target_package
         ? `<span class="pill bad">外部包: ${{esc(d.foreground_package)}}</span>`
         : `<span class="pill ok">目标包: ${{esc(d.foreground_package || '-')}}</span>`;
 
       let html = '';
+      html += `<div class="card">`;
+      if (sp.preview) {{
+        html += `<div style="margin-bottom:8px"><img class="preview" src="${{esc(sp.preview)}}" /></div>`;
+      }} else {{
+        html += `<div class="meta">No screenshot preview for this UI.</div>`;
+      }}
+      html += renderCopyPath('UI folder', sp.ui_dir_abs || '');
+      html += `</div>`;
       html += `<div class="card"><div class="k">节点</div><div class="mono">${{esc(d.alias)}} | ${{esc(d.state_sig)}}</div>`;
       html += `<div style="margin-top:6px">${{tag}}`;
       html += `<span class="pill warn">page_kind=${{esc(d.page_kind)}}</span>`;
@@ -1082,18 +1144,14 @@ def build_interactive_html(run_dir: Path) -> Path:
 
       html += `<div class="card"><div class="k">Task 状态</div>`;
       if (currentTask.task_id) {{
-        html += `<div>current_task: <span class="mono">${{esc(currentTask.task_id)}} / ${{esc(currentTask.task_type || '')}}</span></div>`;
-        html += `<div>exploration_depth: <span class="mono">${{esc(currentTask.exploration_depth || '-')}}</span></div>`;
-        html += `<div>priority: <span class="mono">${{esc(currentTask.priority ?? '')}}</span>, type_priority: <span class="mono">${{esc(currentTask.type_priority ?? '')}}</span>, llm_priority: <span class="mono">${{esc(currentTask.llm_priority ?? '')}}</span></div>`;
-        html += `<div>step_budget: <span class="mono">${{esc(currentTask.step_budget ?? '')}}</span>, used_steps: <span class="mono">${{esc(currentTask.used_steps ?? '')}}</span></div>`;
-        html += `<div>initial_goal: <span class="mono">${{esc(currentTask.initial_goal || currentTask.prompt || '')}}</span></div>`;
+        html += `<div>current: <span class="mono">${{esc(currentTask.task_id)}} / ${{esc(currentTask.task_type || '')}} / ${{esc(currentTask.status || '')}}</span></div>`;
+        html += `<div>depth: <span class="mono">${{esc(currentTask.exploration_depth || '-')}}</span>, steps: <span class="mono">${{esc(currentTask.used_steps ?? '')}}/${{esc(currentTask.step_budget ?? '')}}</span></div>`;
         html += `<div>current_goal: <span class="mono">${{esc(currentTask.current_goal || currentTask.initial_goal || currentTask.prompt || '')}}</span></div>`;
         html += `<div>progress_summary: <span class="mono">${{esc(currentTask.progress_summary || '')}}</span></div>`;
       }} else {{
         html += `<div class="meta">trace ctx 中没有 current_task。</div>`;
       }}
-      html += `<div>task_stack_depth: <span class="mono">${{esc(taskStack.length)}}</span></div>`;
-      html += `<div>llm_task_id: <span class="mono">${{esc(d.task_id || '')}}</span></div>`;
+      html += `<div>task_stack_depth: <span class="mono">${{esc(taskStack.length)}}</span>, llm_task_id: <span class="mono">${{esc(d.task_id || '')}}</span></div>`;
       if (Object.keys(taskUpdate).length) {{
         html += `<div>task_update.current_goal: <span class="mono">${{esc(taskUpdate.current_goal || '')}}</span></div>`;
         html += `<div>task_update.progress: <span class="mono">${{esc(taskUpdate.progress || '')}}</span></div>`;
@@ -1103,7 +1161,7 @@ def build_interactive_html(run_dir: Path) -> Path:
         html += `<div>reason: <span class="mono">${{esc(taskDecision.reason || '')}}</span></div>`;
       }}
       if (proposedTasks.length) {{
-        html += `<details style="margin-top:8px" open><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>type_priority</th><th>llm_priority</th><th>depth</th><th>type</th><th>entry</th><th>initial_goal</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px"><summary>Proposed Tasks (${{esc(proposedTasks.length)}})</summary><table><thead><tr><th>#</th><th>priority</th><th>type_priority</th><th>llm_priority</th><th>depth</th><th>type</th><th>entry</th><th>initial_goal</th></tr></thead><tbody>`;
         proposedTasks.forEach((t, idx) => {{
           const a = t.entry_action || {{}};
           const entry = `${{a.action || ''}}:${{a.element_id ?? 'None'}} ${{a.anchor_label || a.text || ''}}`;
@@ -1113,24 +1171,25 @@ def build_interactive_html(run_dir: Path) -> Path:
       }}
       html += `</div>`;
 
-      const sp = d.snapshot_paths || {{}};
-      html += `<div class="card"><div class="k">快照文件</div>`;
-      if (sp.preview) {{
-        html += `<div style="margin:8px 0"><img class="preview" src="${{esc(sp.preview)}}" /></div>`;
+      const policyCapture = d.policy_capture || {{}};
+      if (Object.keys(policyCapture).length) {{
+        html += `<div class="card"><div class="k">Policy Capture</div>`;
+        html += `<div>status: <span class="mono">${{esc(policyCapture.status || '')}}</span></div>`;
+        html += `<div>document_title: <span class="mono">${{esc(policyCapture.document_title || '')}}</span></div>`;
+        html += `<div>capture_location: <span class="mono">${{esc(policyCapture.capture_location || '')}}</span></div>`;
+        html += `<div>url_raw: <span class="mono">${{esc(policyCapture.url_raw || '')}}</span></div>`;
+        html += `<div>text_char_count: <span class="mono">${{esc(policyCapture.text_char_count ?? '')}}</span></div>`;
+        html += `<div>output_dir: <span class="mono">${{esc(policyCapture.output_dir || '')}}</span></div>`;
+        html += renderPathLink('document_text', policyCapture.document_text_path || '');
+        html += renderPathLink('policy_screenshot', policyCapture.screenshot_path || '');
+        html += renderPathLink('metadata', policyCapture.metadata_path || '');
+        if (policyCapture.failure_reason) {{
+          html += `<div>failure_reason: <span class="mono">${{esc(policyCapture.failure_reason || '')}}</span></div>`;
+        }}
+        html += `</div>`;
       }}
-      html += renderPathLink('screenshot', sp.screenshot_path);
-      html += renderPathLink('screenshot_raw', sp.screenshot_raw_path);
-      html += renderPathLink('xml', sp.xml_path);
-      html += renderPathLink('xml_raw', sp.xml_raw_path);
-      html += renderPathLink('uist', sp.uist_path);
-      html += renderPathLink('uist_overlay', sp.uist_overlay_path);
-      html += renderPathLink('vidmap_overlay', sp.vidmap_overlay_path);
-      html += renderPathLink('navigation_router_result', sp.navigation_router_result_path);
-      html += renderPathLink('utg_context', sp.utg_context_path);
-      html += renderPathLink('blocks_fill_result', sp.blocks_fill_result_path);
-      html += `</div>`;
-
-      html += `<div class="card"><div class="k">LLM NAV 结果</div>`;
+      html += `<div class="card"><div class="k">LLM NAV result</div>`;
+      html += `<div>page_summary: <span class="mono">${{esc(nav.page_summary ?? '')}}</span></div>`;
       html += `<div>page_kind: <span class="mono">${{esc(nav.page_kind ?? d.page_kind ?? 'legacy_unknown')}}</span></div>`;
       html += `<div>page_kind_reason: <span class="mono">${{esc(nav.page_kind_reason ?? d.page_kind_reason ?? '')}}</span></div>`;
       html += `<div>page_tags: <span class="mono">${{esc((nav.page_tags || d.page_tags || []).join(', '))}}</span></div>`;
@@ -1141,10 +1200,10 @@ def build_interactive_html(run_dir: Path) -> Path:
       html += `<div>exhausted: <span class="mono">${{esc(nav.exhausted)}}</span>, confidence: <span class="mono">${{esc(nav.exhausted_confidence)}}</span></div>`;
       html += `<div>why_these_actions: <span class="mono">${{esc(nav.why_these_actions ?? '')}}</span></div>`;
       if (cands.length) {{
-        html += `<details style="margin-top:8px" open><summary>Candidate Actions (LLM + state_action_snapshot)</summary><table><thead><tr><th>status</th><th>key</th><th>role</th><th>starts</th><th>depth</th><th>score</th><th>action</th><th>reason</th><th>intent</th></tr></thead><tbody>`;
+        html += `<details style="margin-top:8px" open><summary>Candidate Actions (LLM + state_action_snapshot)</summary><table><thead><tr><th>status</th><th>key</th><th>bound_task</th><th>role</th><th>starts</th><th>depth</th><th>score</th><th>action</th><th>reason</th><th>intent</th></tr></thead><tbody>`;
         for (const c of cands) {{
           const a = (c.actions || [])[0] || {{}};
-          html += `<tr><td>${{esc(c.status || '-')}}</td><td class="mono">${{esc(c.candidate_key || '-')}}</td><td>${{esc(c.action_role || '-')}}</td><td>${{esc(c.starts_task_type || '-')}}</td><td>${{esc(c.starts_task_depth || '-')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td><td>${{esc(c.action_intent || '')}}</td></tr>`;
+          html += `<tr><td>${{esc(c.status || '-')}}</td><td class="mono">${{esc(c.candidate_key || '-')}}</td><td class="mono">${{esc(c.bound_task_id || '-')}}</td><td>${{esc(c.action_role || '-')}}</td><td>${{esc(c.starts_task_type || '-')}}</td><td>${{esc(c.starts_task_depth || '-')}}</td><td>${{esc(c.score)}}</td><td class="mono">${{esc((a.action || '') + ':' + (a.element_id ?? 'None'))}}</td><td>${{esc(a.reasoning || '')}}</td><td>${{esc(c.action_intent || '')}}</td></tr>`;
         }}
         html += `</tbody></table></details>`;
       }}
@@ -1169,30 +1228,14 @@ def build_interactive_html(run_dir: Path) -> Path:
       }}
       html += `</div>`;
 
-      html += `<div class="card"><div class="k">UTG Context</div>`;
+      html += `<details class="card"><summary>UTG Context</summary>`;
       if (d.utg_context_text) {{
         html += `<pre>${{esc(d.utg_context_text)}}</pre>`;
       }} else {{
         html += `<div class="meta">UTG context not generated for this UI.</div>`;
       }}
-      html += `</div>`;
+      html += `</details>`;
 
-      html += `<div class="card"><div class="k">VID Map 摘要</div>`;
-      html += `<pre>${{esc(JSON.stringify(d.vid_map_summary || {{}}, null, 2))}}</pre>`;
-      html += `</div>`;
-
-      html += `<div class="card"><div class="k">Snapshot 元信息</div>`;
-      html += `<pre>${{esc(JSON.stringify(d.snapshot_meta || {{}}, null, 2))}}</pre>`;
-      html += `<div class="meta">说明：当前 run 的 snapshot 未落盘完整 snap 对象，因此这里展示的是已落盘字段。</div>`;
-      html += `</div>`;
-
-      html += `<div class="card"><div class="k">Router / Blocks 观测</div>`;
-      html += `<div>router_answers: <span class="mono">${{esc((router.router_answers || []).length)}}</span></div>`;
-      html += `<div>matched_block_ids: <span class="mono">${{esc((router.matched_block_ids || []).length)}}</span></div>`;
-      html += `<div>block_fill_results: <span class="mono">${{esc((blocks.block_fill_results || []).length)}}</span></div>`;
-      html += `</div>`;
-
-      html += `<details class="card"><summary>Raw JSON</summary><pre>${{esc(JSON.stringify(d, null, 2))}}</pre></details>`;
       return html;
     }}
 

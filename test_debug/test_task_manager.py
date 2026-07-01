@@ -62,15 +62,15 @@ def test_task_type_specs_include_quota_and_budget() -> None:
     """
     Input: predefined task type specs.
     Output: expected max_created and step_budget for each task type.
-    Function: protects the first-version task scheduling quota table.
+    Function: protects the currently configured task scheduling quota table.
     """
     expected = {
-        TaskType.ENTER_MAIN_PAGE: (1, 8),
-        TaskType.EXPLORE_MAIN_FUNCTION: (8, 5),
-        TaskType.EXPLORE_PAYMENT: (3, 3),
-        TaskType.EXPLORE_POLICY: (3, 3),
-        TaskType.EXPLORE_SETTINGS: (3, 3),
-        TaskType.GENERIC: (3, 4),
+        TaskType.ENTER_MAIN_PAGE: (1, 10),
+        TaskType.EXPLORE_MAIN_FUNCTION: (50, 8),
+        TaskType.EXPLORE_PAYMENT: (50, 8),
+        TaskType.EXPLORE_POLICY: (50, 8),
+        TaskType.EXPLORE_SETTINGS: (50, 8),
+        TaskType.GENERIC: (20, 6),
     }
 
     for task_type, (max_created, step_budget) in expected.items():
@@ -145,12 +145,36 @@ def test_child_task_pushes_on_top_and_finish_returns_to_parent() -> None:
     assert manager.current_task() == child
     assert child.parent_task_id == parent.task_id
     assert child.task_type == "explore_policy"
+    assert child.resume_state_sig == "xml:root"
 
     finished = manager.finish_current_task("done", "policy page captured", state_sig="xml:policy")
 
     assert finished == child
     assert manager.current_task() == parent
     assert child.finish_reason == "policy page captured"
+
+
+def test_update_resume_state_tracks_task_resume_location() -> None:
+    """
+    Input: one child task and a later state signature.
+    Output: the child task resume_state_sig is updated.
+    Function: verifies task switching can restore to the latest UI for a task.
+    """
+    manager = TaskManager(default_steps=4)
+    manager.ensure_initial_task("xml:root")
+    child = manager.push_child_task(
+        initial_goal="探索 Privacy Policy 页面",
+        task_type="explore_policy",
+        entry_action={"action": "click", "element_id": 7},
+        origin_state_sig="xml:root",
+        reason="policy link is visible",
+    )
+
+    assert child is not None
+    updated = manager.update_resume_state(child.task_id, "xml:policy")
+
+    assert updated == child
+    assert child.resume_state_sig == "xml:policy"
 
 
 def test_invalid_child_without_entry_action_is_ignored() -> None:
@@ -223,20 +247,21 @@ def test_child_task_step_budget_uses_task_type_spec() -> None:
     )
 
     assert child is not None
-    assert child.step_budget == 3
+    assert child.step_budget == TASK_TYPE_SPECS[TaskType.EXPLORE_PAYMENT].step_budget
 
 
 def test_child_task_creation_respects_max_created_per_type() -> None:
     """
-    Input: four proposed explore_payment child tasks.
-    Output: only three are created and the fourth is recorded as ignored.
-    Function: verifies first-version task-type creation quota.
+    Input: one more proposed explore_payment child task than the configured quota.
+    Output: tasks up to the quota are created and the extra proposal is recorded as ignored.
+    Function: verifies task-type creation quota even while the quota is temporarily relaxed.
     """
     manager = TaskManager(default_steps=8)
     manager.ensure_initial_task("xml:root")
+    max_created = TASK_TYPE_SPECS[TaskType.EXPLORE_PAYMENT].max_created
 
     created = []
-    for idx in range(4):
+    for idx in range(max_created + 1):
         created.append(
             manager.push_child_task(
                 initial_goal=f"explore payment entry {idx}",
@@ -247,17 +272,17 @@ def test_child_task_creation_respects_max_created_per_type() -> None:
             )
         )
 
-    assert [task is not None for task in created] == [True, True, True, False]
-    assert len([task for task in manager.tasks_by_id.values() if task.task_type == "explore_payment"]) == 3
+    assert [task is not None for task in created] == [True] * max_created + [False]
+    assert len([task for task in manager.tasks_by_id.values() if task.task_type == "explore_payment"]) == max_created
     assert manager.ignored_proposed_tasks[-1]["ignored_reason"] == "max_created_per_type_exceeded"
     assert manager.ignored_proposed_tasks[-1]["task_type"] == "explore_payment"
-    assert manager.ignored_proposed_tasks[-1]["max_created"] == 3
+    assert manager.ignored_proposed_tasks[-1]["max_created"] == max_created
 
 
 def test_step_budget_expires_current_task() -> None:
     """
-    Input: child task whose local task type has a three-step budget.
-    Output: consuming three steps expires the child and returns to parent.
+    Input: child task whose local task type has a configured step budget.
+    Output: consuming that many steps expires the child and returns to parent.
     Function: verifies action-based budget exhaustion.
     """
     manager = TaskManager(default_steps=4)
@@ -272,13 +297,12 @@ def test_step_budget_expires_current_task() -> None:
     )
 
     assert child is not None
-    assert child.step_budget == 3
+    assert child.step_budget == TASK_TYPE_SPECS[TaskType.EXPLORE_PAYMENT].step_budget
     assert child.used_steps == 0
-    manager.consume_step(state_sig="xml:root", action_key="click:9:Store", source="unit")
-    manager.consume_step(state_sig="xml:store", action_key="click:10:More", source="unit")
-    manager.consume_step(state_sig="xml:store2", action_key="click:11:More", source="unit")
+    for idx in range(child.step_budget):
+        manager.consume_step(state_sig=f"xml:store{idx}", action_key=f"click:{idx}:More", source="unit")
 
-    assert child.used_steps == 3
+    assert child.used_steps == child.step_budget
     assert child.status == "expired"
     assert manager.current_task() == parent
 
@@ -354,14 +378,15 @@ def test_snapshot_is_json_safe() -> None:
 
 def test_snapshot_records_quota_ignored_tasks() -> None:
     """
-    Input: task manager where one proposed task exceeds per-type quota.
+    Input: task manager where one proposed task exceeds the configured per-type quota.
     Output: snapshot contains the quota rejection entry.
     Function: ensures run-level tasks.json can explain why LLM proposals were dropped.
     """
     manager = TaskManager(default_steps=8)
     manager.ensure_initial_task("xml:root")
+    max_created = TASK_TYPE_SPECS[TaskType.EXPLORE_POLICY].max_created
 
-    for idx in range(4):
+    for idx in range(max_created + 1):
         manager.push_child_task(
             initial_goal=f"explore policy entry {idx}",
             task_type="explore_policy",
@@ -372,6 +397,6 @@ def test_snapshot_records_quota_ignored_tasks() -> None:
 
     snapshot = manager.snapshot()
 
-    assert len([task for task in snapshot["tasks"] if task["task_type"] == "explore_policy"]) == 3
+    assert len([task for task in snapshot["tasks"] if task["task_type"] == "explore_policy"]) == max_created
     assert snapshot["ignored_proposed_tasks"][-1]["ignored_reason"] == "max_created_per_type_exceeded"
     assert snapshot["ignored_proposed_tasks"][-1]["task_type"] == "explore_policy"

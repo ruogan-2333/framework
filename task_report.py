@@ -64,7 +64,7 @@ def _event_payload(event: Dict[str, Any]) -> Dict[str, Any]:
     """
     for key in ("data", "extra", "payload"):
         value = event.get(key)
-        if isinstance(value, dict) and value.get("kind"):
+        if isinstance(value, dict) and (value.get("kind") or value.get("name")):
             return value
     return event
 
@@ -106,6 +106,7 @@ def _seed_task_rows(tasks_payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             "step_budget": task.get("step_budget"),
             "finish_reason": task.get("finish_reason", ""),
             "history": list(task.get("history") or []),
+            "policy_captures": [],
             "steps": [],
         }
     return rows
@@ -153,15 +154,19 @@ def _iter_task_events(trace_events: Iterable[Dict[str, Any]]) -> Iterable[Tuple[
     """
     Input: raw trace event dictionaries.
     Output: iterable of (kind, task_id, payload) rows for task report events.
-    Function: filters trace.jsonl down to task_ui_observation/task_action_selected.
+    Function: filters trace.jsonl down to task UI/action events and policy capture events.
     """
     for event in trace_events:
         payload = _event_payload(event)
         kind = str(payload.get("kind") or "")
-        if kind not in {"task_ui_observation", "task_action_selected"}:
+        name = str(payload.get("name") or "")
+        if kind not in {"task_ui_observation", "task_action_selected"} and name not in {"policy_capture_done", "policy_capture_failed"}:
             continue
-        task_id = _task_id_value(payload.get("task_id"))
+        task_id = _task_id_value(payload.get("task_id") or payload.get("source_task_id"))
         if not task_id:
+            continue
+        if name in {"policy_capture_done", "policy_capture_failed"}:
+            yield name, task_id, payload
             continue
         yield kind, task_id, payload
 
@@ -193,8 +198,26 @@ def build_task_report(run_dir: Path) -> Dict[str, Any]:
                 "step_budget": None,
                 "finish_reason": "",
                 "history": [],
+                "policy_captures": [],
                 "steps": [],
             }
+        if kind in {"policy_capture_done", "policy_capture_failed"}:
+            task_rows[task_id].setdefault("policy_captures", []).append(
+                {
+                    "status": payload.get("status", ""),
+                    "failure_reason": payload.get("failure_reason", ""),
+                    "document_title": payload.get("document_title", ""),
+                    "capture_location": payload.get("capture_location", ""),
+                    "url_raw": payload.get("url_raw", ""),
+                    "text_char_count": payload.get("text_char_count"),
+                    "output_dir": payload.get("output_dir", ""),
+                    "document_text_path": payload.get("document_text_path", ""),
+                    "screenshot_path": payload.get("screenshot_path", ""),
+                    "metadata_path": payload.get("metadata_path", ""),
+                    "state_sig": payload.get("state_sig", "") or payload.get("sig", ""),
+                }
+            )
+            continue
         state_sig = str(payload.get("state_sig") or payload.get("sig") or "")
         key = (task_id, state_sig)
         if kind == "task_ui_observation":
@@ -246,6 +269,23 @@ def render_task_report_markdown(report: Dict[str, Any]) -> str:
         if task.get("finish_reason"):
             lines.append(f"- finish_reason: {task.get('finish_reason')}")
         lines.append("")
+        if task.get("policy_captures"):
+            lines.extend(["### Policy Capture", ""])
+            for item in task.get("policy_captures") or []:
+                lines.extend(
+                    [
+                        f"- document_title: {item.get('document_title', '')}",
+                        f"  - status: `{item.get('status', '')}`",
+                        f"  - location: `{item.get('capture_location', '')}`",
+                        f"  - url_raw: {item.get('url_raw', '')}",
+                        f"  - text_chars: `{item.get('text_char_count', '')}`",
+                        f"  - output: `{item.get('output_dir', '')}`",
+                        f"  - text: `{item.get('document_text_path', '')}`",
+                    ]
+                )
+                if item.get("failure_reason"):
+                    lines.append(f"  - failure_reason: {item.get('failure_reason')}")
+            lines.append("")
         if task.get("history"):
             lines.extend(["### History", ""])
             for idx, row in enumerate(task.get("history") or [], start=1):
