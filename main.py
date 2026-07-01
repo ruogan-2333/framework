@@ -25,16 +25,18 @@ from trace_callbacks import InteractiveDebugCallbacks, JsonlTraceCallbacks, NoOp
 
 
 _META_SELECTED_FIELDS = [
-    "description",
-    "descriptionHTML",
-    "summary",
-    "contentRating",
-    "contentRatingDescription",
-    "offersIAP",
-    "inAppProductPrice",
-    "genre",
-    "genreId",
-    "categories",
+    "app_name",
+    "content_descriptors",
+    "age_rating_descriptors",
+    "category_name",
+    "category_code",
+    "details_full_description",
+    "application_category",
+    "data_safety_summary",
+    "security_practices_text",
+    "permissions_text",
+    "details_interactive_elements",
+    "details_in_app_purchases",
 ]
 
 
@@ -132,41 +134,20 @@ def _find_metadata_row_by_app_id(rows: list[Dict[str, Any]], app_id: str) -> Opt
 
 def _pick_metadata_fields(row: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Input: one metadata CSV row in either old app-store format or downloaded-app format.
-    Output: normalized metadata payload consumed by GPTClient.analyze_app_metadata.
-    Function: fills missing fields with empty strings while preserving useful description/category signals.
+    Input: one row from known_dataset_200_metadata.csv or the final large metadata CSV.
+    Output: selected metadata fields consumed by GPTClient.analyze_app_metadata.
+    Function: keeps only fields useful for app-level exploration context and avoids answer-leaking fields.
     """
-    out: Dict[str, Any] = {key: "" for key in _META_SELECTED_FIELDS}
-    for key in _META_SELECTED_FIELDS:
-        out[key] = row.get(key, "")
+    return {key: str(row.get(key, "") or "").strip() for key in _META_SELECTED_FIELDS}
 
-    # known_dataset_200_metadata.csv is the target benchmark metadata source.
-    # Keep the downstream LLM payload shape stable: map the final dataset fields
-    # into the original compact metadata field names.
-    out["description"] = _row_first_value(row, ["details_full_description"])
-    out["descriptionHTML"] = ""
-    out["summary"] = _row_first_value(row, ["app_name", "data_safety_summary"])
-    out["contentRating"] = _row_first_value(row, ["age_rating", "details_content_rating"])
-    out["contentRatingDescription"] = _row_first_value(
-        row,
-        ["age_rating_descriptors", "details_interactive_elements", "content_descriptors"],
-    )
-    out["offersIAP"] = _row_first_value(row, ["details_in_app_purchases"])
-    out["inAppProductPrice"] = _row_first_value(row, ["details_in_app_purchases"])
-    category = _row_first_value(row, ["category_name"])
-    out["genre"] = category
-    out["genreId"] = _row_first_value(row, ["application_category", "category_code"])
-    out["categories"] = "; ".join(
-        value
-        for value in [
-            _row_first_value(row, ["category_name"]),
-            _row_first_value(row, ["category_code"]),
-            _row_first_value(row, ["application_category"]),
-            f"is_game={_row_first_value(row, ['is_game'])}" if _row_first_value(row, ["is_game"]) else "",
-        ]
-        if value
-    )
-    return out
+
+def _read_questionnaire_type_from_metadata_row(row: Dict[str, Any]) -> str:
+    """
+    Input: one row from the final metadata CSV.
+    Output: questionnaire type string from CSV field `app_type`.
+    Function: uses the dataset's curated questionnaire type instead of asking LLM to infer it.
+    """
+    return str(row.get("app_type", "") or "").strip()
 
 
 def _normalize_questionnaire_type(value: str) -> str:
@@ -546,8 +527,26 @@ def main(argv=None):
                 )
             )
             install_failed = install_preflight_result.install_status != "ok"
-            verify_failed = install_preflight_result.verify_installed_status and install_preflight_result.verify_installed_status != "ok"
-            launch_failed = bool(args.validate_launch_before_run) and install_preflight_result.launch_status != "ok"
+            verify_failed_raw = bool(
+                install_preflight_result.verify_installed_status
+                and install_preflight_result.verify_installed_status != "ok"
+            )
+            launch_required = bool(args.validate_launch_before_run)
+            launch_foreground_package = str(install_preflight_result.launch_foreground_package or "").strip()
+            launch_foreground_mismatch = bool(
+                launch_required and launch_foreground_package and launch_foreground_package != args.package
+            )
+            launch_failed = bool(
+                launch_required
+                and (install_preflight_result.launch_status != "ok" or launch_foreground_mismatch)
+            )
+            verify_failed = verify_failed_raw and not (launch_required and not launch_failed)
+            if verify_failed_raw and not verify_failed:
+                logger.warning(
+                    "Install pm-path verification failed, but launch validation succeeded; continuing. package=%s foreground=%s",
+                    args.package,
+                    install_preflight_result.launch_foreground_package or "-",
+                )
             if install_failed or verify_failed or launch_failed:
                 logger.error("Install preflight failed: %s", json.dumps(install_payload, ensure_ascii=False))
                 return 2
@@ -583,11 +582,11 @@ def main(argv=None):
                         logger.warning("Metadata CSV has no appId=%s; fallback to manual questionnaire type.", args.package)
                     else:
                         metadata_entry_found = True
+                        metadata_questionnaire_type = _read_questionnaire_type_from_metadata_row(row)
                         selected_meta = _pick_metadata_fields(row)
                         meta_result = gpt.analyze_app_metadata(app_id=args.package, app_metadata=selected_meta)
                         app_intro = (str(meta_result.app_intro or "").strip() or None)
                         focus_hints = (str(meta_result.focus_hints or "").strip() or None)
-                        metadata_questionnaire_type = _normalize_questionnaire_type(str(meta_result.questionnaire_type or ""))
                         metadata_notes = str(meta_result.notes or "").strip()
                         metadata_result_path = _write_metadata_result_json(meta_result, args.trace_dir, args.run_id)
                         logger.info(

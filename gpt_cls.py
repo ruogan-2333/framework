@@ -430,25 +430,29 @@ class NavigationRouterResult(BaseModel):
 
 class AppMetadataSummary(BaseModel):
     """
-    One-shot summary generated from app-level metadata (store description/category/etc.).
-    This output is intended to be reused as stable context in later LLM calls.
+    One-shot summary generated from app-level metadata.
+    Input: selected final-dataset metadata fields.
+    Output: compact reusable app context for downstream UI exploration.
+    Function: stores app-level exploration hints without deciding questionnaire type.
     """
     app_id: str = Field("", description="App package id (e.g., com.example.app)")
-    app_intro: str = Field("", description="One-sentence app overview inferred from description fields")
+    app_intro: str = Field(
+        "",
+        description=(
+            "A concise but sufficiently detailed overview of the app's main functions and category context, "
+            "within 600 characters. It must consider application_category when available."
+        ),
+    )
     focus_hints: str = Field(
         "",
         description=(
-            "Potential content focus hints for UI review, written as short phrases separated by semicolons. "
-            "Leave empty when evidence is insufficient."
+            "Concise natural-language risk hints inferred from sensitive functions, permissions, data safety, "
+            "purchases, ads, or interaction features. Use semicolons to separate aspects."
         ),
-    )
-    questionnaire_type: Literal["games", "social_apps", "others", ""] = Field(
-        "",
-        description="Questionnaire bucket inferred from genre fields. Empty when insufficient evidence.",
     )
     notes: str = Field(
         "",
-        description="Brief reason when any output field is empty (e.g., missing source field, empty value, garbled text).",
+        description="Brief reason when any output field is empty or metadata is incomplete/garbled.",
     )
 
 
@@ -847,65 +851,71 @@ TASK RULES:
 - Do not artificially limit proposed_tasks to only the top three. Include visible valuable child tasks and use priority to rank their importance.
 """
 
-_APP_METADATA_SYSTEM = """You are an assistant that summarizes Android app metadata for downstream UI analysis.
+_APP_METADATA_SYSTEM = """You are an assistant that summarizes Android app metadata for downstream UI exploration.
 
 GOAL:
-- Convert selected app metadata fields into a compact reusable context for later app UI exploration and UI analysis.
+- Convert selected app metadata fields into compact reusable context for later Android UI exploration and UI analysis.
 - Keep the output factual and concise; do not invent details not supported by the metadata.
+- Do not infer questionnaire type. Questionnaire type is provided by a separate CSV field outside this LLM call.
 
 INPUTS:
 - app_id:
-  - Android package id (unique app identifier).
-- app_metadata: contains only the following selected fields:
-  - description
-    - Main app-store description text; primary source for app functionality/content.
-  - descriptionHTML
-    - HTML-formatted description text; may overlap with description and include markup artifacts.
-  - summary
-    - Short app tagline/summary of core purpose.
-  - contentRating
-    - Store-provided content-rating label.
-  - contentRatingDescription
-    - Optional explanation text for the content-rating decision.
-  - offersIAP
-    - Whether the app provides in-app purchases.
-  - inAppProductPrice
-    - In-app purchase price range or price note.
-  - genre
+  - Android package id.
+- app_metadata: contains selected fields from the final benchmark metadata CSV:
+  - app_name:
+    - App display name. Use it only to understand the app; do not simply repeat the name in app_intro.
+  - content_descriptors:
+    - Store-provided content descriptors such as ads or in-app purchases.
+  - age_rating_descriptors:
+    - Store-provided descriptors related to age/content considerations. Do not infer or output the age rating itself.
+  - category_name:
     - Human-readable app category.
-  - genreId
-    - Normalized category id from store taxonomy.
-  - categories
-    - Category list payload (often serialized list/dict string).
+  - category_code:
+    - Store category code.
+  - application_category:
+    - Stable normalized category. IMPORTANT: incorporate this signal into app_intro when present.
+  - details_full_description:
+    - Main app-store description text; primary source for app functionality/content.
+  - details_interactive_elements:
+    - Store-provided interactive element hints, such as in-app purchases or user interaction.
+  - details_in_app_purchases:
+    - In-app purchase price/range or purchase availability note.
+  - data_safety_summary:
+    - Summary of collected/shared data and safety practices.
+  - security_practices_text:
+    - Store-provided data security practices.
+  - permissions_text:
+    - Permission information useful for UI exploration.
 
 WORKFLOW:
-1) Build `app_intro` (based on description / descriptionHTML / summary).
-   - Output one concise sentence that briefly introduces the app and provides hints for subsequent app exploration and UI analysis.
-   - Do not mention the app's specific name; refer to it as "the app".
+1) Build `app_intro`.
+   - Output a concise but sufficiently detailed overview of what the app appears to do and what broad category/context it belongs to.
+   - Keep it within 600 characters.
+   - Use details_full_description as the main functionality source.
+   - Use application_category as an important category signal.
+   - Do not mention the app's exact name unless necessary for clarity.
 
-2) Build `focus_hints` (primarily based on contentRating / contentRatingDescription / offersIAP / inAppProductPrice, and also referencing description / descriptionHTML / summary).
-   - Output short natural-language review hints for downstream UI inspection, summarizing what types of content in the app may affect age-related content considerations.
-   - Format as semicolon-separated phrases, where each phrase represents one aspect.
-   - IMPORTANT: do NOT explicitly output the app's age rating; only describe the related content.
+2) Build `focus_hints`.
+   - Output concise natural-language risk hints for downstream UI exploration.
+   - Focus on sensitive functions, permissions, data safety signals, purchases/subscriptions, ads, social/user interaction, content risks, account/settings/policy areas.
+   - Use semicolons to separate aspects; each semicolon-separated item should describe one clear risk/focus area.
+   - Avoid overly cryptic short phrases; make each item understandable to a human reviewer.
+   - Do not output or infer the age rating.
 
-3) Infer `questionnaire_type` (based on genre / genreId / categories).
-   - Based on the app's category/type information, determine which questionnaire type applies.
-   - The output must be exactly one of: games | social_apps | others.
-
-4) Fill `notes`.
-   - If any of the above three fields is empty, briefly explain why:
-     e.g., missing source field, empty source value, garbled/unusable text, or insufficient evidence.
-   - If all fields are confidently filled, `notes` should be empty.
+3) Fill `notes`.
+   - If app_intro or focus_hints is weak because source fields are missing, empty, garbled, or insufficient, briefly explain why.
+   - If both fields are confidently filled, notes should be empty.
 
 OUTPUT (strict JSON matching AppMetadataSummary):
 - app_id
 - app_intro
 - focus_hints
-- questionnaire_type
 - notes
 
 RULES:
-- Use only provided information; no guessing.
+- Use only provided metadata.
+- Do not infer questionnaire_type.
+- Do not use age_rating, teacher_approved, play_families_policy_committed, or privacy_policy_url; those fields are not provided to this LLM call.
 - Follow output format strictly.
 """
 
@@ -1474,9 +1484,9 @@ class GPTClient:
 
         Inputs:
         - app_id:
-          App package id, usually from CSV column `appId`.
+          App package id, usually from CSV column `APID`.
         - app_metadata:
-          Selected metadata fields only (description/summary/rating/iap/genre related).
+          Selected final-dataset metadata fields for app-level exploration context.
 
         Processing:
         - Keep payload compact (trim long string fields).
@@ -1484,7 +1494,7 @@ class GPTClient:
 
         Output:
         - AppMetadataSummary:
-          app_intro + focus_hints + questionnaire_type (+ notes for empty fields).
+          app_intro + focus_hints (+ notes for empty fields).
         """
         compact_meta: Dict[str, Any] = {}
         for k, v in (app_metadata or {}).items():
@@ -1508,11 +1518,9 @@ class GPTClient:
 
         out = self._call_structured(messages, AppMetadataSummary, opname="analyze_app_metadata")
         out.app_id = app_id or out.app_id
-        out.app_intro = str(out.app_intro or "")[:280]
-        out.focus_hints = str(out.focus_hints or "")[:500]
+        out.app_intro = str(out.app_intro or "")[:600]
+        out.focus_hints = str(out.focus_hints or "")[:800]
         out.notes = str(out.notes or "")[:500]
-        if out.questionnaire_type not in ("games", "social_apps", "others", ""):
-            out.questionnaire_type = ""
         return out
 
     @time_consumed

@@ -26,6 +26,8 @@ import base64
 import hashlib
 import logging
 import re
+import shutil
+import subprocess
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -48,6 +50,50 @@ DEFAULT_CAPS: Dict[str, str | bool | int] = {
 }
 
 R = TypeVar("R")
+
+
+_ADB_DAEMON_ERROR_MARKERS = (
+    "could not read ok from adb server",
+    "failed to start daemon",
+    "cannot connect to daemon",
+    "daemon not running",
+)
+
+
+def _looks_like_adb_daemon_failure(exc: Exception) -> bool:
+    """Return whether an Appium driver error looks like an ADB daemon startup failure.
+
+    Input:
+    - exc: exception raised while creating the Appium WebDriver session.
+
+    Output:
+    - True when the exception text contains known ADB daemon failure markers.
+
+    Function:
+    - Keeps Appium retry narrow so normal capability/configuration errors are not
+      hidden behind an unrelated ADB restart.
+    """
+    message = str(exc).lower()
+    return any(marker in message for marker in _ADB_DAEMON_ERROR_MARKERS)
+
+
+def _restart_adb_server() -> None:
+    """Restart the local ADB server used by Appium.
+
+    Input:
+    - None. The function resolves `adb` from PATH, falling back to the command
+      name and letting the shell environment resolve it.
+
+    Output:
+    - None. Any subprocess failure raises CalledProcessError.
+
+    Function:
+    - Handles transient Windows ADB daemon failures observed during Appium
+      session creation by running `adb kill-server` followed by `adb start-server`.
+    """
+    adb_exe = shutil.which("adb") or "adb"
+    subprocess.run([adb_exe, "kill-server"], check=False, capture_output=True, text=True)
+    subprocess.run([adb_exe, "start-server"], check=True, capture_output=True, text=True)
 
 
 def _with_retry(fn: Callable[[], R], attempts: int = 3, delay: float = 0.25) -> R:
@@ -135,6 +181,20 @@ class AndroidAppiumClient:
 
     # ------------- Lifecycle -------------
     def init_connection(self, extra_caps: Optional[Dict] = None) -> "AndroidAppiumClient":
+        """Create the Appium WebDriver session for the configured Android device.
+
+        Input:
+        - extra_caps: optional capability overrides passed to UiAutomator2.
+
+        Output:
+        - self, with `driver` and `capabilities` populated after a successful
+          connection.
+
+        Function:
+        - Builds the Appium capability set and creates a WebDriver session.
+        - If session creation fails because the local ADB daemon cannot start,
+          restarts ADB once and retries the same session creation.
+        """
         merged = {**DEFAULT_CAPS, **(extra_caps or {})}
         if self.device_name:
             merged.setdefault("deviceName", self.device_name)
@@ -145,9 +205,19 @@ class AndroidAppiumClient:
         try:
             self.driver = WebDriver(command_executor=self.server_url, options=options)
             logger.info("Appium driver created")
-        except Exception:  # pragma: no cover - real device only
-            logger.exception("Failed to create Appium driver")
-            raise
+        except Exception as exc:  # pragma: no cover - real device only
+            if not _looks_like_adb_daemon_failure(exc):
+                logger.exception("Failed to create Appium driver")
+                raise
+            logger.warning("Appium driver creation failed due to ADB daemon issue; restarting ADB and retrying once")
+            try:
+                _restart_adb_server()
+                time.sleep(1.0)
+                self.driver = WebDriver(command_executor=self.server_url, options=options)
+                logger.info("Appium driver created after ADB restart")
+            except Exception:
+                logger.exception("Failed to create Appium driver after ADB restart retry")
+                raise
         return self
 
     def quit(self) -> None:
