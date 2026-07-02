@@ -2152,6 +2152,215 @@ class BaseUI:
         return out
 
     @staticmethod
+    def _omniparser_paths() -> Dict[str, str]:
+        """
+        Input: none.
+        Output: local paths for the external OmniParser Python, script, and repository root.
+        Function: centralizes the external OmniParser runtime paths so the main project venv is not polluted.
+        """
+        framework_root = Path(__file__).resolve().parent
+        return {
+            "python": r"F:\workplace\external_tools\omniparser_venv\Scripts\python.exe",
+            "script": str(framework_root / "test_debug" / "test_omniparser_overlay.py"),
+            "root": r"F:\workplace\external_tools\OmniParser",
+        }
+
+    @staticmethod
+    def _omniparser_runtime_root() -> Path:
+        """
+        Input: none.
+        Output: runtime cache directory for OmniParser subprocess outputs.
+        Function: keeps OmniParser artifacts inspectable without writing them into the project virtual environment.
+        """
+        return Path(__file__).resolve().parent / "test_debug" / "omniparser_runtime"
+
+    @staticmethod
+    def _write_omniparser_input_image(screenshot_b64: str, out_dir: str) -> str:
+        """
+        Input: base64 screenshot and an output directory.
+        Output: absolute PNG path written for OmniParser.
+        Function: converts the in-memory workflow screenshot into a file because OmniParser runs in an external subprocess.
+        """
+        os.makedirs(out_dir, exist_ok=True)
+        b64 = str(screenshot_b64 or "")
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        png_path = os.path.join(out_dir, "omniparser_input.png")
+        with open(png_path, "wb") as f:
+            f.write(base64.b64decode(b64 + "==", validate=False))
+        return png_path
+
+    @staticmethod
+    def _run_omniparser_ocr_subprocess(screenshot_b64: str, work_dir: str = "") -> Dict[str, Any]:
+        """
+        Input: screenshot base64 and an optional working directory.
+        Output: parsed elements, label coordinates, summary, and artifact paths produced by OmniParser.
+        Function: invokes the external OmniParser + OCR environment and loads JSON outputs for UI tree conversion.
+        """
+        import subprocess
+
+        b64 = str(screenshot_b64 or "")
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        shot_hash = hashlib.md5(b64.encode("utf-8")).hexdigest()
+        root = Path(work_dir) if work_dir else BaseUI._omniparser_runtime_root() / shot_hash
+        out_dir = root / "omniparser_ocr"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        parsed_path = out_dir / "parsed_elements.json"
+        coords_path = out_dir / "label_coordinates.json"
+        summary_path = out_dir / "summary.json"
+        overlay_path = out_dir / "overlay.png"
+
+        if not (parsed_path.exists() and coords_path.exists() and summary_path.exists() and overlay_path.exists()):
+            paths = BaseUI._omniparser_paths()
+            image_path = BaseUI._write_omniparser_input_image(screenshot_b64, str(root))
+            cmd = [
+                paths["python"],
+                paths["script"],
+                "--image",
+                image_path,
+                "--omniparser-root",
+                paths["root"],
+                "--out-dir",
+                str(out_dir),
+                "--use-ocr",
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "OmniParser OCR subprocess failed "
+                    f"code={proc.returncode}\nstdout={proc.stdout[-2000:]}\nstderr={proc.stderr[-2000:]}"
+                )
+
+        with open(parsed_path, "r", encoding="utf-8") as f:
+            parsed = json.load(f)
+        with open(coords_path, "r", encoding="utf-8") as f:
+            coords = json.load(f)
+        with open(summary_path, "r", encoding="utf-8") as f:
+            summary = json.load(f)
+
+        return {
+            "parsed_elements": parsed,
+            "label_coordinates": coords,
+            "summary": summary,
+            "out_dir": str(out_dir),
+            "overlay_path": str(overlay_path),
+            "parsed_path": str(parsed_path),
+            "coords_path": str(coords_path),
+            "summary_path": str(summary_path),
+        }
+
+    @staticmethod
+    def _omniparser_bbox_to_frame(bbox: Any, image_w: int, image_h: int) -> Dict[str, int]:
+        """
+        Input: OmniParser bbox plus screenshot width and height.
+        Output: framework frame dict with x, y, width, and height.
+        Function: supports ratio bboxes and absolute bboxes in [x1, y1, x2, y2] format.
+        """
+        vals = list(bbox or [])
+        if len(vals) != 4:
+            return BaseUI._tt_safe_frame(0, 0, 1, 1)
+        x1, y1, x2, y2 = [float(v) for v in vals]
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.5:
+            x1 *= int(image_w)
+            x2 *= int(image_w)
+            y1 *= int(image_h)
+            y2 *= int(image_h)
+        x = int(round(min(x1, x2)))
+        y = int(round(min(y1, y2)))
+        w = int(round(abs(x2 - x1)))
+        h = int(round(abs(y2 - y1)))
+        return BaseUI._tt_safe_frame(x, y, w, h)
+
+    @staticmethod
+    def _omniparser_element_to_uist_node(element_id: int, elem: Dict[str, Any], frame: Dict[str, int]) -> Dict[str, Any]:
+        """
+        Input: one OmniParser element and its converted framework frame.
+        Output: one framework UI node.
+        Function: normalizes OmniParser text/icon outputs into nodes consumed by vid_map, LLM prompts, and action execution.
+        """
+        typ = str(elem.get("type") or "").strip()
+        source = str(elem.get("source") or "").strip()
+        content = str(elem.get("content") or "").strip()
+        node_class = "omniparser_text" if typ == "text" else "omniparser_icon"
+        node: Dict[str, Any] = {
+            "class": node_class,
+            "text": content if typ == "text" else "",
+            "content_desc": content if typ != "text" else "",
+            "resource_id": "",
+            "ocr_text": content,
+            "semantic_label": content,
+            "clickable": True,
+            "enabled": True,
+            "absolute_frame": frame,
+            "subviews": [],
+            "semantic_source": "omniparser_ocr",
+            "omniparser_type": typ,
+            "omniparser_source": source,
+            "omniparser_interactivity": bool(elem.get("interactivity", False)),
+            "omniparser_index": int(element_id),
+        }
+        return node
+
+    @staticmethod
+    def _omniparser_result_to_uist(result: Dict[str, Any], image_w: int, image_h: int) -> Dict[str, Any]:
+        """
+        Input: OmniParser result dictionary and screenshot dimensions.
+        Output: framework uist dictionary.
+        Function: converts all non-empty OmniParser boxes into clickable nodes, matching current three-tools behavior.
+        """
+        nodes: List[Dict[str, Any]] = []
+        for idx, elem in enumerate(result.get("parsed_elements") or [], start=1):
+            frame = BaseUI._omniparser_bbox_to_frame(elem.get("bbox"), image_w, image_h)
+            if frame["width"] <= 1 or frame["height"] <= 1:
+                continue
+            nodes.append(BaseUI._omniparser_element_to_uist_node(idx, elem, frame))
+        nodes = BaseUI._dedupe_and_sort_roots(nodes)
+        return {
+            "elements": nodes,
+            "screenscale": 1.0,
+            "omniparser_debug": {
+                "summary": result.get("summary") or {},
+                "out_dir": result.get("out_dir") or "",
+                "overlay_path": result.get("overlay_path") or "",
+                "parsed_path": result.get("parsed_path") or "",
+                "coords_path": result.get("coords_path") or "",
+            },
+        }
+
+    @staticmethod
+    @time_consumed
+    def post_process_ui_omniparser_ocr(
+        uist: Dict[str, Any],
+        screenshot_b64: str,
+        device_info: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Dict[str, Any], Dict[int, Dict[str, Any]]]:
+        """
+        Input: raw XML-derived uist, screenshot base64, and optional device info.
+        Output: OmniParser-derived uist and vid_map.
+        Function: builds a clickable visual UI tree from external OmniParser + OCR for XML-unreliable pages.
+        """
+        image_w, image_h = BaseUI._tt_image_size_from_b64(screenshot_b64)
+        if image_w <= 0 or image_h <= 0:
+            return BaseUI.post_process_ui_three_tools_debug(uist, screenshot_b64, device_info=device_info)
+
+        try:
+            result = BaseUI._run_omniparser_ocr_subprocess(screenshot_b64)
+            out_uist = BaseUI._omniparser_result_to_uist(result, image_w, image_h)
+            vid_map = BaseUI._assign_ids_all_nodes(out_uist)
+            logger.debug(
+                "omniparser_ocr post-process: parsed=%d ids=%d out_dir=%s",
+                len(result.get("parsed_elements") or []),
+                len(vid_map),
+                result.get("out_dir"),
+            )
+            return out_uist, vid_map
+        except Exception as e:
+            logger.warning("OmniParser OCR post-process failed; falling back to three_tools: %s", e, exc_info=True)
+            return BaseUI.post_process_ui_three_tools_debug(uist, screenshot_b64, device_info=device_info)
+
+    @staticmethod
     @time_consumed
     def post_process_ui_three_tools_debug(
         uist: Dict[str, Any],

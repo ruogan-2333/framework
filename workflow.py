@@ -153,6 +153,8 @@ class BudgetConfig:
     per_page_probe_cap: int = 10
     max_dfs_depth: int = 999
     post_action_settle_s: float = 1
+    post_action_change_poll_attempts: int = 5
+    post_action_change_poll_interval_s: float = 2.0
 
     # NAV barrier (wait + timeout fallback)
     nav_timeout_s: float = 120.0  # LLM1 wait timeout before heuristic fallback
@@ -166,6 +168,7 @@ class BudgetConfig:
     screenshot_phash_similarity_threshold: float = 0.75# phash相似度判断阈值
     state_identity_phash_similarity_threshold: float = 0.80  # stricter threshold for merging full captures into existing visual states
     meaningful_xml_nodes_threshold: int = 2  #计算xml中有意义节点数阈值,用于判断xml是否可信
+    visual_detector_backend: str = "three_tools"  # visual backend for XML-unreliable pages: three_tools or omniparser_ocr
     visual_probe_max_taps: int = 6
     visual_probe_settle_s: float = 0.25
     visual_probe_roi_delta_threshold: float = 0.035
@@ -952,6 +955,41 @@ class WorkflowRunner:
         except Exception:
             logger.debug("on_decision failed", exc_info=True)
 
+    def _task_trace_json_safe(self, value: Any) -> Any:
+        """
+        Input: arbitrary task trace payload value.
+        Output: JSON-serializable value.
+        Function: normalizes task trace event details before writing them through trace callbacks.
+        """
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if hasattr(value, "model_dump"):
+            try:
+                return value.model_dump(mode="json")
+            except Exception:
+                return str(value)
+        if isinstance(value, dict):
+            return {str(k): self._task_trace_json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [self._task_trace_json_safe(v) for v in value]
+        return str(value)
+
+    def _emit_task_trace_event(self, sig: str, event_type: str, detail: Dict[str, Any]) -> None:
+        """
+        Input: current state signature, task event type, and event detail dictionary.
+        Output: one ``task_trace`` decision record in trace.jsonl.
+        Function: records task lifecycle/routing/state-family events for offline task execution reports.
+        """
+        current_task = self.task_manager.current_task()
+        payload = {
+            "event_type": str(event_type or ""),
+            "task_id": str(getattr(current_task, "task_id", "") or ""),
+            "task_type": str(getattr(current_task, "task_type", "") or ""),
+            "state_sig": str(sig or ""),
+            **(detail or {}),
+        }
+        self._emit_decision(str(sig or ""), "task_trace", self._task_trace_json_safe(payload))
+
     def _questionnaire2_observation_dir(self) -> Path:
         """
         Return where the new router/block observations should be saved.
@@ -1368,6 +1406,22 @@ class WorkflowRunner:
             event_name = "policy_capture_done" if metadata.get("status") == "success" else "policy_capture_failed"
             self._emit_decision(sig, event_name, metadata)
             self._log_event(event_name, sig=sig, **metadata)
+            current_task = self.task_manager.current_task()
+            status = "done" if metadata.get("status") == "success" else "failed"
+            finish_reason = "policy document captured" if status == "done" else f"policy capture failed: {metadata.get('failure_reason')}"
+            if current_task:
+                self._emit_task_trace_event(
+                    sig,
+                    "task_finished",
+                    {
+                        "task_id": str(getattr(current_task, "task_id", "") or ""),
+                        "task_type": str(getattr(current_task, "task_type", "") or ""),
+                        "status": status,
+                        "finish_reason": finish_reason,
+                        "state_sig": sig,
+                        "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+                    },
+                )
             if metadata.get("status") == "success":
                 self.task_manager.finish_current_task("done", "policy document captured", state_sig=sig)
             else:
@@ -1420,6 +1474,20 @@ class WorkflowRunner:
         if not policy_snap:
             self._emit_decision(src_sig, "policy_capture_failed", {"status": "failed", "failure_reason": "capture_failed_after_policy_action"})
             self._log_event("policy_capture_failed", sig=src_sig, failure_reason="capture_failed_after_policy_action")
+            current_task = self.task_manager.current_task()
+            if current_task:
+                self._emit_task_trace_event(
+                    src_sig,
+                    "task_finished",
+                    {
+                        "task_id": str(getattr(current_task, "task_id", "") or ""),
+                        "task_type": str(getattr(current_task, "task_type", "") or ""),
+                        "status": "failed",
+                        "finish_reason": "policy capture failed: capture failed after policy action",
+                        "state_sig": src_sig,
+                        "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+                    },
+                )
             self.task_manager.finish_current_task("failed", "policy capture failed: capture failed after policy action", state_sig=src_sig)
             self._save_tasks_snapshot(reason="policy_capture_failed")
             self.policy_capture_pending = False
@@ -1835,6 +1903,23 @@ class WorkflowRunner:
             logger.info(json.dumps(payload, ensure_ascii=False))
         except Exception:
             logger.debug("log_event failed", exc_info=True)
+
+    def _emit_timing(self, sig: str, name: str, duration_s: float, **fields: Any) -> None:
+        """
+        Input: state signature, timing name, elapsed seconds, and optional structured fields.
+        Output: emits one trace-visible timing decision and one structured log line.
+        Function: makes slow runtime phases visible without changing workflow behavior.
+        """
+        detail = {
+            "phase": str(name or ""),
+            "duration_s": float(duration_s or 0.0),
+            **fields,
+        }
+        try:
+            self._emit_decision(sig or "", "timing", detail)
+        except Exception:
+            logger.debug("emit timing decision failed", exc_info=True)
+        self._log_event("timing", sig=sig or "", timing_name=name, duration_s=float(duration_s or 0.0), **fields)
 
     def _infer_action_origin(self) -> str:
         """
@@ -2666,6 +2751,18 @@ class WorkflowRunner:
                 and current_loop_task_id
                 and current_loop_task_id != self.last_active_task_id
             )
+            if task_switched:
+                self._emit_task_trace_event(
+                    cur_sig,
+                    "task_switch",
+                    {
+                        "from_task_id": self.last_active_task_id,
+                        "to_task_id": current_loop_task_id,
+                        "from_state_sig": cur_sig,
+                        "to_state_sig": cur_sig,
+                        "reason": "stack_top_changed",
+                    },
+                )
             if not self.last_active_task_id and current_loop_task_id:
                 self.last_active_task_id = current_loop_task_id
 
@@ -3305,12 +3402,18 @@ class WorkflowRunner:
           - Defines the single source of truth for current state_sig.
           - Prevents planning on mixed frames (xml from one, screenshot from another).
         """
+        total_start = time.time()
+        scope = "debug" if debug else "main"
         try:
             if debug and raw is not None:
+                capture_start = time.time()
                 if xml_raw is None:
                     xml_raw = raw.get("xml", "")
+                self._emit_timing("", "capture_and_process.use_supplied_raw", time.time() - capture_start, scope=scope)
             else:
+                capture_start = time.time()
                 raw = self.appium.capture_snapshot(timeout=timeout)
+                self._emit_timing("", "capture_and_process.capture_snapshot", time.time() - capture_start, scope=scope, timeout_s=float(timeout or 0.0))
                 xml_raw = raw.get("xml", "")
             xml_hash_raw = str(raw.get("xml_hash") or "")
             screenshot_b64_raw = raw.get("screenshot", "")
@@ -3376,7 +3479,11 @@ class WorkflowRunner:
             xml_hash = hashlib.md5((xml or "").encode("utf-8")).hexdigest()
 
             xml_reliable = count_meaningful_xml_nodes(xml) >= int(self.budget.meaningful_xml_nodes_threshold)
-            postprocess_mode = "xml_only" if xml_reliable else "three_tools"
+            if xml_reliable:
+                postprocess_mode = "xml_only"
+            else:
+                backend = str(getattr(self.budget, "visual_detector_backend", "three_tools") or "three_tools")
+                postprocess_mode = "omniparser_ocr" if backend == "omniparser_ocr" else "three_tools"
             scope = "debug" if debug else "main"
             logger.info(
                 "%s post-process mode: %s (xml_reliable=%s)",
@@ -3406,19 +3513,50 @@ class WorkflowRunner:
                 self._log_event("snapshot_cache_hit", sig=sig, raw_key=raw_key, cache_size=len(self.snapshot_cache))
             else:
                 self.snapshot_cache_misses += 1
+                parse_start = time.time()
                 uist = self.appium.parse_xml_to_uist(xml, pixel_ratio=coord_scale)
+                self._emit_timing(
+                    "",
+                    "capture_and_process.parse_xml_to_uist",
+                    time.time() - parse_start,
+                    scope=scope,
+                    postprocess_mode=postprocess_mode,
+                    xml_reliable=bool(xml_reliable),
+                )
+                post_start = time.time()
                 if xml_reliable:
                     uist2, vid_map = BaseUI.post_process_ui(uist, screenshot_b64, device_info=info)
+                elif postprocess_mode == "omniparser_ocr":
+                    uist2, vid_map = BaseUI.post_process_ui_omniparser_ocr(
+                        uist,
+                        screenshot_b64,
+                        device_info=info,
+                    )
                 else:
                     uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
                         uist,
                         screenshot_b64,
                         device_info=info,
                     )
+                self._emit_timing(
+                    "",
+                    f"capture_and_process.post_process.{postprocess_mode}",
+                    time.time() - post_start,
+                    scope=scope,
+                    xml_reliable=bool(xml_reliable),
+                )
+                sig_start = time.time()
                 sig = compute_state_signature(
                     uist2,
                     foreground_package=foreground_package,
                     foreground_activity=foreground_activity,
+                )
+                self._emit_timing(
+                    sig,
+                    "capture_and_process.compute_state_signature",
+                    time.time() - sig_start,
+                    scope=scope,
+                    postprocess_mode=postprocess_mode,
                 )
                 # Store deep copies to avoid mutable sharing across cache hits.
                 self.snapshot_cache[raw_key] = {"uist": copy.deepcopy(uist2), "vid_map": copy.deepcopy(vid_map), "state_sig": sig}
@@ -3426,6 +3564,7 @@ class WorkflowRunner:
                     self.snapshot_cache.popitem(last=False)
                 self._log_event("snapshot_cache_miss", sig=sig, raw_key=raw_key, cache_size=len(self.snapshot_cache))
 
+            identity_start = time.time()
             coarse_sig = compute_coarse_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
             struct_sig = compute_structural_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
             fine_sig = compute_fine_signature(uist2, foreground_package=foreground_package, foreground_activity=foreground_activity)
@@ -3439,6 +3578,16 @@ class WorkflowRunner:
                 uist=uist2,
             )
             sig = str(identity.get("state_sig") or sig or "")
+            self._emit_timing(
+                sig,
+                "capture_and_process.resolve_state_identity",
+                time.time() - identity_start,
+                scope=scope,
+                postprocess_mode=postprocess_mode,
+                identity_source=str(identity.get("identity_source") or ""),
+                matched_existing=bool(identity.get("matched_existing")),
+                matched_similarity=float(identity.get("matched_similarity") or 0.0),
+            )
             family_sig = str(identity.get("family_sig") or struct_sig or sig or "")
             try:
                 if sig and family_sig:
@@ -3459,6 +3608,7 @@ class WorkflowRunner:
                 "device_info": info,  # 设备信息：分辨率、像素比等
                 "meta": {
                     "raw_key": raw_key,  # 这次快照在 snapshot cache 里的 key
+                    "postprocess_mode": postprocess_mode,  # UI 后处理模式：xml_only / three_tools / omniparser_ocr
                     "cache_hit": bool(cached),  # 是否命中了 snapshot cache
                     "cache_size": len(self.snapshot_cache),  # 当前 snapshot cache 大小
                     "xml_hash": xml_hash,  # 处理后 XML 的 hash
@@ -3508,8 +3658,18 @@ class WorkflowRunner:
             )
             self._remember_state_snap(snap)
             self._emit_snapshot(snap)
+            self._emit_timing(
+                sig,
+                "capture_and_process.total",
+                time.time() - total_start,
+                scope=scope,
+                postprocess_mode=postprocess_mode,
+                xml_reliable=bool(xml_reliable),
+                cache_hit=bool(cached),
+            )
             return snap
         except Exception:
+            self._emit_timing("", "capture_and_process.failed", time.time() - total_start, scope=scope)
             logger.exception("capture_and_process failed")
             return None
         
@@ -3687,15 +3847,46 @@ class WorkflowRunner:
         Output: raw XML/screenshot/package/activity without OCR/UIED/template post-processing.
         Function: provides the cheap observation layer for drift checks.
         """
+        expected_sig = str((expected_snap or {}).get("state_sig") or "")
+        total_start = time.time()
         try:
+            stage_start = time.time()
             xml_now = self.appium.page_source_once()
+            self._emit_timing(
+                expected_sig,
+                "lightweight_raw_snapshot.page_source_once",
+                time.time() - stage_start,
+                xml_len=len(xml_now or ""),
+            )
+            stage_start = time.time()
             png_now = self.appium.screenshot_png_once()
+            self._emit_timing(
+                expected_sig,
+                "lightweight_raw_snapshot.screenshot_png_once",
+                time.time() - stage_start,
+                png_bytes=len(png_now or b""),
+            )
             if not xml_now or not png_now:
                 return None
+            stage_start = time.time()
             pkg = self.appium.foreground_package()
             act = self.appium.foreground_activity()
+            self._emit_timing(
+                expected_sig,
+                "lightweight_raw_snapshot.foreground_identity",
+                time.time() - stage_start,
+                foreground_package=str(pkg or ""),
+                foreground_activity=str(act or ""),
+            )
             info = dict((expected_snap or {}).get("device_info") or {})
             screenshot_b64 = base64.b64encode(png_now).decode("utf-8")
+            self._emit_timing(
+                expected_sig,
+                "lightweight_raw_snapshot.total",
+                time.time() - total_start,
+                foreground_package=str(pkg or ""),
+                foreground_activity=str(act or ""),
+            )
             return {
                 "xml": xml_now,
                 "xml_hash": hashlib.md5((xml_now or "").encode("utf-8")).hexdigest(),
@@ -3706,6 +3897,7 @@ class WorkflowRunner:
                 "foreground_activity": act,
             }
         except Exception:
+            self._emit_timing(expected_sig, "lightweight_raw_snapshot.failed", time.time() - total_start)
             logger.debug("lightweight raw snapshot failed", exc_info=True)
             return None
 
@@ -3789,16 +3981,27 @@ class WorkflowRunner:
         Output: DriftCheckResult describing same_state, changed_known, changed_unknown, external, or capture_failed.
         Function: detects page movement cheaply without running OCR/UIED/template processing.
         """
+        total_start = time.time()
         expected_sig = str((expected_snap or {}).get("state_sig") or "")
         meta = (expected_snap or {}).get("meta") or {}
         raw = self._lightweight_raw_snapshot(expected_snap)
         if not raw:
+            self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="capture_failed", reason="lightweight_snapshot_failed")
             return DriftCheckResult(kind="capture_failed", expected_sig=expected_sig, reason="lightweight_snapshot_failed")
 
         pkg = str(raw.get("foreground_package") or "")
         act = str(raw.get("foreground_activity") or "")
         allowed = set(self.allowed_packages or set())
         if allowed and pkg and pkg not in allowed:
+            self._emit_timing(
+                expected_sig,
+                "check_drift_lightweight.total",
+                time.time() - total_start,
+                drift_kind="external",
+                reason="foreground_package_mismatch",
+                foreground_package=pkg,
+                foreground_activity=act,
+            )
             return DriftCheckResult(
                 kind="external",
                 expected_sig=expected_sig,
@@ -3830,6 +4033,7 @@ class WorkflowRunner:
                     xml_now = self._preprocess_hierarchy_xml(xml_now, crop_top_xml=crop_top_xml)
                 cur_xml_hash = hashlib.md5((xml_now or "").encode("utf-8")).hexdigest()
                 if cur_xml_hash == exp_xml_hash:
+                    self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="same_state", reason="xml_hash_same")
                     return DriftCheckResult(
                         kind="same_state",
                         expected_sig=expected_sig,
@@ -3841,6 +4045,7 @@ class WorkflowRunner:
                     )
                 matched_sig, _matched_snap = self._known_snap_by_xml_hash(cur_xml_hash, foreground_package=pkg)
                 if matched_sig:
+                    self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="changed_known", reason="xml_hash_known", matched_sig=matched_sig)
                     return DriftCheckResult(
                         kind="changed_known",
                         expected_sig=expected_sig,
@@ -3851,6 +4056,7 @@ class WorkflowRunner:
                         foreground_activity=act,
                         reason="xml_hash_known",
                     )
+                self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="changed_unknown", reason="xml_hash_changed_unknown")
                 return DriftCheckResult(
                     kind="changed_unknown",
                     expected_sig=expected_sig,
@@ -3865,6 +4071,7 @@ class WorkflowRunner:
                 png_now = self._crop_png_top(png_now, crop_top_px)
             cur_shot_hash = hashlib.md5(png_now).hexdigest() if png_now else ""
             if exp_shot_hash and cur_shot_hash == exp_shot_hash:
+                self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="same_state", reason="screenshot_hash_same")
                 return DriftCheckResult(
                     kind="same_state",
                     expected_sig=expected_sig,
@@ -3879,6 +4086,14 @@ class WorkflowRunner:
             if exp_shot_phash:
                 sim = compare_phash_similarity(exp_shot_phash, cur_phash)
                 if sim >= float(self.budget.screenshot_phash_similarity_threshold):
+                    self._emit_timing(
+                        expected_sig,
+                        "check_drift_lightweight.total",
+                        time.time() - total_start,
+                        drift_kind="same_state",
+                        reason="phash_same",
+                        matched_similarity=sim,
+                    )
                     return DriftCheckResult(
                         kind="same_state",
                         expected_sig=expected_sig,
@@ -3891,6 +4106,15 @@ class WorkflowRunner:
                     )
             matched_sig, _matched_snap, best_similarity = self._known_snap_by_phash(cur_phash)
             if matched_sig and best_similarity >= float(self.budget.screenshot_phash_similarity_threshold):
+                self._emit_timing(
+                    expected_sig,
+                    "check_drift_lightweight.total",
+                    time.time() - total_start,
+                    drift_kind="changed_known",
+                    reason="phash_known",
+                    matched_sig=matched_sig,
+                    matched_similarity=best_similarity,
+                )
                 return DriftCheckResult(
                     kind="changed_known",
                     expected_sig=expected_sig,
@@ -3901,6 +4125,14 @@ class WorkflowRunner:
                     foreground_activity=act,
                     reason="phash_known",
                 )
+            self._emit_timing(
+                expected_sig,
+                "check_drift_lightweight.total",
+                time.time() - total_start,
+                drift_kind="changed_unknown",
+                reason="phash_changed_unknown",
+                matched_similarity=best_similarity,
+            )
             return DriftCheckResult(
                 kind="changed_unknown",
                 expected_sig=expected_sig,
@@ -3911,6 +4143,7 @@ class WorkflowRunner:
                 reason="phash_changed_unknown",
             )
         except Exception:
+            self._emit_timing(expected_sig, "check_drift_lightweight.total", time.time() - total_start, drift_kind="capture_failed", reason="drift_check_exception")
             logger.debug("lightweight drift check failed", exc_info=True)
             return DriftCheckResult(kind="capture_failed", expected_sig=expected_sig, raw=raw, reason="drift_check_exception")
 
@@ -3920,14 +4153,33 @@ class WorkflowRunner:
         Output: known cached snap, newly processed snap, or None for same/external states.
         Function: preserves the old preflight behavior while avoiding full processing for known states.
         """
+        expected_sig = str(getattr(drift, "expected_sig", "") or "")
         if drift.kind == "same_state":
             return None
         if drift.kind == "changed_known" and drift.matched_sig:
             return self.state_snap_cache.get(drift.matched_sig)
         if drift.kind == "changed_unknown" and drift.raw:
-            return self._capture_and_process_debug(timeout=timeout_s, debug=True, raw=drift.raw)
+            stage_start = time.time()
+            snap = self._capture_and_process_debug(timeout=timeout_s, debug=True, raw=drift.raw)
+            self._emit_timing(
+                expected_sig,
+                "snap_from_drift_result.changed_unknown_full_process",
+                time.time() - stage_start,
+                observed_state_sig=str((snap or {}).get("state_sig") or ""),
+                drift_reason=str(getattr(drift, "reason", "") or ""),
+            )
+            return snap
         if drift.kind == "capture_failed":
-            return self._capture_and_process(timeout=timeout_s)
+            stage_start = time.time()
+            snap = self._capture_and_process(timeout=timeout_s)
+            self._emit_timing(
+                expected_sig,
+                "snap_from_drift_result.capture_failed_full_process",
+                time.time() - stage_start,
+                observed_state_sig=str((snap or {}).get("state_sig") or ""),
+                drift_reason=str(getattr(drift, "reason", "") or ""),
+            )
+            return snap
         return None
 
     def _preflight_refresh_if_changed(self, snap: Dict[str, Any], *, timeout_s: float = 0.5) -> Optional[Dict[str, Any]]:
@@ -4045,6 +4297,19 @@ class WorkflowRunner:
             "drift_kind": drift.kind,
         }
         self._emit_llm_enqueued("state_family_drift", reference_sig, payload)
+        self._emit_task_trace_event(
+            reference_sig,
+            "state_family_check",
+            {
+                "phase": "before",
+                "check_kind": "pre_action_drift",
+                "reference_state_sig": reference_sig,
+                "observed_state_sig": observed_sig,
+                "source": source,
+                "planned_action": planned_action,
+                "drift_kind": drift.kind,
+            },
+        )
         start = time.time()
         try:
             result = self.gpt.compare_drift_before_action(
@@ -4072,6 +4337,19 @@ class WorkflowRunner:
                     "result": result_payload,
                 },
             )
+            self._emit_task_trace_event(
+                reference_sig,
+                "state_family_check",
+                {
+                    "phase": "after",
+                    "check_kind": "pre_action_drift",
+                    "reference_state_sig": reference_sig,
+                    "observed_state_sig": observed_sig,
+                    "source": source,
+                    "duration_s": time.time() - start,
+                    "result": result_payload,
+                },
+            )
         except Exception as exc:
             logger.warning("state-family pre-action drift compare failed: %s", exc)
             self._emit_llm_result(
@@ -4080,6 +4358,19 @@ class WorkflowRunner:
                 {
                     "state_sig": reference_sig,
                     "observed_state_sig": observed_sig,
+                    "duration_s": time.time() - start,
+                    "error": str(exc),
+                },
+            )
+            self._emit_task_trace_event(
+                reference_sig,
+                "state_family_check",
+                {
+                    "phase": "error",
+                    "check_kind": "pre_action_drift",
+                    "reference_state_sig": reference_sig,
+                    "observed_state_sig": observed_sig,
+                    "source": source,
                     "duration_s": time.time() - start,
                     "error": str(exc),
                 },
@@ -4141,6 +4432,20 @@ class WorkflowRunner:
             "transition_context": transition_context or {},
         }
         self._emit_llm_enqueued("state_family_transition", observed_sig, payload)
+        self._emit_task_trace_event(
+            observed_sig,
+            "state_family_check",
+            {
+                "phase": "before",
+                "check_kind": "transition_mismatch",
+                "observed_state_sig": observed_sig,
+                "expected_state_sig": expected_sig,
+                "nearest_state_sig": nearest_sig,
+                "nearest_similarity": nearest_similarity,
+                "source": source,
+                "transition_context": transition_context or {},
+            },
+        )
         start = time.time()
         try:
             result = self.gpt.match_state_after_transition(
@@ -4169,6 +4474,22 @@ class WorkflowRunner:
                     "result": result_payload,
                 },
             )
+            self._emit_task_trace_event(
+                observed_sig,
+                "state_family_check",
+                {
+                    "phase": "after",
+                    "check_kind": "transition_mismatch",
+                    "observed_state_sig": observed_sig,
+                    "expected_state_sig": expected_sig,
+                    "nearest_state_sig": nearest_sig,
+                    "nearest_similarity": nearest_similarity,
+                    "source": source,
+                    "duration_s": time.time() - start,
+                    "transition_context": transition_context or {},
+                    "result": result_payload,
+                },
+            )
         except Exception as exc:
             logger.warning("state-family transition compare failed: %s", exc)
             self._emit_llm_result(
@@ -4177,6 +4498,22 @@ class WorkflowRunner:
                 {
                     "state_sig": observed_sig,
                     "duration_s": time.time() - start,
+                    "error": str(exc),
+                },
+            )
+            self._emit_task_trace_event(
+                observed_sig,
+                "state_family_check",
+                {
+                    "phase": "error",
+                    "check_kind": "transition_mismatch",
+                    "observed_state_sig": observed_sig,
+                    "expected_state_sig": expected_sig,
+                    "nearest_state_sig": nearest_sig,
+                    "nearest_similarity": nearest_similarity,
+                    "source": source,
+                    "duration_s": time.time() - start,
+                    "transition_context": transition_context or {},
                     "error": str(exc),
                 },
             )
@@ -5164,6 +5501,25 @@ class WorkflowRunner:
             )
             if task_obj:
                 created_task_ids.append(task_obj.task_id)
+                self._emit_task_trace_event(
+                    sig,
+                    "task_created",
+                    {
+                        "task_id": task_obj.task_id,
+                        "task_type": str(getattr(task_obj, "task_type", "") or item_dict.get("task_type") or "generic"),
+                        "parent_task_id": parent_task_id,
+                        "origin_state_sig": sig,
+                        "resume_state_sig": str(getattr(task_obj, "resume_state_sig", "") or sig),
+                        "initial_goal": str(getattr(task_obj, "initial_goal", "") or item_dict.get("initial_goal") or ""),
+                        "current_goal": str(getattr(task_obj, "current_goal", "") or item_dict.get("initial_goal") or ""),
+                        "entry_action": entry_action,
+                        "reason": str(item_dict.get("reason") or ""),
+                        "priority": float(item_dict.get("priority", 0.5) or 0.5),
+                        "type_priority": float(item_dict.get("type_priority", 0.5) or 0.5),
+                        "llm_priority": float(item_dict.get("llm_priority", 0.5) or 0.5),
+                        "exploration_depth": str(item_dict.get("exploration_depth") or "normal"),
+                    },
+                )
                 try:
                     entry_step = ActionStep(**entry_action)
                     entry_key = candidate_key_from_step_dict(self._model_to_json_dict(entry_step))
@@ -5204,6 +5560,18 @@ class WorkflowRunner:
         if should_finish and not created_task_ids:
             if current_task:
                 self._graph_annotate(sig, page_tags=_page_tags_for_completed_task(str(getattr(current_task, "task_type", "") or "")))
+                self._emit_task_trace_event(
+                    sig,
+                    "task_finished",
+                    {
+                        "task_id": str(getattr(current_task, "task_id", "") or ""),
+                        "task_type": str(getattr(current_task, "task_type", "") or ""),
+                        "status": finish_status,
+                        "finish_reason": finish_reason,
+                        "state_sig": sig,
+                        "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+                    },
+                )
             self.task_manager.finish_current_task(finish_status, finish_reason, state_sig=sig)
 
         self._log_event(
@@ -5735,6 +6103,18 @@ class WorkflowRunner:
             return False
         if not self._has_waiting_sibling_task_for_state(sig, current_task_id):
             return False
+        self._emit_task_trace_event(
+            sig,
+            "task_finished",
+            {
+                "task_id": current_task_id,
+                "task_type": str(getattr(current_task, "task_type", "") or ""),
+                "status": "failed",
+                "finish_reason": reason,
+                "state_sig": sig,
+                "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+            },
+        )
         self.task_manager.finish_current_task("failed", reason, state_sig=sig)
         self._log_event(
             "task_failed_local_exhaustion",
@@ -5811,14 +6191,56 @@ class WorkflowRunner:
         if not target_sig or self._is_resume_state_match(cur_sig, target_sig):
             return cur_sig, snap, True
 
+        current_task = self.task_manager.current_task()
+        current_task_id = str(getattr(current_task, "task_id", "") or "")
+        route_id = f"{current_task_id}:{cur_sig}->{target_sig}:{self._step_seq}"
+        self._emit_task_trace_event(
+            cur_sig,
+            "task_route_started",
+            {
+                "route_id": route_id,
+                "task_id": current_task_id,
+                "route_context": "task_resume",
+                "from_state_sig": cur_sig,
+                "target_state_sig": target_sig,
+            },
+        )
         self._log_event("task_resume_restore_start", sig=cur_sig, target_sig=target_sig)
         reached, restored = self._navigate_via_graph(start_sig=cur_sig, start_snap=snap, target_sig=target_sig, task=task)
         if reached:
             restored_sig = str(restored.get("state_sig") or target_sig)
+            self._emit_task_trace_event(
+                restored_sig,
+                "task_route_finished",
+                {
+                    "route_id": route_id,
+                    "task_id": current_task_id,
+                    "route_context": "task_resume",
+                    "from_state_sig": cur_sig,
+                    "target_state_sig": target_sig,
+                    "reached_state_sig": restored_sig,
+                    "success": True,
+                    "strategy": "navigate_via_graph",
+                },
+            )
             return restored_sig, restored, True
 
         returned_sig, returned_snap = self._return_from_current_state(cur_sig, snap, task)
         if self._is_resume_state_match(returned_sig, target_sig):
+            self._emit_task_trace_event(
+                returned_sig,
+                "task_route_finished",
+                {
+                    "route_id": route_id,
+                    "task_id": current_task_id,
+                    "route_context": "task_resume",
+                    "from_state_sig": cur_sig,
+                    "target_state_sig": target_sig,
+                    "reached_state_sig": returned_sig,
+                    "success": True,
+                    "strategy": "return_from_current_state",
+                },
+            )
             return returned_sig, returned_snap, True
 
         replay_ok = self._restart_and_replay(best_target=target_sig, task=task, reason="resume_state_unreachable")
@@ -5826,17 +6248,55 @@ class WorkflowRunner:
             refreshed = self._capture_and_process(timeout=8.0) or returned_snap
             refreshed_sig = str(refreshed.get("state_sig") or "")
             if self._is_resume_state_match(refreshed_sig, target_sig):
+                self._emit_task_trace_event(
+                    refreshed_sig,
+                    "task_route_finished",
+                    {
+                        "route_id": route_id,
+                        "task_id": current_task_id,
+                        "route_context": "task_resume",
+                        "from_state_sig": cur_sig,
+                        "target_state_sig": target_sig,
+                        "reached_state_sig": refreshed_sig,
+                        "success": True,
+                        "strategy": "restart_and_replay",
+                    },
+                )
                 return refreshed_sig, refreshed, True
 
-        current_task = self.task_manager.current_task()
-        current_task_id = str(getattr(current_task, "task_id", "") or "")
         if current_task:
+            self._emit_task_trace_event(
+                cur_sig,
+                "task_finished",
+                {
+                    "task_id": current_task_id,
+                    "task_type": str(getattr(current_task, "task_type", "") or ""),
+                    "status": "failed",
+                    "finish_reason": f"resume_state_unreachable:{target_sig}",
+                    "state_sig": cur_sig,
+                    "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+                },
+            )
             self.task_manager.finish_current_task(
                 "failed",
                 f"resume_state_unreachable:{target_sig}",
                 state_sig=cur_sig,
             )
             self._save_tasks_snapshot(reason="resume_state_unreachable")
+        self._emit_task_trace_event(
+            cur_sig,
+            "task_route_finished",
+            {
+                "route_id": route_id,
+                "task_id": current_task_id,
+                "route_context": "task_resume",
+                "from_state_sig": cur_sig,
+                "target_state_sig": target_sig,
+                "reached_state_sig": cur_sig,
+                "success": False,
+                "strategy": "unreachable",
+            },
+        )
         self._log_event("task_resume_restore_failed", sig=cur_sig, target_sig=target_sig, task_id=current_task_id)
         return cur_sig, snap, False
 
@@ -6463,6 +6923,67 @@ class WorkflowRunner:
         self._log_event("dfs_candidate_noop_retry", sig=src_sig, action_key=action_key, noop_count=count, limit=limit)
         return False
 
+    def _wait_for_post_action_drift(
+        self,
+        expected_snap: Dict[str, Any],
+        *,
+        attempts: int,
+        interval_s: float,
+        source: str,
+    ) -> DriftCheckResult:
+        """
+        Input: action-before snapshot, maximum polling attempts, polling interval, and caller source label.
+        Output: DriftCheckResult from the first detected page change, or the final same-state/capture-failed result.
+        Function: waits for slow post-action page transitions before allowing candidate clicks to be classified as noop.
+        """
+        expected_sig = str((expected_snap or {}).get("state_sig") or "")
+        max_attempts = max(1, int(attempts or 1))
+        wait_s = max(0.0, float(interval_s or 0.0))
+        started = time.time()
+        last_drift = DriftCheckResult(kind="capture_failed", expected_sig=expected_sig, reason="post_action_poll_not_started")
+        self._emit_decision(
+            expected_sig,
+            "post_action_poll_start",
+            {"source": source, "expected_state_sig": expected_sig, "attempts": max_attempts, "interval_s": wait_s},
+        )
+        self._log_event("post_action_poll_start", sig=expected_sig, source=source, attempts=max_attempts, interval_s=wait_s)
+
+        for attempt_idx in range(max_attempts):
+            drift = self._check_drift_lightweight(expected_snap, timeout_s=0.8)
+            last_drift = drift
+            elapsed_s = time.time() - started
+            detail = {
+                "source": source,
+                "expected_state_sig": expected_sig,
+                "attempt": attempt_idx + 1,
+                "attempts": max_attempts,
+                "elapsed_s": elapsed_s,
+                "drift_kind": drift.kind,
+                "observed_state_sig": str(drift.matched_sig or ""),
+                "reason": str(drift.reason or ""),
+            }
+            self._emit_decision(expected_sig, "post_action_poll_tick", detail)
+            self._log_event("post_action_poll_tick", sig=expected_sig, **detail)
+            if drift.kind in {"changed_known", "changed_unknown", "external"}:
+                self._emit_decision(expected_sig, "post_action_poll_changed", detail)
+                self._log_event("post_action_poll_changed", sig=expected_sig, **detail)
+                return drift
+            if attempt_idx < max_attempts - 1:
+                time.sleep(wait_s)
+
+        timeout_detail = {
+            "source": source,
+            "expected_state_sig": expected_sig,
+            "attempts": max_attempts,
+            "elapsed_s": time.time() - started,
+            "drift_kind": last_drift.kind,
+            "observed_state_sig": str(last_drift.matched_sig or ""),
+            "reason": str(last_drift.reason or ""),
+        }
+        self._emit_decision(expected_sig, "post_action_poll_noop_timeout", timeout_detail)
+        self._log_event("post_action_poll_noop_timeout", sig=expected_sig, **timeout_detail)
+        return last_drift
+
     def _execute_candidate_branch(self, src_sig: str, snap: Dict[str, Any], cand: ActionCandidate, task: str) -> Tuple[str, Dict[str, Any]]:
         """
         Input: current state snapshot and one LLM candidate.
@@ -6516,7 +7037,12 @@ class WorkflowRunner:
             self._mark_explored(src_sig, cand)
             return policy_result
 
-        drift = self._check_drift_lightweight(snap, timeout_s=0.8)
+        drift = self._wait_for_post_action_drift(
+            snap,
+            attempts=int(self.budget.post_action_change_poll_attempts),
+            interval_s=float(self.budget.post_action_change_poll_interval_s),
+            source="candidate_action",
+        )
         if drift.kind == "external":
             try:
                 self._save_external_capture_after_candidate(src_sig, cand, action_key)
@@ -8915,7 +9441,25 @@ class WorkflowRunner:
         action_key = self._action_key(step)
         self.action_count += 1
         self.history.append(action_key)
-        self.task_manager.consume_step(state_sig=sig, action_key=action_key, source=source)
+        task_before = self.task_manager.current_task()
+        status_before = str(getattr(task_before, "status", "") or "") if task_before else ""
+        consumed_task = self.task_manager.consume_step(state_sig=sig, action_key=action_key, source=source)
+        status_after = str(getattr(consumed_task, "status", "") or "") if consumed_task else ""
+        if task_before and status_before not in {"done", "failed", "blocked", "expired"} and status_after == "expired":
+            self._emit_task_trace_event(
+                sig,
+                "task_finished",
+                {
+                    "task_id": str(getattr(consumed_task, "task_id", "") or getattr(task_before, "task_id", "") or ""),
+                    "task_type": str(getattr(consumed_task, "task_type", "") or getattr(task_before, "task_type", "") or ""),
+                    "status": "expired",
+                    "finish_reason": str(getattr(consumed_task, "finish_reason", "") or "step_budget exhausted"),
+                    "state_sig": sig,
+                    "current_goal": str(getattr(consumed_task, "current_goal", "") or getattr(task_before, "current_goal", "") or ""),
+                    "source": source,
+                    "action_key": action_key,
+                },
+            )
         self._save_tasks_snapshot(reason="action_step_consumed")
 
     def _fail_current_task_after_recovery_unreachable(self, sig: str, *, reason: str, target_sig: str = "") -> None:
@@ -8930,6 +9474,18 @@ class WorkflowRunner:
         if target_sig:
             detail = f"{detail}; target_sig={target_sig}"
         if current_task:
+            self._emit_task_trace_event(
+                sig,
+                "task_finished",
+                {
+                    "task_id": str(getattr(current_task, "task_id", "") or ""),
+                    "task_type": str(getattr(current_task, "task_type", "") or ""),
+                    "status": "failed",
+                    "finish_reason": detail,
+                    "state_sig": sig,
+                    "current_goal": str(getattr(current_task, "current_goal", "") or ""),
+                },
+            )
             self.task_manager.finish_current_task("failed", detail, state_sig=sig)
         self._log_event(
             "task_failed_recovery_unreachable",
@@ -9463,11 +10019,15 @@ class WorkflowRunner:
     # ---------------------------
 
     def _should_recover_stuck(self) -> bool:
-        age_strong = time.time() - float(self.last_strong_progress_ts or 0.0)
-        if age_strong >= self.budget.stuck_time_s:
-            return True
-        if self.no_progress_loops >= self.budget.stuck_loops_limit and self.nav_ready_once:
-            return True
+        """
+        Input: current progress bookkeeping.
+        Output: False.
+        Function: disables progress-based stuck recovery while task-driven exploration is active.
+        """
+        # Progress-based recovery is too narrow for the current task-driven flow:
+        # policy capture, dynamic-page comparison, return routing, and post-action
+        # polling can all be useful work without updating last_strong_progress_ts.
+        # Keep the function as a compatibility hook, but do not trigger recovery.
         return False
 
     def _stop_condition_reason(self, start: float) -> str:
@@ -9475,10 +10035,12 @@ class WorkflowRunner:
             return "time_budget_reached"
         if self.recovery_route_exhausted:
             return "recovery_route_exhausted"
-        # Hard stop if we haven't made strong progress for too long (prevents infinite recover loops).
-        if float(self.budget.strong_stall_stop_s or 0.0) > 0.0:
-            if (time.time() - float(self.last_strong_progress_ts or 0.0)) >= float(self.budget.strong_stall_stop_s):
-                return "strong_stall_timeout"
+        # Progress-based hard stop is disabled for task-driven exploration. The
+        # global time/action/saturation limits below remain the authoritative
+        # run-level guards.
+        # if float(self.budget.strong_stall_stop_s or 0.0) > 0.0:
+        #     if (time.time() - float(self.last_strong_progress_ts or 0.0)) >= float(self.budget.strong_stall_stop_s):
+        #         return "strong_stall_timeout"
         if self.action_count >= self.budget.max_actions:
             return "max_actions_reached"
         if self.no_new_state_count >= self.budget.saturation_limit:

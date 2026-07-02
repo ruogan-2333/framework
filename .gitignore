@@ -700,3 +700,6 @@ test_debug/test_5.24/outputs/comparison_results_all_pairs.json
 test_debug/test_5.24/outputs/comparison_results.json
 test_debug/5.18周报.md
 test_debug/rerun_failed_10_apps.py
+test_debug/omniparser_outputs/
+test_debug/omniparser_backend_outputs/
+test_debug/omniparser_runtime/

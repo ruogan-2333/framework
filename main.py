@@ -353,6 +353,16 @@ def parse_args(argv) -> argparse.Namespace:
     run.add_argument("--disable-probe-return", action="store_true", help="Skip probe-return exploration and commit forward directly")
     run.add_argument("--min-candidate-score", type=float, default=-1.0, help="Filter out LLM1 candidates with score below this threshold before probe/forward")
     run.add_argument("--workers", type=int, default=1, help="Thread pool workers (LLM overlap)")
+    run.add_argument(
+        "--visual-detector-backend",
+        choices=["three_tools", "omniparser_ocr"],
+        default="three_tools",
+        help=(
+            "Visual UI construction backend used when Appium XML is unreliable. "
+            "three_tools keeps the existing OCR/UIED/template path; "
+            "omniparser_ocr uses the external OmniParser + OCR backend."
+        ),
+    )
 
     # Model
     run.add_argument("--model", type=str, default="gemini-2.5-flash", help="OpenAI-compatible model name")
@@ -651,6 +661,7 @@ def main(argv=None):
             min_candidate_score=float(args.min_candidate_score),
             per_page_probe_cap=int(args.probe_cap),
             max_workers=int(args.workers),
+            visual_detector_backend=str(getattr(args, "visual_detector_backend", "three_tools") or "three_tools"),
         )
 
         if args.interactive_debug:
