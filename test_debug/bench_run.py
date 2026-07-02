@@ -314,7 +314,6 @@ def build_main_command(args: argparse.Namespace, app: BenchApp, run_id: str) -> 
                 str(app.app_file),
                 "--install-before-run",
                 "--uninstall-before-install",
-                "--validate-launch-before-run",
             ]
         )
         if not args.keep_installed:

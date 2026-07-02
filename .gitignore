@@ -21,7 +21,9 @@ test_debug/utg_eval/
 test_debug/llm_replay_runs/
 test_debug/policy_document_capture/
 test_debug/install_test_outputs/
+test_debug/install_recheck_outputs/
 test_debug/metadata_analysis_outputs/
+test_debug/state_family_compare_outputs/
 6.11标注/
 mytest2/llm1_debug/
 mytest2/preflight_refresh_test/

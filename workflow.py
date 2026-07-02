@@ -23,7 +23,7 @@ Critical StateGraph alignment (must match patched state_graph.py):
   => We call graph.annotate() for flags.
 
 CONDITIONS explicitly handled:
-- DRIFT: UI changes without our logged action -> record drift edge, replan at new state.
+- DRIFT: UI changes without our logged action -> compare once before action or after transition mismatch, then reuse known state or replan at new state.
 - PAGE_KIND: stable/popup/loading is recorded for debugging and UTG context, not used as a dismiss branch.
 - BACK-LIKE: a click lands in an ancestor state -> do NOT probe-return; replan at that ancestor.
 - NAV timeout: LLM1 not ready -> cancel best-effort; only then heuristics.
@@ -154,10 +154,10 @@ class BudgetConfig:
     max_dfs_depth: int = 999
     post_action_settle_s: float = 1
 
-    # NAV barrier (wait + drift detection + timeout fallback)
+    # NAV barrier (wait + timeout fallback)
     nav_timeout_s: float = 120.0  # LLM1 wait timeout before heuristic fallback
     nav_poll_interval_s: float = 0.08
-    nav_drift_check_interval_s: float = 0.9# 每隔多久进行一次drift检测
+    nav_drift_check_interval_s: float = 0.9  # legacy: wait-period drift checks are disabled; pre-action drift is used instead
     nav_cooldown_s: float = 6.0
     loading_wait_s: float = 6.0
     topic_route_conf_threshold: float = 0.55
@@ -226,6 +226,36 @@ class DriftCheckResult:
     foreground_package: str = ""
     foreground_activity: str = ""
     reason: str = ""
+
+
+@dataclass
+class PreActionDriftDecision:
+    """
+    Input: result of the one-time pre-action drift resolution.
+    Output: action routing decision used by candidate and return-action execution.
+    Function: avoids executing stale actions when a dynamic page changed after LLM analysis.
+    """
+    decision: str
+    observed_sig: str = ""
+    observed_snap: Optional[Dict[str, Any]] = None
+    reason: str = ""
+    result: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TransitionMatchDecision:
+    """
+    Input: LLM state-family comparison after a replay/return transition mismatch.
+    Output: resolved known/new state decision for workflow routing.
+    Function: lets dynamic variants reuse an expected or nearest known state when safe.
+    """
+    decision: str
+    matched_sig: str = ""
+    matched_snap: Optional[Dict[str, Any]] = None
+    observed_sig: str = ""
+    observed_snap: Optional[Dict[str, Any]] = None
+    reason: str = ""
+    result: Dict[str, Any] = field(default_factory=dict)
 
 
 class RecoveryReason(str, Enum):
@@ -2685,58 +2715,9 @@ class WorkflowRunner:
                 # 本轮剩余逻辑作废，直接开始下一轮。
                 continue
 
-            # CONDITION: DRIFT (UI changed without our explicit logged action)
-            # WHEN/WHERE:
-            # - checked once per loop BEFORE trusting NAV proposals/caches for cur_sig.
-            # 在真正相信当前缓存和导航建议之前，先做一次轻量预检，看看页面是否自己变了。
-            snap_live = self._preflight_refresh_if_changed(snap, timeout_s=0.8)
-            # 如果预检发现页面确实发生了变化，就进入 drift 分支。
-            if snap_live:
-                # 如果状态签名已经变了，说明页面漂移到了另一个状态，当前计划要作废重排。
-                if snap_live["state_sig"] != cur_sig:
-                    # 取出漂移后的新状态签名。
-                    new_sig: str = snap_live["state_sig"]
-                    # 输出 drift 日志，帮助定位“页面自己变了”的情况。
-                    logger.warning("DRIFT: old=%s new=%s. Replanning.", cur_sig[:8], new_sig[:8])
-                    # 发出决策事件，标记这是一次 drift 导致的重规划。
-                    self._emit_decision(cur_sig, "drift_detected", {"from_sig": cur_sig, "to_sig": new_sig})
-
-                    # 构造一个伪动作，用来在状态图里表示“等待时页面自己变了”这类漂移迁移。
-                    drift_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.2", priority=1, reasoning="drift")
-                    # 把 drift 也记成一条状态迁移边，并拿到目标状态在发现当时是否是新状态。
-                    dst_was_new = self._graph_record_transition(
-                        cur_sig,
-                        new_sig,
-                        self._actions_signature([drift_step]),
-                        src_snap=snap,
-                        dst_snap=snap_live,
-                    )
-                    # 更新 DFS 路径，让当前所在位置切换到漂移后的状态。
-                    self._enter_state(from_sig=cur_sig, to_sig=new_sig, via_action="drift")
-
-                    # 当前状态与快照都切到漂移后的页面。
-                    cur_sig, snap = new_sig, snap_live
-                    if current_loop_task_id and not task_switched:
-                        self.task_manager.update_resume_state(current_loop_task_id, cur_sig)
-                        self._save_tasks_snapshot(reason="task_resume_state_drift_updated")
-                    # 对新状态重新安排异步分析。
-                    self._schedule_state(cur_sig, snap, task)
-
-                    # no_new_state_count tracks novelty-at-discovery
-                    # 如果漂移到了一个从未见过的新状态，就清零“无新状态”计数。
-                    if dst_was_new:
-                        self.no_new_state_count = 0
-                    # 否则说明只是跳到旧状态，“无新状态”计数继续累计。
-                    else:
-                        self.no_new_state_count += 1
-                    if current_loop_task_id:
-                        self.last_active_task_id = current_loop_task_id
-                    # 当前轮因为页面基准已经变化，直接重开下一轮。
-                    continue
-
-                # Same state_sig but raw content changed; refresh snap for accurate vid_map.
-                # 如果 sig 没变但底层内容更新了，也要用新快照替换，保证 vid_map / 元素 id 不过期。
-                snap = snap_live
+            # CONDITION: DRIFT is intentionally not checked here anymore.
+            # Dynamic-page drift is resolved once immediately before executing an action,
+            # after the relevant NAV result and task candidate are known.
 
             # CONDITION: TASK RESUME STATE MISMATCH
             # 栈顶任务切换后，当前设备页面可能还停留在上一个子任务的终点。
@@ -2765,8 +2746,8 @@ class WorkflowRunner:
             # 等待 NAV 结果；如果超时或进入 cooldown，则允许走启发式候选。
             nav, using_heuristics = self._wait_nav_or_fallback(cur_sig, snap, task, timeout_s=timeout_s)
 
-            # NAV wait can set forced replan (drift while waiting)
-            # NAV 等待期间也可能检测到 drift / 强制重规划信号，这里优先处理。
+            # Other recovery/probe paths may still set forced replan signals.
+            # 动作前 drift 已经不在 NAV 等待期间触发，这里只消费其他路径留下的强制重规划信号。
             if self._consume_forced_replan():
                 # 取出强制重规划指定的新状态与快照。
                 cur_sig, snap = self._force_replan_sig, self._force_replan_snap  # type: ignore[assignment]
@@ -3957,6 +3938,261 @@ class WorkflowRunner:
         """
         drift = self._check_drift_lightweight(snap, timeout_s=timeout_s)
         return self._snap_from_drift_result(drift, timeout_s=timeout_s)
+
+    def _snap_xml_reliable(self, snap: Optional[Dict[str, Any]]) -> Optional[bool]:
+        """
+        Input: processed snapshot or None.
+        Output: XML reliability flag when known.
+        Function: keeps state-family LLM prompts aligned with the main navigation prompt's screenshot-first rule.
+        """
+        if not snap:
+            return None
+        meta = snap.get("meta") or {}
+        if "xml_reliable" in snap:
+            return bool(snap.get("xml_reliable"))
+        if "xml_reliable" in meta:
+            return bool(meta.get("xml_reliable"))
+        return None
+
+    def _current_task_payload(self) -> Dict[str, Any]:
+        """
+        Input: current TaskManager state.
+        Output: JSON-safe current task dictionary.
+        Function: provides state-family LLM calls with the same task context used by normal navigation.
+        """
+        try:
+            current_task = self.task_manager.current_task()
+            if current_task and hasattr(current_task, "to_dict"):
+                return current_task.to_dict()
+            return self._model_to_json_dict(current_task)
+        except Exception:
+            return {}
+
+    def _nearest_known_snap_for_observed(self, observed_snap: Dict[str, Any], *, exclude: Optional[Set[str]] = None) -> Tuple[str, Optional[Dict[str, Any]], float]:
+        """
+        Input: observed processed snapshot and optional signatures to exclude.
+        Output: nearest known state signature, snapshot, and visual similarity.
+        Function: gives transition-mismatch LLM a local best-match candidate without scanning trace files.
+        """
+        exclude = set(exclude or set())
+        observed_meta = (observed_snap or {}).get("meta") or {}
+        observed_phash = str(observed_meta.get("screenshot_phash") or "")
+        if not observed_phash:
+            return "", None, 0.0
+        best_sig = ""
+        best_snap: Optional[Dict[str, Any]] = None
+        best_similarity = 0.0
+        for sig, known in reversed(list((self.state_snap_cache or {}).items())):
+            if sig in exclude:
+                continue
+            known_phash = str(((known or {}).get("meta") or {}).get("screenshot_phash") or "")
+            if not known_phash:
+                continue
+            sim = compare_phash_similarity(observed_phash, known_phash)
+            if sim > best_similarity:
+                best_sig = str(sig)
+                best_snap = known
+                best_similarity = float(sim)
+        return best_sig, best_snap, best_similarity
+
+    def _resolve_pre_action_drift(
+        self,
+        reference_sig: str,
+        reference_snap: Dict[str, Any],
+        *,
+        planned_action: Dict[str, Any],
+        task: str,
+        source: str,
+    ) -> PreActionDriftDecision:
+        """
+        Input: reference snapshot analyzed by LLM, planned action payload, active task text, and debug source label.
+        Output: PreActionDriftDecision telling caller to reuse the reference page or analyze the observed page.
+        Function: performs the only pre-action drift check, replacing periodic drift checks during LLM waiting.
+        """
+        if not reference_snap:
+            return PreActionDriftDecision("capture_failed", reference_sig, None, "missing_reference_snap")
+
+        drift = self._check_drift_lightweight(reference_snap, timeout_s=0.8)
+        if drift.kind == "same_state":
+            return PreActionDriftDecision("reuse_reference_state", reference_sig, reference_snap, drift.reason or "same_state")
+        if drift.kind == "external":
+            drift = self._handle_external_after_action(reference_sig, f"pre_action_{source}")
+            if drift.kind == "same_state":
+                return PreActionDriftDecision("reuse_reference_state", reference_sig, reference_snap, drift.reason or "foreground_restored")
+
+        observed_snap = self._snap_from_drift_result(drift, timeout_s=0.8)
+        if not observed_snap:
+            if drift.kind == "capture_failed":
+                observed_snap = self._capture_and_process(timeout=0.8)
+            if not observed_snap:
+                return PreActionDriftDecision("capture_failed", reference_sig, None, drift.reason or drift.kind or "observed_capture_failed")
+
+        observed_sig = str(observed_snap.get("state_sig") or "")
+        if not observed_sig:
+            return PreActionDriftDecision("capture_failed", "", observed_snap, "observed_sig_missing")
+        if observed_sig == reference_sig:
+            return PreActionDriftDecision("reuse_reference_state", observed_sig, observed_snap, "observed_sig_matches_reference")
+
+        nav = self.nav_cache.get(reference_sig)
+        reference_analysis = self._model_to_json_dict(nav)
+        payload = {
+            "state_sig": reference_sig,
+            "reference_state_sig": reference_sig,
+            "observed_state_sig": observed_sig,
+            "source": source,
+            "planned_action": planned_action,
+            "current_task": self._current_task_payload(),
+            "drift_kind": drift.kind,
+        }
+        self._emit_llm_enqueued("state_family_drift", reference_sig, payload)
+        start = time.time()
+        try:
+            result = self.gpt.compare_drift_before_action(
+                reference_screenshot_b64=str(reference_snap.get("screenshot") or ""),
+                observed_screenshot_b64=str(observed_snap.get("screenshot") or ""),
+                reference_ui_json=reference_snap.get("uist") or {},
+                observed_ui_json=observed_snap.get("uist") or {},
+                planned_action=planned_action,
+                current_task=self._current_task_payload(),
+                reference_analysis=reference_analysis,
+                reference_state_sig=reference_sig,
+                observed_state_sig=observed_sig,
+                reference_xml_reliable=self._snap_xml_reliable(reference_snap),
+                observed_xml_reliable=self._snap_xml_reliable(observed_snap),
+                debug_payload_path=str(self._debug_page_artifact_path(reference_sig, "llm/state_family_drift_input_debug.json")),
+            )
+            result_payload = self._model_to_json_dict(result)
+            self._emit_llm_result(
+                "state_family_drift",
+                reference_sig,
+                {
+                    "state_sig": reference_sig,
+                    "observed_state_sig": observed_sig,
+                    "duration_s": time.time() - start,
+                    "result": result_payload,
+                },
+            )
+        except Exception as exc:
+            logger.warning("state-family pre-action drift compare failed: %s", exc)
+            self._emit_llm_result(
+                "state_family_drift",
+                reference_sig,
+                {
+                    "state_sig": reference_sig,
+                    "observed_state_sig": observed_sig,
+                    "duration_s": time.time() - start,
+                    "error": str(exc),
+                },
+            )
+            return PreActionDriftDecision("analyze_observed_as_new_state", observed_sig, observed_snap, "llm_compare_failed")
+
+        same_page = bool(getattr(result, "same_page", False))
+        next_step = str(getattr(result, "recommended_next_step", "") or "")
+        if same_page and next_step == "reuse_reference_state":
+            return PreActionDriftDecision("reuse_reference_state", observed_sig, observed_snap, str(getattr(result, "reuse_reason", "") or ""), result_payload)
+        if next_step == "wait_and_recapture" and not source.endswith("_after_wait"):
+            time.sleep(0.8)
+            recaptured = self._capture_and_process(timeout=1.5)
+            if recaptured:
+                return self._resolve_pre_action_drift(
+                    reference_sig,
+                    reference_snap,
+                    planned_action=planned_action,
+                    task=task,
+                    source=f"{source}_after_wait",
+                )
+        return PreActionDriftDecision("analyze_observed_as_new_state", observed_sig, observed_snap, str(getattr(result, "reuse_reason", "") or ""), result_payload)
+
+    def _resolve_transition_mismatch(
+        self,
+        *,
+        observed_snap: Dict[str, Any],
+        expected_sig: str = "",
+        expected_snap: Optional[Dict[str, Any]] = None,
+        transition_context: Optional[Dict[str, Any]] = None,
+        source: str = "",
+    ) -> TransitionMatchDecision:
+        """
+        Input: observed snapshot after a transition plus expected/nearest known-state context.
+        Output: TransitionMatchDecision telling caller to treat observed as expected, nearest, or a new state.
+        Function: handles dynamic page variants during UTG replay, task resume, and return-action routing.
+        """
+        observed_sig = str((observed_snap or {}).get("state_sig") or "")
+        if not observed_snap or not observed_sig:
+            return TransitionMatchDecision("reanalyze_observed", observed_sig, observed_snap, "missing_observed_snap")
+
+        expected_sig = str(expected_sig or "")
+        expected_snap = expected_snap or (self.state_snap_cache.get(expected_sig) if expected_sig else None)
+        exclude = {observed_sig}
+        if expected_sig:
+            exclude.add(expected_sig)
+        nearest_sig, nearest_snap, nearest_similarity = self._nearest_known_snap_for_observed(observed_snap, exclude=exclude)
+
+        if not expected_snap and not nearest_snap:
+            return TransitionMatchDecision("reanalyze_observed", observed_sig, observed_snap, "no_expected_or_nearest_state")
+
+        payload = {
+            "state_sig": observed_sig,
+            "observed_state_sig": observed_sig,
+            "expected_state_sig": expected_sig,
+            "nearest_state_sig": nearest_sig,
+            "nearest_similarity": nearest_similarity,
+            "source": source,
+            "transition_context": transition_context or {},
+        }
+        self._emit_llm_enqueued("state_family_transition", observed_sig, payload)
+        start = time.time()
+        try:
+            result = self.gpt.match_state_after_transition(
+                observed_screenshot_b64=str(observed_snap.get("screenshot") or ""),
+                observed_ui_json=observed_snap.get("uist") or {},
+                expected_screenshot_b64=str((expected_snap or {}).get("screenshot") or ""),
+                expected_ui_json=(expected_snap or {}).get("uist") or {},
+                nearest_screenshot_b64=str((nearest_snap or {}).get("screenshot") or ""),
+                nearest_ui_json=(nearest_snap or {}).get("uist") or {},
+                transition_context=transition_context or {},
+                expected_state_sig=expected_sig,
+                observed_state_sig=observed_sig,
+                nearest_state_sig=nearest_sig,
+                expected_xml_reliable=self._snap_xml_reliable(expected_snap),
+                observed_xml_reliable=self._snap_xml_reliable(observed_snap),
+                nearest_xml_reliable=self._snap_xml_reliable(nearest_snap),
+                debug_payload_path=str(self._debug_page_artifact_path(observed_sig, "llm/state_family_transition_input_debug.json")),
+            )
+            result_payload = self._model_to_json_dict(result)
+            self._emit_llm_result(
+                "state_family_transition",
+                observed_sig,
+                {
+                    "state_sig": observed_sig,
+                    "duration_s": time.time() - start,
+                    "result": result_payload,
+                },
+            )
+        except Exception as exc:
+            logger.warning("state-family transition compare failed: %s", exc)
+            self._emit_llm_result(
+                "state_family_transition",
+                observed_sig,
+                {
+                    "state_sig": observed_sig,
+                    "duration_s": time.time() - start,
+                    "error": str(exc),
+                },
+            )
+            return TransitionMatchDecision("reanalyze_observed", observed_sig=observed_sig, observed_snap=observed_snap, reason="llm_compare_failed")
+
+        match_type = str(getattr(result, "match_type", "") or "new_state")
+        matched_sig = str(getattr(result, "matched_state_sig", "") or "")
+        confidence = float(getattr(result, "confidence", 0.0) or 0.0)
+        reason = str(getattr(result, "reason", "") or "")
+        if match_type == "same_as_expected" and expected_sig and confidence >= 0.75:
+            return TransitionMatchDecision("treat_as_expected", expected_sig, expected_snap, observed_sig, observed_snap, reason, result_payload)
+        if match_type == "same_as_nearest" and matched_sig and confidence >= 0.75:
+            matched_snap = self.state_snap_cache.get(matched_sig) or (nearest_snap if matched_sig == nearest_sig else None)
+            if matched_snap:
+                return TransitionMatchDecision("treat_as_nearest", matched_sig, matched_snap, observed_sig, observed_snap, reason, result_payload)
+        return TransitionMatchDecision("reanalyze_observed", observed_sig=observed_sig, observed_snap=observed_snap, reason=reason, result=result_payload)
 
     # ---------------------------
     # Graph recording (delegates semantics to StateGraph)
@@ -5343,11 +5579,11 @@ class WorkflowRunner:
           out: (nav, using_heuristics)
 
         WHEN called:
-          - once per main-loop iteration, AFTER drift check, BEFORE overlay/probe/forward
+          - once per main-loop iteration before candidate selection; pre-action drift is checked later
 
         GUARANTEES:
           - We do NOT heuristic-click unless NAV timed out or is under cooldown.
-          - While waiting, we periodically recapture to detect drift/popups.
+          - While waiting, we do not recapture for drift; drift is resolved once before action execution.
 
         WHICH state:
           - sig is the authoritative current snapshot state_sig.
@@ -5376,7 +5612,6 @@ class WorkflowRunner:
 
         t0 = time.time()
         timeout_s = float(timeout_s if timeout_s is not None else self.budget.nav_timeout_s)
-        last_drift_check = t0
         rescheduled_once = False
 
         while time.time() - t0 < timeout_s:
@@ -5394,26 +5629,6 @@ class WorkflowRunner:
                 logger.debug("NAV missing in-flight for sig=%s -> reschedule once.", sig[:8])
                 self._schedule_state(sig, snap, task)
                 rescheduled_once = True
-
-            # Drift check while waiting
-            if time.time() - last_drift_check >= self.budget.nav_drift_check_interval_s:
-                last_drift_check = time.time()
-                snap_live = self._preflight_refresh_if_changed(snap, timeout_s=0.8)
-                if snap_live:
-                    # Always refresh local snapshot to keep vid_map/hashes aligned with the real UI,
-                    # even when state_sig stays stable.
-                    if snap_live["state_sig"] != sig:
-                        new_sig = snap_live["state_sig"]
-                        logger.warning("DRIFT during NAV wait: old=%s new=%s", sig[:8], new_sig[:8])
-                        drift_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.2", priority=1, reasoning="drift_wait_nav")
-                        self._graph_record_transition(sig, new_sig, self._actions_signature([drift_step]), src_snap=snap, dst_snap=snap_live)
-                        self._set_forced_replan(new_sig, snap_live, has_edge=True)
-                        self._emit_decision(sig, "drift_during_nav_wait", {"from_sig": sig, "to_sig": new_sig})
-                        return None, False
-                    try:
-                        snap.update(snap_live)
-                    except Exception:
-                        pass
 
             time.sleep(self.budget.nav_poll_interval_s)
 
@@ -6186,6 +6401,40 @@ class WorkflowRunner:
                 self._mark_return_action_result(cur_sig, step, {"kind": "capture_failed", "reason": "unknown_capture_failed"})
                 return False, cur_sig, snap
             dst_sig = str(dst_snap.get("state_sig") or "")
+            transition_decision = self._resolve_transition_mismatch(
+                observed_snap=dst_snap,
+                expected_sig="",
+                expected_snap=None,
+                transition_context={
+                    "source": "return_action",
+                    "from_sig": cur_sig,
+                    "observed_sig": dst_sig,
+                    "action": action_payload,
+                    "task": self._current_task_payload(),
+                },
+                source="return_action",
+            )
+            if transition_decision.decision in {"treat_as_expected", "treat_as_nearest"} and transition_decision.matched_snap:
+                dst_sig = str(transition_decision.matched_sig or transition_decision.matched_snap.get("state_sig") or dst_sig)
+                dst_snap = transition_decision.matched_snap
+                self._record_drift_transition(cur_sig, dst_sig, action_payload, snap, dst_snap)
+                if dst_sig in self.dfs_stack:
+                    self._mark_return_action_result(
+                        cur_sig,
+                        step,
+                        {"kind": "returned_to_ancestor", "dst_sig": dst_sig, "state_family_decision": transition_decision.decision},
+                    )
+                    self._pop_stack_to(dst_sig, mark_explored=True)
+                    self._schedule_state(dst_sig, dst_snap, task)
+                    return True, dst_sig, dst_snap
+                self._mark_return_action_result(
+                    cur_sig,
+                    step,
+                    {"kind": "known_non_ancestor", "dst_sig": dst_sig, "state_family_decision": transition_decision.decision},
+                )
+                self._reconcile_stack_on_external_move(dst_sig, snap=dst_snap, record_observation=False)
+                self._schedule_state(dst_sig, dst_snap, task)
+                return True, dst_sig, dst_snap
             self._record_drift_transition(cur_sig, dst_sig, action_payload, snap, dst_snap)
             self._mark_return_action_result(cur_sig, step, {"kind": "new_state", "dst_sig": dst_sig})
             self._enter_state(from_sig=cur_sig, to_sig=dst_sig, via_action=step_key)
@@ -6222,6 +6471,32 @@ class WorkflowRunner:
         """
         action_key = self._candidate_key(cand)
         action_payload = self._actions_signature(cand.actions, vid_map=snap.get("vid_map") or {})
+        pre_action = self._resolve_pre_action_drift(
+            src_sig,
+            snap,
+            planned_action=action_payload,
+            task=task,
+            source="candidate",
+        )
+        if pre_action.decision == "analyze_observed_as_new_state" and pre_action.observed_snap:
+            drift_sig = str(pre_action.observed_snap.get("state_sig") or pre_action.observed_sig or "")
+            if drift_sig and drift_sig != src_sig:
+                drift_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.2", priority=1, reasoning="pre_action_drift")
+                wait_payload = self._actions_signature([drift_step])
+                self._record_drift_transition(src_sig, drift_sig, wait_payload, snap, pre_action.observed_snap)
+                self._enter_state(from_sig=src_sig, to_sig=drift_sig, via_action="pre_action_drift")
+                self._log_event(
+                    "pre_action_drift_replan",
+                    sig=src_sig,
+                    observed_sig=drift_sig,
+                    action_key=action_key,
+                    source="candidate",
+                    reason=pre_action.reason,
+                )
+                return drift_sig, pre_action.observed_snap
+        elif pre_action.decision == "capture_failed":
+            self._log_event("pre_action_drift_capture_failed", sig=src_sig, action_key=action_key, source="candidate", reason=pre_action.reason)
+
         self._emit_decision(
             src_sig,
             "next_step",
@@ -6283,6 +6558,32 @@ class WorkflowRunner:
                 self._log_event("page_return_skip_known_bad", sig=cur_sig, action_key=self._action_key(step), result=self._return_action_result(cur_sig, step) or {})
                 continue
             action_payload = self._actions_signature([step], vid_map=snap.get("vid_map") or {})
+            pre_action = self._resolve_pre_action_drift(
+                cur_sig,
+                snap,
+                planned_action=action_payload,
+                task=task,
+                source="return_action",
+            )
+            if pre_action.decision == "analyze_observed_as_new_state" and pre_action.observed_snap:
+                drift_sig = str(pre_action.observed_snap.get("state_sig") or pre_action.observed_sig or "")
+                if drift_sig and drift_sig != cur_sig:
+                    drift_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.2", priority=1, reasoning="pre_return_drift")
+                    wait_payload = self._actions_signature([drift_step])
+                    self._record_drift_transition(cur_sig, drift_sig, wait_payload, snap, pre_action.observed_snap)
+                    self._enter_state(from_sig=cur_sig, to_sig=drift_sig, via_action="pre_return_drift")
+                    self._log_event(
+                        "pre_action_drift_replan",
+                        sig=cur_sig,
+                        observed_sig=drift_sig,
+                        action_key=self._action_key(step),
+                        source="return_action",
+                        reason=pre_action.reason,
+                    )
+                    return drift_sig, pre_action.observed_snap
+            elif pre_action.decision == "capture_failed":
+                self._log_event("pre_action_drift_capture_failed", sig=cur_sig, action_key=self._action_key(step), source="return_action", reason=pre_action.reason)
+
             self._emit_decision(cur_sig, "next_step", {"plan": "page_return_action", "action": action_payload})
             ok = self._execute_action_sequence([step], snap)
             if not ok:
@@ -6315,6 +6616,32 @@ class WorkflowRunner:
         if self._should_skip_return_action(cur_sig, back) or self._is_action_blacklisted(cur_sig, self._action_key(back)):
             return self._handle_return_exhausted_state(cur_sig, snap, task, "fallback_back_unusable")
         action_payload = self._actions_signature([back], vid_map=snap.get("vid_map") or {})
+        pre_action = self._resolve_pre_action_drift(
+            cur_sig,
+            snap,
+            planned_action=action_payload,
+            task=task,
+            source="fallback_back",
+        )
+        if pre_action.decision == "analyze_observed_as_new_state" and pre_action.observed_snap:
+            drift_sig = str(pre_action.observed_snap.get("state_sig") or pre_action.observed_sig or "")
+            if drift_sig and drift_sig != cur_sig:
+                drift_step = ActionStep(action=ActionType.WAIT, element_id=None, text="0.2", priority=1, reasoning="pre_fallback_back_drift")
+                wait_payload = self._actions_signature([drift_step])
+                self._record_drift_transition(cur_sig, drift_sig, wait_payload, snap, pre_action.observed_snap)
+                self._enter_state(from_sig=cur_sig, to_sig=drift_sig, via_action="pre_fallback_back_drift")
+                self._log_event(
+                    "pre_action_drift_replan",
+                    sig=cur_sig,
+                    observed_sig=drift_sig,
+                    action_key=self._action_key(back),
+                    source="fallback_back",
+                    reason=pre_action.reason,
+                )
+                return drift_sig, pre_action.observed_snap
+        elif pre_action.decision == "capture_failed":
+            self._log_event("pre_action_drift_capture_failed", sig=cur_sig, action_key=self._action_key(back), source="fallback_back", reason=pre_action.reason)
+
         ok = self._execute_action(back, snap.get("vid_map") or {}, cur_sig)
         if ok:
             self._record_successful_action_step(back, cur_sig, source="fallback_back_after_page_return")
@@ -8226,10 +8553,40 @@ class WorkflowRunner:
                 return False, snap
 
             new_sig = snap2["state_sig"]
+            expected = state_path[i + 1] if (i + 1) < len(state_path) else ""
+            if expected and new_sig and not (
+                new_sig == expected or self._family_id(str(new_sig)) == self._family_id(str(expected))
+            ):
+                transition_decision = self._resolve_transition_mismatch(
+                    observed_snap=snap2,
+                    expected_sig=str(expected),
+                    expected_snap=self.state_snap_cache.get(str(expected)),
+                    transition_context={
+                        "source": "graph_replay",
+                        "step_index": i + 1,
+                        "from_sig": cur_sig,
+                        "expected_sig": str(expected),
+                        "observed_sig": str(new_sig),
+                        "target_sig": target_sig,
+                        "action": used_act,
+                        "task": self._current_task_payload(),
+                    },
+                    source="graph_replay",
+                )
+                if transition_decision.decision in {"treat_as_expected", "treat_as_nearest"} and transition_decision.matched_snap:
+                    self._log_event(
+                        "graph_nav_state_family_matched",
+                        sig=cur_sig,
+                        observed_sig=new_sig,
+                        matched_sig=transition_decision.matched_sig,
+                        decision=transition_decision.decision,
+                        reason=transition_decision.reason,
+                    )
+                    snap2 = transition_decision.matched_snap
+                    new_sig = str(transition_decision.matched_sig or snap2.get("state_sig") or new_sig)
 
             # Update replay verification stats for the planned edge (before any divergence abort).
             try:
-                expected = state_path[i + 1] if (i + 1) < len(state_path) else None
                 if expected:
                     ok_edge = bool(new_sig == expected) or (self._family_id(str(new_sig)) == self._family_id(str(expected)))
                     self.graph.record_edge_verification(state_path[i], expected, act, ok=ok_edge)

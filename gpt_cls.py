@@ -456,6 +456,68 @@ class AppMetadataSummary(BaseModel):
     )
 
 
+class DriftBeforeActionResult(BaseModel):
+    """
+    LLM comparison result for a page that changed after analysis but before action execution.
+
+    Input:
+    - Reference UI that was analyzed by navigation/router.
+    - Observed UI captured immediately before executing the planned action.
+    - Planned action and current task context.
+
+    Output:
+    - Whether the old page analysis/action cache can be reused, or the observed
+      UI should be analyzed as a new page.
+    """
+
+    reference_state_sig: str = Field("", description="State signature of the UI originally analyzed")
+    observed_state_sig: str = Field("", description="State signature of the UI captured before action execution")
+    same_page: bool = Field(
+        False,
+        description="True only if the reference page analysis and pending/planned actions can be safely reused",
+    )
+    confidence: float = Field(0.0, ge=0.0, le=1.0, description="Confidence in same_page judgment")
+    recommended_next_step: Literal["reuse_reference_state", "analyze_observed_as_new_state", "wait_and_recapture"] = Field(
+        "analyze_observed_as_new_state",
+        description="Recommended workflow behavior after the drift comparison",
+    )
+    visible_change_summary: str = Field("", description="Short description of what changed between the two UIs")
+    reuse_reason: str = Field("", description="Why the reference analysis/cache can or cannot be reused")
+
+
+class TransitionMismatchResult(BaseModel):
+    """
+    LLM comparison result for a UTG/return/replay step whose observed UI differs from expectation.
+
+    Input:
+    - Expected UI from the transition plan.
+    - Observed UI after executing one transition/recovery action.
+    - Optional nearest known UI from local similarity search.
+
+    Output:
+    - Whether the observed UI can reuse the expected state's analysis/action
+      cache, another known state's cache, or must be analyzed as a new state.
+    """
+
+    observed_state_sig: str = Field("", description="State signature of the observed UI")
+    match_type: Literal["same_as_expected", "same_as_nearest", "new_state"] = Field(
+        "new_state",
+        description="Which known state's analysis/action cache can be reused, or new_state if none can be reused",
+    )
+    matched_state_sig: str = Field("", description="Known state signature when match_type is not new_state")
+    confidence: float = Field(0.0, ge=0.0, le=1.0, description="Confidence in the state-family match")
+    should_reanalyze_observed: bool = Field(
+        True,
+        description="True if workflow should run normal navigation/router analysis on the observed UI",
+    )
+    visible_change_summary: str = Field("", description="Short description of differences and similarities")
+    recommended_next_step: Literal["treat_as_expected", "treat_as_nearest", "reanalyze_observed"] = Field(
+        "reanalyze_observed",
+        description="Recommended workflow behavior after this mismatch comparison",
+    )
+    reason: str = Field("", description="Short reason for the classification")
+
+
 def _safe_json_from_text(text: str) -> Dict[str, Any]:
     if not text:
         raise ValueError("Empty model output")
@@ -849,6 +911,78 @@ TASK RULES:
 - If current_task.exploration_depth=normal, inspect only key branches and stop when the page gives enough useful context.
 - If current_task.exploration_depth=deep, continue while evidence is still needed for router/questionnaire questions, but avoid real purchases, irreversible submissions, or credential entry.
 - Do not artificially limit proposed_tasks to only the top three. Include visible valuable child tasks and use priority to rank their importance.
+"""
+
+_DRIFT_BEFORE_ACTION_SYSTEM = """You compare two Android UI snapshots for a dynamic-page drift check.
+
+GOAL:
+- Decide whether a navigation/router analysis and action cache made for a reference UI can be reused on the currently observed UI before executing the planned action.
+- Treat screenshots as the primary evidence. UI digest and saved analysis are auxiliary.
+
+INPUTS:
+- reference: UI that was originally analyzed.
+- observed: UI currently visible before executing the planned action.
+- planned_action: action candidate planned on the reference UI.
+- current_task: active task context.
+- reference_analysis: compact saved LLM result for the reference UI, if available.
+
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- UI digest/XML is auxiliary evidence for element ids and possible structure; use it to align visible screenshot controls to actionable element_id values.
+- Do not over-rely on UI digest/XML labels, click regions, or tree structure when they conflict with the screenshot.
+- If xml_reliable=false on either UI, treat UI tree labels, clickable segmentation, element ids, and structure as weak hints only.
+- When xml_reliable=false and screenshots are visually almost identical, prefer same_page=true unless the main visible content or main actionable state changed enough that old analysis should not be reused.
+- Do not invalidate a planned action only because the observed UI digest has different element ids, different click-region segmentation, or a newly detected label.
+- For XML-unreliable states, judge reusability mainly by whether the page's visible purpose, primary actionable controls, and pending/planned actions are still the same.
+
+RULES:
+- same_page=true means the reference page analysis, proposed tasks, pending/planned actions, and action cache can be safely reused on the observed UI.
+- same_page=false means the observed UI should be analyzed as a new state with the same active task context.
+- Do not create an intermediate judgment where the page is the same but old analysis cannot be reused. If old analysis should not be reused, set same_page=false.
+- If screenshots are similar but the main actionable state changed, such as a new central Start/Play button appearing where none existed before, set same_page=false.
+- If the reference UI is loading and observed UI is loaded content, set same_page=false and recommend analyze_observed_as_new_state.
+- If observed UI is an ad/popup/interruption, set same_page=false and recommend analyze_observed_as_new_state so normal router/navigation can record visible evidence and decide how to close it.
+- If the UIs are visually the same except small dynamic animation/content shifts and old actions remain semantically the same, set same_page=true and recommend reuse_reference_state.
+- Do not invent hidden UI state. If unsure whether old analysis/cache can be reused, set same_page=false and recommend analyze_observed_as_new_state.
+
+OUTPUT:
+- Strict JSON matching DriftBeforeActionResult.
+"""
+
+_TRANSITION_MISMATCH_SYSTEM = """You compare Android UI snapshots after a transition/replay/return step reached an unexpected UI.
+
+GOAL:
+- Decide whether the observed UI can reuse the expected known UI's page analysis, task/action cache, and pending actions.
+- If expected cannot be reused, decide whether the optional nearest known UI can be reused instead.
+- If neither known state can be reused, classify observed as a new state that needs normal navigation/router analysis.
+- This is used for dynamic pages whose screenshot/XML changes while the reusable page state is still the same.
+
+INPUTS:
+- expected: known UI that the workflow expected to reach.
+- observed: UI actually captured after one transition action.
+- nearest: optional known UI selected by local similarity search.
+- transition_context: action and task/replay context for why the workflow expected this state.
+
+EVIDENCE PRIORITY RULES:
+- The screenshot is the primary source of truth for the current visible state.
+- UI digest/XML is auxiliary evidence for element ids and possible structure.
+- Do not over-rely on UI digest/XML labels, click regions, or tree structure when they conflict with the screenshot.
+- If xml_reliable=false on any compared UI, treat UI tree labels, clickable segmentation, element ids, and structure as weak hints only.
+- When xml_reliable=false and screenshots are visually almost identical, prefer reusing the existing state unless the main visible content or main actionable state changed enough that old analysis/action cache should not be reused.
+- Do not classify observed as new_state only because UI digest has different element ids, different click-region segmentation, or newly detected labels.
+
+RULES:
+- match_type=same_as_expected only when the expected state's page analysis, proposed tasks, pending/planned actions, and action cache can be safely reused on the observed UI.
+- match_type=same_as_nearest only when expected cannot be reused but nearest state's page analysis/action cache can be safely reused.
+- match_type=new_state when observed should be analyzed normally as a new state.
+- If screenshots are similar but the main actionable state changed, such as a new central Start/Play button appearing where none existed before, use new_state instead of same_as_expected.
+- If observed differs from expected because a loading page finished into content, use new_state.
+- If observed is an ad/popup/interruption, prefer new_state and should_reanalyze_observed=true so it can be recorded and handled by normal navigation.
+- Do not merge pages solely because they share a package or common navigation bar.
+- If confidence is below 0.75, prefer new_state.
+
+OUTPUT:
+- Strict JSON matching TransitionMismatchResult.
 """
 
 _APP_METADATA_SYSTEM = """You are an assistant that summarizes Android app metadata for downstream UI exploration.
@@ -1471,6 +1605,187 @@ class GPTClient:
             depth = str(getattr(candidate, "starts_task_depth", "") or "")
             if depth not in {"shallow", "normal", "deep"}:
                 candidate.starts_task_depth = depth_by_type.get(starts_type, "normal")
+        return out
+
+    @time_consumed
+    def compare_drift_before_action(
+        self,
+        reference_screenshot_b64: str,
+        observed_screenshot_b64: str,
+        reference_ui_json: Dict[str, Any],
+        observed_ui_json: Dict[str, Any],
+        planned_action: Optional[Dict[str, Any]] = None,
+        current_task: Optional[Dict[str, Any]] = None,
+        reference_analysis: Optional[Dict[str, Any]] = None,
+        reference_state_sig: str = "",
+        observed_state_sig: str = "",
+        reference_xml_reliable: Optional[bool] = None,
+        observed_xml_reliable: Optional[bool] = None,
+        debug_payload_path: str = "",
+    ) -> DriftBeforeActionResult:
+        """
+        Compare a reference UI with the currently observed UI before executing a planned action.
+
+        Inputs:
+        - reference_screenshot_b64 / observed_screenshot_b64:
+          Screenshots for the analyzed UI and current UI.
+        - reference_ui_json / observed_ui_json:
+          Snap or UIST dictionaries used to build compact UI digests.
+        - planned_action:
+          The action candidate or action step planned on the reference UI.
+        - current_task:
+          Active task context when the action was selected.
+        - reference_analysis:
+          Saved navigation/router result for the reference UI, if available.
+        - reference_state_sig / observed_state_sig:
+          State identifiers for debugging and output echo.
+        - reference_xml_reliable / observed_xml_reliable:
+          Whether XML-derived UI structure should be trusted for each state.
+
+        Output:
+        - DriftBeforeActionResult telling whether the old action can still be
+          used or whether the observed UI needs normal re-analysis.
+        """
+        payload = {
+            "mode": "pre_action_drift",
+            "reference": {
+                "state_sig": reference_state_sig,
+                "xml_reliable": reference_xml_reliable,
+                "ui_digest": _compact_digest(reference_ui_json, limit=220),
+            },
+            "observed": {
+                "state_sig": observed_state_sig,
+                "xml_reliable": observed_xml_reliable,
+                "ui_digest": _compact_digest(observed_ui_json, limit=220),
+            },
+            "planned_action": planned_action or {},
+            "current_task": current_task or {},
+            "reference_analysis": reference_analysis or {},
+        }
+        if debug_payload_path:
+            try:
+                out_path = Path(debug_payload_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.debug("Failed to write drift-compare debug payload", exc_info=True)
+
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": _DRIFT_BEFORE_ACTION_SYSTEM},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": json.dumps(payload, ensure_ascii=False)},
+                    {"type": "text", "text": "reference screenshot:"},
+                    {"type": "image_url", "image_url": {"url": _b64_image_url(reference_screenshot_b64)}} if reference_screenshot_b64 else {"type": "text", "text": "(no reference screenshot)"},
+                    {"type": "text", "text": "observed screenshot:"},
+                    {"type": "image_url", "image_url": {"url": _b64_image_url(observed_screenshot_b64)}} if observed_screenshot_b64 else {"type": "text", "text": "(no observed screenshot)"},
+                ],
+            },
+        ]
+
+        out = self._call_structured(messages, DriftBeforeActionResult, opname="compare_drift_before_action")
+        out.reference_state_sig = reference_state_sig or out.reference_state_sig
+        out.observed_state_sig = observed_state_sig or out.observed_state_sig
+        out.visible_change_summary = str(out.visible_change_summary or "")[:800]
+        out.reuse_reason = str(out.reuse_reason or "")[:800]
+        return out
+
+    @time_consumed
+    def match_state_after_transition(
+        self,
+        observed_screenshot_b64: str,
+        observed_ui_json: Dict[str, Any],
+        expected_screenshot_b64: str = "",
+        expected_ui_json: Optional[Dict[str, Any]] = None,
+        nearest_screenshot_b64: str = "",
+        nearest_ui_json: Optional[Dict[str, Any]] = None,
+        transition_context: Optional[Dict[str, Any]] = None,
+        expected_state_sig: str = "",
+        observed_state_sig: str = "",
+        nearest_state_sig: str = "",
+        expected_xml_reliable: Optional[bool] = None,
+        observed_xml_reliable: Optional[bool] = None,
+        nearest_xml_reliable: Optional[bool] = None,
+        debug_payload_path: str = "",
+    ) -> TransitionMismatchResult:
+        """
+        Compare an observed transition result against expected and nearest known states.
+
+        Inputs:
+        - observed_screenshot_b64 / observed_ui_json:
+          UI captured after executing a transition, return action, or replay step.
+        - expected_screenshot_b64 / expected_ui_json:
+          Known UI the workflow expected to reach.
+        - nearest_screenshot_b64 / nearest_ui_json:
+          Optional locally selected most similar known UI.
+        - transition_context:
+          Action/task/replay details explaining why this transition happened.
+        - *_state_sig:
+          State identifiers for echo/debug.
+        - *_xml_reliable:
+          Whether XML-derived UI structure should be trusted for each state.
+
+        Output:
+        - TransitionMismatchResult classifying the observed UI as expected,
+          nearest known, or a new UI that needs normal analysis.
+        """
+        payload = {
+            "mode": "transition_mismatch",
+            "expected": {
+                "state_sig": expected_state_sig,
+                "xml_reliable": expected_xml_reliable,
+                "ui_digest": _compact_digest(expected_ui_json or {}, limit=220),
+            },
+            "observed": {
+                "state_sig": observed_state_sig,
+                "xml_reliable": observed_xml_reliable,
+                "ui_digest": _compact_digest(observed_ui_json, limit=220),
+            },
+            "nearest": {
+                "state_sig": nearest_state_sig,
+                "xml_reliable": nearest_xml_reliable,
+                "ui_digest": _compact_digest(nearest_ui_json or {}, limit=220),
+            },
+            "transition_context": transition_context or {},
+        }
+        if debug_payload_path:
+            try:
+                out_path = Path(debug_payload_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                logger.debug("Failed to write transition-match debug payload", exc_info=True)
+
+        content: List[Dict[str, Any]] = [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}]
+        if expected_screenshot_b64:
+            content.extend([
+                {"type": "text", "text": "expected screenshot:"},
+                {"type": "image_url", "image_url": {"url": _b64_image_url(expected_screenshot_b64)}},
+            ])
+        content.extend([
+            {"type": "text", "text": "observed screenshot:"},
+            {"type": "image_url", "image_url": {"url": _b64_image_url(observed_screenshot_b64)}} if observed_screenshot_b64 else {"type": "text", "text": "(no observed screenshot)"},
+        ])
+        if nearest_screenshot_b64:
+            content.extend([
+                {"type": "text", "text": "nearest known screenshot:"},
+                {"type": "image_url", "image_url": {"url": _b64_image_url(nearest_screenshot_b64)}},
+            ])
+
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": _TRANSITION_MISMATCH_SYSTEM},
+            {"role": "user", "content": content},
+        ]
+
+        out = self._call_structured(messages, TransitionMismatchResult, opname="match_state_after_transition")
+        out.observed_state_sig = observed_state_sig or out.observed_state_sig
+        if out.match_type == "same_as_expected" and not out.matched_state_sig:
+            out.matched_state_sig = expected_state_sig
+        if out.match_type == "same_as_nearest" and not out.matched_state_sig:
+            out.matched_state_sig = nearest_state_sig
+        out.visible_change_summary = str(out.visible_change_summary or "")[:800]
+        out.reason = str(out.reason or "")[:800]
         return out
 
     @time_consumed
