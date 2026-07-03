@@ -58,6 +58,7 @@ from utils import time_consumed, crop_image
 
 # OCR is required; keep paddle_cls
 from paddle_cls import PaddleOCRClient
+from omniparser_cls import OmniParserClient
 
 
 # Optional icon classifier hook (do not require it)
@@ -2152,53 +2153,21 @@ class BaseUI:
         return out
 
     @staticmethod
-    def _omniparser_paths() -> Dict[str, str]:
-        """
-        Input: none.
-        Output: local paths for the external OmniParser Python, script, and repository root.
-        Function: centralizes the external OmniParser runtime paths so the main project venv is not polluted.
-        """
-        framework_root = Path(__file__).resolve().parent
-        return {
-            "python": r"F:\workplace\external_tools\omniparser_venv\Scripts\python.exe",
-            "script": str(framework_root / "test_debug" / "test_omniparser_overlay.py"),
-            "root": r"F:\workplace\external_tools\OmniParser",
-        }
-
-    @staticmethod
     def _omniparser_runtime_root() -> Path:
         """
         Input: none.
-        Output: runtime cache directory for OmniParser subprocess outputs.
-        Function: keeps OmniParser artifacts inspectable without writing them into the project virtual environment.
+        Output: runtime cache directory for in-process OmniParser outputs.
+        Function: keeps OmniParser artifacts inspectable across workflow runs.
         """
         return Path(__file__).resolve().parent / "test_debug" / "omniparser_runtime"
 
     @staticmethod
-    def _write_omniparser_input_image(screenshot_b64: str, out_dir: str) -> str:
-        """
-        Input: base64 screenshot and an output directory.
-        Output: absolute PNG path written for OmniParser.
-        Function: converts the in-memory workflow screenshot into a file because OmniParser runs in an external subprocess.
-        """
-        os.makedirs(out_dir, exist_ok=True)
-        b64 = str(screenshot_b64 or "")
-        if "," in b64:
-            b64 = b64.split(",", 1)[1]
-        png_path = os.path.join(out_dir, "omniparser_input.png")
-        with open(png_path, "wb") as f:
-            f.write(base64.b64decode(b64 + "==", validate=False))
-        return png_path
-
-    @staticmethod
-    def _run_omniparser_ocr_subprocess(screenshot_b64: str, work_dir: str = "") -> Dict[str, Any]:
+    def _run_omniparser_ocr_inprocess(screenshot_b64: str, work_dir: str = "") -> Dict[str, Any]:
         """
         Input: screenshot base64 and an optional working directory.
-        Output: parsed elements, label coordinates, summary, and artifact paths produced by OmniParser.
-        Function: invokes the external OmniParser + OCR environment and loads JSON outputs for UI tree conversion.
+        Output: parsed elements, label coordinates, summary, and artifact paths produced by in-process OmniParser.
+        Function: invokes OmniParserClient.parse_base64 inside the framework process and returns the structure consumed by UI tree conversion.
         """
-        import subprocess
-
         b64 = str(screenshot_b64 or "")
         if "," in b64:
             b64 = b64.split(",", 1)[1]
@@ -2207,49 +2176,15 @@ class BaseUI:
         out_dir = root / "omniparser_ocr"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        parsed_path = out_dir / "parsed_elements.json"
-        coords_path = out_dir / "label_coordinates.json"
-        summary_path = out_dir / "summary.json"
-        overlay_path = out_dir / "overlay.png"
-
-        if not (parsed_path.exists() and coords_path.exists() and summary_path.exists() and overlay_path.exists()):
-            paths = BaseUI._omniparser_paths()
-            image_path = BaseUI._write_omniparser_input_image(screenshot_b64, str(root))
-            cmd = [
-                paths["python"],
-                paths["script"],
-                "--image",
-                image_path,
-                "--omniparser-root",
-                paths["root"],
-                "--out-dir",
-                str(out_dir),
-                "--use-ocr",
-            ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    "OmniParser OCR subprocess failed "
-                    f"code={proc.returncode}\nstdout={proc.stdout[-2000:]}\nstderr={proc.stderr[-2000:]}"
-                )
-
-        with open(parsed_path, "r", encoding="utf-8") as f:
-            parsed = json.load(f)
-        with open(coords_path, "r", encoding="utf-8") as f:
-            coords = json.load(f)
-        with open(summary_path, "r", encoding="utf-8") as f:
-            summary = json.load(f)
-
-        return {
-            "parsed_elements": parsed,
-            "label_coordinates": coords,
-            "summary": summary,
-            "out_dir": str(out_dir),
-            "overlay_path": str(overlay_path),
-            "parsed_path": str(parsed_path),
-            "coords_path": str(coords_path),
-            "summary_path": str(summary_path),
-        }
+        return OmniParserClient.parse_base64(
+            b64,
+            str(out_dir),
+            use_ocr=True,
+            box_threshold=0.05,
+            iou_threshold=0.1,
+            imgsz=640,
+            batch_size=8,
+        )
 
     @staticmethod
     def _omniparser_bbox_to_frame(bbox: Any, image_w: int, image_h: int) -> Dict[str, int]:
@@ -2339,26 +2274,22 @@ class BaseUI:
         """
         Input: raw XML-derived uist, screenshot base64, and optional device info.
         Output: OmniParser-derived uist and vid_map.
-        Function: builds a clickable visual UI tree from external OmniParser + OCR for XML-unreliable pages.
+        Function: builds a clickable visual UI tree from in-process OmniParser + OCR for XML-unreliable pages.
         """
         image_w, image_h = BaseUI._tt_image_size_from_b64(screenshot_b64)
         if image_w <= 0 or image_h <= 0:
-            return BaseUI.post_process_ui_three_tools_debug(uist, screenshot_b64, device_info=device_info)
+            raise ValueError("OmniParser OCR post-process requires a valid screenshot size.")
 
-        try:
-            result = BaseUI._run_omniparser_ocr_subprocess(screenshot_b64)
-            out_uist = BaseUI._omniparser_result_to_uist(result, image_w, image_h)
-            vid_map = BaseUI._assign_ids_all_nodes(out_uist)
-            logger.debug(
-                "omniparser_ocr post-process: parsed=%d ids=%d out_dir=%s",
-                len(result.get("parsed_elements") or []),
-                len(vid_map),
-                result.get("out_dir"),
-            )
-            return out_uist, vid_map
-        except Exception as e:
-            logger.warning("OmniParser OCR post-process failed; falling back to three_tools: %s", e, exc_info=True)
-            return BaseUI.post_process_ui_three_tools_debug(uist, screenshot_b64, device_info=device_info)
+        result = BaseUI._run_omniparser_ocr_inprocess(screenshot_b64)
+        out_uist = BaseUI._omniparser_result_to_uist(result, image_w, image_h)
+        vid_map = BaseUI._assign_ids_all_nodes(out_uist)
+        logger.debug(
+            "omniparser_ocr post-process: parsed=%d ids=%d out_dir=%s",
+            len(result.get("parsed_elements") or []),
+            len(vid_map),
+            result.get("out_dir"),
+        )
+        return out_uist, vid_map
 
     @staticmethod
     @time_consumed

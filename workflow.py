@@ -88,6 +88,7 @@ from task_manager import (
 from task_report import write_task_report
 from ui_cls import BaseUI
 from trace_callbacks import Callbacks, StepCtx, NoOpCallbacks
+from omniparser_cls import OmniParserClient
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,6 @@ class BudgetConfig:
     screenshot_phash_similarity_threshold: float = 0.75# phash相似度判断阈值
     state_identity_phash_similarity_threshold: float = 0.80  # stricter threshold for merging full captures into existing visual states
     meaningful_xml_nodes_threshold: int = 2  #计算xml中有意义节点数阈值,用于判断xml是否可信
-    visual_detector_backend: str = "three_tools"  # visual backend for XML-unreliable pages: three_tools or omniparser_ocr
     visual_probe_max_taps: int = 6
     visual_probe_settle_s: float = 0.25
     visual_probe_roi_delta_threshold: float = 0.035
@@ -2679,6 +2679,23 @@ class WorkflowRunner:
         # 记录本次 run 开始时间，后面的停止条件会基于它计算总耗时。
         start = time.time()
 
+        # OmniParser is now the fixed visual backend for XML-unreliable pages.
+        # Warm up here so the first unreliable snapshot does not pay model-load cost.
+        omniparser_warmup_start = time.time()
+        omniparser_warmup = OmniParserClient.warmup()
+        self._emit_timing(
+            "",
+            "omniparser.warmup",
+            time.time() - omniparser_warmup_start,
+            already_loaded=bool(omniparser_warmup.get("already_loaded", False)),
+            model_seconds=float(omniparser_warmup.get("model_seconds", 0.0) or 0.0),
+        )
+        logger.info(
+            "OmniParser warmup completed: already_loaded=%s model_seconds=%.3f",
+            bool(omniparser_warmup.get("already_loaded", False)),
+            float(omniparser_warmup.get("model_seconds", 0.0) or 0.0),
+        )
+
         # 如果配置了目标包名，先确保目标应用已经在前台，避免一开始就跑在错误页面上。
         if self.target_package:
             # 把目标 app 拉到前台；如果已经在前台，这一步基本是幂等的。
@@ -3482,8 +3499,7 @@ class WorkflowRunner:
             if xml_reliable:
                 postprocess_mode = "xml_only"
             else:
-                backend = str(getattr(self.budget, "visual_detector_backend", "three_tools") or "three_tools")
-                postprocess_mode = "omniparser_ocr" if backend == "omniparser_ocr" else "three_tools"
+                postprocess_mode = "omniparser_ocr"
             scope = "debug" if debug else "main"
             logger.info(
                 "%s post-process mode: %s (xml_reliable=%s)",
@@ -3526,18 +3542,15 @@ class WorkflowRunner:
                 post_start = time.time()
                 if xml_reliable:
                     uist2, vid_map = BaseUI.post_process_ui(uist, screenshot_b64, device_info=info)
-                elif postprocess_mode == "omniparser_ocr":
+                else:
                     uist2, vid_map = BaseUI.post_process_ui_omniparser_ocr(
                         uist,
                         screenshot_b64,
                         device_info=info,
                     )
-                else:
-                    uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(
-                        uist,
-                        screenshot_b64,
-                        device_info=info,
-                    )
+                    # Disabled old three-tools visual backend.
+                    # Keep BaseUI.post_process_ui_three_tools_debug(...) available for manual restoration or comparison.
+                    # uist2, vid_map = BaseUI.post_process_ui_three_tools_debug(uist, screenshot_b64, device_info=info)
                 self._emit_timing(
                     "",
                     f"capture_and_process.post_process.{postprocess_mode}",

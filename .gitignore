@@ -703,3 +703,4 @@ test_debug/rerun_failed_10_apps.py
 test_debug/omniparser_outputs/
 test_debug/omniparser_backend_outputs/
 test_debug/omniparser_runtime/
+test_debug/omniparser_inprocess_outputs/

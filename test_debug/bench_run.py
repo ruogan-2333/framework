@@ -46,6 +46,7 @@ class BenchApp:
     - app_name: Human-readable app name.
     - questionnaire_type: Optional known questionnaire type, otherwise auto.
     - app_file: Local APK/XAPK path.
+    - global_index: 1-based index in the sorted app-list CSV.
     - row: Original CSV row for audit output.
 
     Output:
@@ -56,6 +57,7 @@ class BenchApp:
     app_name: str
     questionnaire_type: str
     app_file: Path
+    global_index: int
     row: Dict[str, str]
 
 
@@ -228,13 +230,14 @@ def load_bench_apps(args: argparse.Namespace) -> list[BenchApp]:
     rows = read_csv_rows(app_list_csv)
     rows.sort(key=lambda row: int(float(row.get("sample_rank") or row.get("index") or "999999")))
     start = max(1, int(args.start_index))
-    selected_rows = rows[start - 1 :]
+    indexed_rows = list(enumerate(rows, start=1))
+    selected_rows = indexed_rows[start - 1 :]
     if int(args.limit) > 0:
         selected_rows = selected_rows[: int(args.limit)]
 
     apps: list[BenchApp] = []
     missing_files: list[str] = []
-    for row in selected_rows:
+    for global_index, row in selected_rows:
         package = row_package(row)
         if not package:
             continue
@@ -248,6 +251,7 @@ def load_bench_apps(args: argparse.Namespace) -> list[BenchApp]:
                 app_name=str(row.get("app_name") or package).strip(),
                 questionnaire_type=infer_questionnaire_type(row, str(args.questionnaire_type)),
                 app_file=app_file,
+                global_index=global_index,
                 row=row,
             )
         )
@@ -414,6 +418,7 @@ def write_apps_csv(path: Path, apps: Sequence[BenchApp]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = [
         "index",
+        "global_index",
         "package",
         "app_name",
         "questionnaire_type",
@@ -431,6 +436,7 @@ def write_apps_csv(path: Path, apps: Sequence[BenchApp]) -> None:
             writer.writerow(
                 {
                     "index": index,
+                    "global_index": app.global_index,
                     "package": app.package,
                     "app_name": app.app_name,
                     "questionnaire_type": app.questionnaire_type,
@@ -463,6 +469,7 @@ def write_summary(batch_dir: Path, rows: Sequence[Dict[str, object]]) -> None:
 
     fieldnames = [
         "index",
+        "global_index",
         "package",
         "app_name",
         "questionnaire_type",
@@ -483,13 +490,14 @@ def write_summary(batch_dir: Path, rows: Sequence[Dict[str, object]]) -> None:
     lines = [
         "# Bench Run Summary",
         "",
-        "| # | package | app | q | exit | elapsed_s | analysis | stop_reason | actions | run_id |",
-        "|---:|---|---|---|---:|---:|---|---|---:|---|",
+        "| # | global# | package | app | q | exit | elapsed_s | analysis | stop_reason | actions | run_id |",
+        "|---:|---:|---|---|---|---:|---:|---|---|---:|---|",
     ]
     for row in rows:
         lines.append(
-            "| {index} | `{package}` | {app_name} | `{questionnaire_type}` | {exit_code} | {elapsed_s:.1f} | {analysis_exists} | {stop_reason} | {action_count} | `{run_id}` |".format(
+            "| {index} | {global_index} | `{package}` | {app_name} | `{questionnaire_type}` | {exit_code} | {elapsed_s:.1f} | {analysis_exists} | {stop_reason} | {action_count} | `{run_id}` |".format(
                 index=int(row.get("index") or 0),
+                global_index=int(row.get("global_index") or 0),
                 package=str(row.get("package") or ""),
                 app_name=str(row.get("app_name") or "").replace("|", "\\|"),
                 questionnaire_type=str(row.get("questionnaire_type") or ""),
@@ -533,13 +541,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     rows: list[Dict[str, object]] = []
     for index, app in enumerate(apps, start=1):
-        run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_bench_{safe_token(app.package)}"
+        run_id = f"{time.strftime('%Y%m%d_%H%M%S')}_bench_i{index:03d}_g{app.global_index:03d}_{safe_token(app.package)}"
         trace_dir = Path(args.trace_root).resolve() / run_id
-        log_path = logs_dir / f"{index:03d}_{safe_token(app.package)}.log"
+        log_path = logs_dir / f"{index:03d}_g{app.global_index:03d}_{safe_token(app.package)}.log"
         cmd = build_main_command(args, app, run_id)
         command_text = command_to_text(cmd)
         row: Dict[str, object] = {
             "index": index,
+            "global_index": app.global_index,
             "package": app.package,
             "app_name": app.app_name,
             "questionnaire_type": app.questionnaire_type,
